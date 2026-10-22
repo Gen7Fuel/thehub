@@ -1,138 +1,102 @@
 const express = require('express');
 const router = express.Router();
 const WriteOff = require('../models/WriteOff');
+const WriteOffCart = require('../models/WriteOffCart');
+const User = require('../models/User');
 const Location = require('../models/Location');
 const { getBulkOnHandQtyCSO } = require('../services/sqlService');
 const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require('../services/notificationService');
-
-// Helper function to generate email HTML content
-function generateEmailHTML(site, woMongoId, ateMongoId, btMongoId) {
-  const ids = [
-    { id: woMongoId, label: "Standard Write-Off", btn: "📂 View WO List", color: "#333333", sub: "Warehouse" },
-    { id: ateMongoId, label: "About to Expire", btn: "📅 View ATE List", color: "#3f51b5", sub: "Expiry Review" },
-    { id: btMongoId, label: "Bistro Write-Off", btn: "🍔 View Bistro List", color: "#e67e22", sub: "Bistro Workflow" }
-  ].filter(item => item.id);
-
-  const headerTitle = ids.length > 1 ? "Multiple Inventory Write Off Lists Generated" : ids[0]?.label || "Inventory List";
-  const bannerColor = "#283593";
-
-  // Generate the table cells for buttons
-  let linksHTML = '';
-  ids.forEach((item, index) => {
-    // If it's the 3rd item in a set of 3, make it full width
-    const isFullWidth = ids.length === 3 && index === 2;
-    const width = isFullWidth ? '100%' : (ids.length === 1 ? '100%' : '50%');
-
-    linksHTML += `
-      <td align="center" style="padding: 10px; width: ${width}; display: ${isFullWidth ? 'block' : 'table-cell'};">
-        <p style="margin: 0 0 10px 0; font-size: 13px; color: #666; font-weight: 500;">${item.label}</p>
-        <a href="https://app.gen7fuel.com/write-off/${item.id}" 
-           style="background-color: ${item.color}; color: #ffffff; padding: 14px 10px; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; font-size: 14px; text-align: center;">
-           ${item.btn}
-        </a>
-      </td>`;
-
-    // Add a table row break if we have 2 items and more are coming
-    if (index === 1 && ids.length === 3) {
-      linksHTML += '</tr><tr>';
-    }
-  });
-
-  return `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f2f5; padding: 30px;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        <div style="background-color: ${bannerColor}; color: #ffffff; text-align: center; padding: 25px;">
-          <h2 style="margin: 0; font-size: 22px; letter-spacing: 0.5px;">${headerTitle}</h2>
-          <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 15px;">Site: ${site}</p>
-        </div>
-        <div style="padding: 30px;">
-          <p style="font-size: 16px; color: #444; line-height: 1.6;">
-            Hello Team,<br><br>
-            The following inventory lists have been generated for your review.
-          </p>
-          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 25px; background-color: #f8f9fa; border-radius: 8px; padding: 15px;">
-            <tr>${linksHTML}</tr>
-          </table>
-          <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
-            <p style="font-size: 12px; color: #888; text-align: center; line-height: 1.4;">
-              This is an automated message from the Gen7Fuel Hub.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function generateFinalizedEmailHTML(site, listNumber, hubLink, csoLink, listType) {
-  const isBT = listType === 'BT';
-  const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
-  const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
-
-  // Text content based on type
-  const mainMessage = isBT
-    ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${site}</strong>. Please review the items in the Hub.`
-    : `The Station Manager has finalized the Write-Off request for <strong>${site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
-
-  // Dynamic Button Layout
-  let buttonsHTML = '';
-  if (csoLink) {
-    // TWO BUTTONS (For WO)
-    buttonsHTML = `
-      <td align="center" style="padding: 10px; width: 50%;">
-        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
-        <a href="${hubLink}" style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">📂 View in Hub</a>
-      </td>
-      <td align="center" style="padding: 10px; width: 50%;">
-        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
-        <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
-      </td>`;
-  } else {
-    // ONE BUTTON (For BT)
-    buttonsHTML = `
-      <td align="center" style="padding: 10px; width: 100%;">
-        <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
-        <a href="${hubLink}" style="background-color: #e67e22; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 95%; font-size: 14px; text-align: center;">📂 View Approved Bistro List</a>
-      </td>`;
-  }
-
-  return `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; background-color: #f0f2f5; padding: 30px;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
-        <div style="background-color: ${bannerColor}; color: #ffffff; text-align: center; padding: 25px;">
-          <h2 style="margin: 0; font-size: 20px; letter-spacing: 0.5px;">${headerTitle}</h2>
-          <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 14px;">List: ${listNumber} | Site: ${site}</p>
-        </div>
-        <div style="padding: 30px;">
-          <p style="font-size: 15px; color: #444; line-height: 1.6;">
-            Hello Team,<br><br>
-            ${mainMessage}
-          </p>
-          <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top: 25px; background-color: #f8f9fa; border-radius: 8px; padding: 15px;">
-            <tr>${buttonsHTML}</tr>
-          </table>
-          <div style="margin-top: 30px; border-top: 1px solid #eee; padding-top: 20px;">
-            <p style="font-size: 12px; color: #888; text-align: center; line-height: 1.4;">
-              This is an automated message from the Gen7Fuel Hub.
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
+const { writeOffAutomationQueue } = require("../queues/writeOffAutomationQueue");
+const { getPg } = require("../config/pg");
+const moment = require("moment-timezone");
 
 // GET /api/write-off/list?site=RANKIN
+router.get('/work-list', async (req, res) => {
+  try {
+    if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const workList = await WriteOffCart.findOne({ site: req.query.site }).lean();
+    const location = await Location.findOne({ $or: [{ stationName: req.query.site }, { site: req.query.site }] }).select('timezone').lean();
+    res.json({ ...(workList || { site: req.query.site, items: [] }), siteTimezone: location?.timezone || 'America/Toronto' });
+  } catch (error) {
+    res.status(500).json({ error: 'Error fetching write-off work list' });
+  }
+});
+
+router.post('/work-list', async (req, res) => {
+  try {
+    const { site, item } = req.body;
+    if (!site || !item) return res.status(400).json({ error: 'Site and item are required' });
+    const workList = await WriteOffCart.findOneAndUpdate(
+      { site },
+      { $push: { items: item } },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+    res.status(201).json(workList);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.put('/work-list/:itemId', async (req, res) => {
+  try {
+    const { site, ...updates } = req.body;
+    if (!site) return res.status(400).json({ error: 'Site is required' });
+    const allowed = ['gtin', 'upc_barcode', 'name', 'qty', 'onHandAtWriteOff', 'reason', 'isManualEntry', 'expiryDate', 'markdownAction'];
+    const itemUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => allowed.includes(key)));
+    const workList = await WriteOffCart.findOneAndUpdate(
+      { site, 'items._id': req.params.itemId },
+      { $set: Object.fromEntries(Object.entries(itemUpdates).map(([key, value]) => [`items.$.${key}`, value])) },
+      { new: true, runValidators: true }
+    );
+    if (!workList) return res.status(404).json({ error: 'Work-list item not found' });
+    res.json(workList);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.delete('/work-list/:itemId', async (req, res) => {
+  try {
+    if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const workList = await WriteOffCart.findOneAndUpdate(
+      { site: req.query.site },
+      { $pull: { items: { _id: req.params.itemId } } },
+      { new: true }
+    );
+    if (!workList) return res.status(404).json({ error: 'Work list not found' });
+    res.json(workList);
+  } catch (error) {
+    res.status(500).json({ error: 'Error removing work-list item' });
+  }
+});
+
+router.delete('/work-list', async (req, res) => {
+  try {
+    if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const workList = await WriteOffCart.findOneAndUpdate({ site: req.query.site }, { $set: { items: [] } }, { new: true });
+    res.json(workList || { site: req.query.site, items: [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Error clearing write-off work list' });
+  }
+});
+
 router.get('/list', async (req, res) => {
-  const { site, listType } = req.query; // Accept listType (WO or ATE)
+  const { site, listType, from, to } = req.query; // Accept listType (WO or ATE)
 
   if (!site) return res.status(400).json({ error: "Site is required" });
 
   try {
     const query = { site };
     if (listType) query.listType = listType;
+    if (from || to) {
+      query.createdAt = {};
+      if (from) query.createdAt.$gte = new Date(`${from}T00:00:00.000Z`);
+      if (to) query.createdAt.$lte = new Date(`${to}T23:59:59.999Z`);
+    }
 
     const lists = await WriteOff.find(query)
-      .select('listNumber status submittedBy items createdAt listType')
+      .select('listNumber status submittedBy submitted items createdAt listType')
       .lean();
 
     const statusPriority = { 'Incomplete': 1, 'Partial': 2, 'Complete': 3 };
@@ -156,8 +120,22 @@ router.get('/:id', async (req, res) => {
     const record = await WriteOff.findById(req.params.id);
     if (!record) return res.status(404).json({ error: "Record not found" });
 
-    res.json(record);
+    const values = [...new Set((record.items || []).flatMap((item) => [item.upc_barcode, item.gtin].filter(Boolean).map(String)))];
+    const recordLocation = await Location.findOne({ $or: [{ stationName: record.site }, { site: record.site }] }).select('_id');
+    const itemBookSite = recordLocation?._id?.toString() || String(record.site);
+    const rows = values.length ? await getPg()('item_bk')
+      .select('site', 'upc', 'upc_barcode', 'gtin', 'description', 'image_url')
+      .where('site', itemBookSite)
+      .where((query) => query.whereIn('upc', values).orWhereIn('upc_barcode', values).orWhereIn('gtin', values)) : [];
+    const byValue = new Map();
+    rows.forEach((row) => [row.upc, row.upc_barcode, row.gtin].filter(Boolean).forEach((value) => byValue.set(String(value), row)));
+    const items = record.items.map((item) => {
+      const book = byValue.get(String(item.upc_barcode)) || byValue.get(String(item.gtin));
+      return { ...item.toObject(), image_url: book?.image_url || null, itemBookName: book?.description || null, itemBookGtin: book?.gtin || null };
+    });
+    res.json({ ...record.toObject(), items });
   } catch (error) {
+    console.error('Error enriching write-off item details:', error);
     res.status(500).json({ error: "Error fetching record details" });
   }
 });
@@ -250,60 +228,14 @@ router.post('/', async (req, res) => {
       createdLists.push(btList.listNumber);
     }
 
-    //     // --- EMAIL QUEUE PLACEHOLDER ---
-    //     // Logic for adding to email queue will go here later
-    //     // here need seperate email templates if the list has write off items then only it will be sent to the category teams
-    //     // else no email to category team and manager email if both then 2 links if one the one link
-    //     // --------------------------------
+    // The work list is only a draft. Clear it after all requested write-off
+    // documents have been saved successfully so a failed submission does not
+    // destroy the user's draft.
+    await WriteOffCart.findOneAndUpdate(
+      { site },
+      { $set: { items: [] } }
+    );
 
-    //     const location = await Location.findOne({ stationName: site });
-    //     const storeEmail = location?.email;
-
-    //     if (!storeEmail) {
-    //       console.error(`No email found for site: ${site}. Email skipped.`);
-    //     } else {
-
-    //       const emailRecipients = {
-    //         store: storeEmail,
-    //         primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-    //         categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
-    //       };
-    //       // --- LOGIC FOR STORE (Receives Combined WO, ATE, BT) ---
-    //       if (woMongoId || ateMongoId || btMongoId) {
-    //         await emailQueue.add("sendWriteOffEmail", {
-    //           to: emailRecipients.store,
-    //           subject: `Inventory Lists Generated: ${site}`,
-    //           html: generateEmailHTML(site, woMongoId, ateMongoId, btMongoId),
-    //           cc: emailRecipients.primaryCC
-    //         });
-    //       }
-
-    //       // --- LOGIC FOR CATEGORY TEAM (Receives ONLY ATE and BT) ---
-    //       // We trigger this only if at least one of them exists
-    //       if (ateMongoId || btMongoId) {
-    //         const catSubject = (ateMongoId && btMongoId)
-    //           ? `Bistro & ATE Review Required: ${site}`
-    //           : (ateMongoId ? `ATE Review Required: ${site}` : `Bistro Approval Required: ${site}`);
-
-    //         await emailQueue.add("sendWriteOffEmail", {
-    //           // to: "daksh@gen7fuel.com", // Primary contact
-    //           to: "grayson@gen7fuel.com", // Primary contact
-    //           subject: catSubject,
-    //           html: generateEmailHTML(site, null, ateMongoId, btMongoId), // woMongoId is explicitly null
-    //           cc: emailRecipients.categoryTeam.filter(e => e !== "grayson@gen7fuel.com")
-    //         });
-    //       }
-    //     }
-    //     res.status(201).json({
-    //       success: true,
-    //       lists: createdLists
-    //     });
-
-    //   } catch (err) {
-    //     console.error("Creation Error:", err);
-    //     res.status(500).json({ error: "Server failed to process write-off lists" });
-    //   }
-    // });
     // 8. Fetch Location for Manager Emails
     const location = await Location.findOne({ site });
 
@@ -320,9 +252,17 @@ router.post('/', async (req, res) => {
       storeTo = location.email;
     }
 
+    const categoryUsers = await User.find({ is_active: true })
+      .populate("role", "role_name name")
+      .select("email role");
+    const categoryEmails = categoryUsers
+      .filter((user) => /inventory\s*team/i.test(user.role?.role_name || user.role?.name || ""))
+      .map((user) => user.email)
+      .filter(Boolean);
+
     const emailRecipients = {
       primaryCC: ["daksh@gen7fuel.com", "grayson@gen7fuel.com"],
-      categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "frank@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "grayson@gen7fuel.com"]
+      categoryTeam: categoryEmails
     };
     // --- NOTIFICATION TRIGGER LOGIC ---
     const io = req.app.get("io");
@@ -409,6 +349,22 @@ router.post('/', async (req, res) => {
 });
 
 // PATCH /api/write-off/:id/items/:itemId/details
+router.patch('/:id/items/:itemId/upc', async (req, res) => {
+  try {
+    const list = await WriteOff.findById(req.params.id);
+    if (!list || list.listType !== 'WO') return res.status(404).json({ error: 'Write-off list not found' });
+    if (!list.submitted) return res.status(400).json({ error: 'The list has not been submitted.' });
+    const item = list.items.id(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found' });
+    if (item.found !== false) return res.status(400).json({ error: 'Only missing items can be updated.' });
+    const upc = String(req.body.upc_barcode || '').trim();
+    if (!upc) return res.status(400).json({ error: 'A UPC is required.' });
+    item.upc_barcode = upc;
+    await list.save();
+    res.json(list);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.patch('/:id/items/:itemId/details', async (req, res) => {
   const { qty, reason, markdownAction } = req.body; // Add markdownAction here
 
@@ -495,13 +451,13 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 
 //     const isBT = list.listType === 'BT';
 
-//     // 1. Mark as submitted and ensure status is Complete
+//     // 1. Mark as submitted
 //     list.submitted = true;
 //     list.status = 'Complete';
 //     const finalizedList = await list.save();
 
-//     // 2. Fetch Location for CSO (Only if not BT)
-//     let csoLink = null;
+//     // 2. Fetch Location for CSO Link (Only if not Bistro)
+//     let csoLink = "";
 //     if (!isBT) {
 //       const location = await Location.findOne({ site: list.site });
 //       const csoCode = location?.csoCode || '0';
@@ -514,22 +470,62 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 
 //     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
 
-//     // 3. Email Config
+
+//     // 3. Notification Config
 //     const emailRecipients = {
 //       primaryTo: "grayson@gen7fuel.com",
-//       categoryTeam: ["daksh@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com"]
+//       categoryTeam: ["daksh@gen7fuel.com", "karthikeyan@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "tejasvini@gen7fuel.com"]
 //     };
 
-//     // Subject logic
 //     const subject = isBT
 //       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
 //       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
 
-//     await emailQueue.add("sendWriteOffEmail", {
-//       to: emailRecipients.primaryTo,
+//     // const isBT = listType === 'BT';
+//     const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+//     const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
+
+//     // Text content based on type
+//     const mainMessage = isBT
+//       ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${list.site}</strong>. Please review the items in the Hub.`
+//       : `The Station Manager has finalized the Write-Off request for <strong>${list.site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
+
+//     // Dynamic Button Layout
+//     let buttonsHTML = '';
+//     if (csoLink) {
+//       // TWO BUTTONS (For WO)
+//       buttonsHTML = `
+//       <td align="center" style="padding: 10px; width: 50%;">
+//         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+//         <a href="${hubLink}" style="background-color: #333333; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">📂 View in Hub</a>
+//       </td>
+//       <td align="center" style="padding: 10px; width: 50%;">
+//         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Inventory System</p>
+//         <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
+//       </td>`;
+//     } else {
+//       // ONE BUTTON (For BT)
+//       buttonsHTML = `
+//       <td align="center" style="padding: 10px; width: 100%;">
+//         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
+//         <a href="${hubLink}" style="background-color: #e67e22; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 95%; font-size: 14px; text-align: center;">📂 View Approved Bistro List</a>
+//       </td>`;
+//     }
+
+//     // 4. Trigger Hub Notification & Email Queue
+//     await pushNotification({
+//       io: req.app.get("io"),
+//       recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
+//       slug: "write-off-finalized",
 //       subject: subject,
-//       html: generateFinalizedEmailHTML(list.site, list.listNumber, hubLink, csoLink, list.listType),
-//       cc: emailRecipients.categoryTeam
+//       fieldValues: {
+//         site: list.site,
+//         listNumber: list.listNumber,
+//         bannerColor: bannerColor,
+//         headerTitle: headerTitle,
+//         mainMessage: mainMessage,
+//         buttonsHTML: buttonsHTML,
+//       }
 //     });
 
 //     res.json(finalizedList);
@@ -538,8 +534,28 @@ router.patch('/:id/items/:itemId', async (req, res) => {
 //     res.status(500).json({ error: err.message });
 //   }
 // });
+router.patch('/:id/resubmit-missing', async (req, res) => {
+  try {
+    const list = await WriteOff.findById(req.params.id);
+    if (!list || list.listType !== 'WO') return res.status(404).json({ error: 'Write-off list not found' });
+    if (!list.submitted) return res.status(400).json({ error: 'The list has not been submitted.' });
+    const missingItems = (list.items || []).filter((item) => item.found === false);
+    if (!missingItems.length) return res.status(400).json({ error: 'There are no missing items to resubmit.' });
+    const location = await Location.findOne({ site: list.site });
+    const localMoment = moment(list.createdAt).tz(location?.timezone || 'America/Toronto');
+    list.submittedAt = new Date();
+    list.csoSubmissionStatus = 'pending';
+    await list.save();
+    await writeOffAutomationQueue.add('sync-write-off-missing', {
+      writeOffId: list._id, targetStationCsoCode: '31750',
+      formattedDate: localMoment.format('MM/DD/YYYY'), formattedTime: localMoment.format('HH:mm:ss'),
+      listNumber: list.listNumber, items: missingItems.map((item) => item.toObject()), missingOnly: true,
+    }, { jobId: `write-off-missing-${list._id}-${Date.now()}` });
+    res.json(list);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
-router.patch('/:id/finalize', async (req, res) => {
+router.patch("/:id/finalize", async (req, res) => {
   try {
     const list = await WriteOff.findById(req.params.id);
     if (!list) return res.status(404).json({ error: "List not found" });
@@ -548,51 +564,89 @@ router.patch('/:id/finalize', async (req, res) => {
       return res.status(400).json({ error: "This list has already been submitted." });
     }
 
-    const isBT = list.listType === 'BT';
+    const isBT = list.listType === "BT";
+    const isWO = list.listType === "WO";
 
     // 1. Mark as submitted
     list.submitted = true;
-    list.status = 'Complete';
-    const finalizedList = await list.save();
+    list.status = "Complete";
+    // const finalizedList = await list.save();
+    const finalizedList = [];
 
-    // 2. Fetch Location for CSO Link (Only if not Bistro)
+    // 2. Fetch Location and Calculate Timezone-specific Timestamps
     let csoLink = "";
-    if (!isBT) {
-      const location = await Location.findOne({ site: list.site });
-      const csoCode = location?.csoCode || '0';
-      const dateObj = new Date(list.createdAt);
-      const formattedDate = dateObj.toLocaleDateString('en-US', {
-        month: '2-digit', day: '2-digit', year: 'numeric'
-      });
-      csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${csoCode}&date_form=${formattedDate}`;
+    let formattedDate = "";
+    let formattedTime = "";
+    let targetStationCsoCode = "0";
+
+    const location = await Location.findOne({ site: list.site });
+
+    if (location) {
+      targetStationCsoCode = location.csoCode || "0";
+      // targetStationCsoCode = '31750'; // Hardcoded for testing purposes
+      const stationTimezone = location.timezone || "America/Toronto";
+
+      // Convert UTC createdAt date to the station's exact local timezone
+      const localMoment = moment(list.createdAt).tz(stationTimezone);
+      formattedDate = localMoment.format("MM/DD/YYYY");
+      formattedTime = localMoment.format("HH:mm:ss");
+    } else {
+      const defaultMoment = moment(list.createdAt).tz("America/Toronto");
+      formattedDate = defaultMoment.format("MM/DD/YYYY");
+      formattedTime = defaultMoment.format("HH:mm:ss");
     }
 
+    if (!isBT) {
+      csoLink = `https://03.cstoreoffice.com/daily-store-spoilage.php?Station=${targetStationCsoCode}&date_form=${formattedDate}`;
+    }
+
+    // 3. Trigger Automation (Only for 'WO' lists)
+    if (isWO) {
+      list.submittedAt = new Date();
+      list.csoSubmissionStatus = "pending";
+      await list.save();
+      await writeOffAutomationQueue.add("sync-write-off", {
+        writeOffId: list._id,
+        targetStationCsoCode,
+        formattedDate,
+        formattedTime,
+        listNumber: list.listNumber,
+        items: (list.items || []).map((item) => item.toObject()),
+      }, {
+        jobId: `write-off-${list._id}`,
+      });
+      console.log(`📥 Queued CStore write-off automation for ${list.listNumber}`);
+    }
+
+    // 4. Notification & Email Configuration
     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
+    
+    const categoryUsers = await User.find({ is_active: true })
+      .populate("role", "role_name name")
+      .select("email role");
+    const categoryEmails = categoryUsers
+      .filter((user) => /inventory\s*team/i.test(user.role?.role_name || user.role?.name || ""))
+      .map((user) => user.email)
+      .filter(Boolean);
 
-
-    // 3. Notification Config
     const emailRecipients = {
-      primaryTo: "grayson@gen7fuel.com",
-      categoryTeam: ["daksh@gen7fuel.com", "karthikeyan@gen7fuel.com", "vasu@gen7fuel.com", "Saeid@gen7fuel.com", "zyannic@bosservicesltd.com", "tejasvini@gen7fuel.com"]
+      primaryTo: ["grayson@gen7fuel.com", "daksh@gen7fuel.com"],
+      categoryTeam: categoryEmails
     };
 
     const subject = isBT
       ? `Approved by Station Manager: Bistro Items - ${list.site} (${list.listNumber})`
       : `Finalized: Write-Off List - ${list.site} (${list.listNumber})`;
 
-    // const isBT = listType === 'BT';
-    const bannerColor = isBT ? "#e67e22" : "#1b5e20"; // Orange for Bistro, Green for WO
+    const bannerColor = isBT ? "#e67e22" : "#1b5e20";
     const headerTitle = isBT ? "Bistro Write-Off Approved" : "Write-Off Finalized";
 
-    // Text content based on type
     const mainMessage = isBT
       ? `The Station Manager has <strong>approved</strong> the Bistro Write-Off request for <strong>${list.site}</strong>. Please review the items in the Hub.`
       : `The Station Manager has finalized the Write-Off request for <strong>${list.site}</strong>. Please review the details in the Hub and accept the corresponding ticket in CStoreOffice.`;
 
-    // Dynamic Button Layout
-    let buttonsHTML = '';
+    let buttonsHTML = "";
     if (csoLink) {
-      // TWO BUTTONS (For WO)
       buttonsHTML = `
       <td align="center" style="padding: 10px; width: 50%;">
         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
@@ -603,7 +657,6 @@ router.patch('/:id/finalize', async (req, res) => {
         <a href="${csoLink}" style="background-color: #2e7d32; color: #ffffff; padding: 14px 0; text-decoration: none; font-weight: 600; border-radius: 6px; display: block; width: 90%; font-size: 14px; text-align: center;">✅ Accept in CSO</a>
       </td>`;
     } else {
-      // ONE BUTTON (For BT)
       buttonsHTML = `
       <td align="center" style="padding: 10px; width: 100%;">
         <p style="margin: 0 0 10px 0; font-size: 12px; color: #666; font-weight: bold; text-transform: uppercase;">Review Details</p>
@@ -611,7 +664,6 @@ router.patch('/:id/finalize', async (req, res) => {
       </td>`;
     }
 
-    // 4. Trigger Hub Notification & Email Queue
     await pushNotification({
       io: req.app.get("io"),
       recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
@@ -624,7 +676,7 @@ router.patch('/:id/finalize', async (req, res) => {
         headerTitle: headerTitle,
         mainMessage: mainMessage,
         buttonsHTML: buttonsHTML,
-      }
+      },
     });
 
     res.json(finalizedList);

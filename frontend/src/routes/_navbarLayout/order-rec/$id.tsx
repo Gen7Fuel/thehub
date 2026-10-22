@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { camelCaseToTitleCase } from '@/lib/utils'
-import { Square, CheckSquare, MinusSquare, Plus, Minus } from 'lucide-react';
+import { Square, CheckSquare, MinusSquare, Plus, Minus, Image as ImageIcon } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -40,6 +40,7 @@ function RouteComponent() {
   const [editItem, setEditItem] = useState<{ catIdx: number, itemIdx: number } | null>(null)
   const [notifying, setNotifying] = useState<boolean>(false)
   const [generatingTemplate, setGeneratingTemplate] = useState<boolean>(false)
+  const [selectedImage, setSelectedImage] = useState<{ url: string; name: string } | null>(null)
 
   // ── Barcode scanning ──────────────────────────────────────────────────────
   const [scanning, setScanning] = useState(false)
@@ -1304,20 +1305,22 @@ function RouteComponent() {
       </div>
 
 
-      <div className={`mb-4 max-w-2xl mx-auto ${scanning ? 'sticky top-0 z-30' : ''}`}>
-        {scanning ? (
-          <OrderRecScanner
-            onScan={handleScan}
-            paused={!!editItem || !!missingItem}
-            status={scanStatus}
-            onClose={() => setScanning(false)}
-          />
-        ) : (
-          <Button type="button" variant="outline" onClick={() => { setScanStatus(''); setScanning(true) }}>
-            Scan items
-          </Button>
-        )}
-      </div>
+      {access?.orderRec?.id?.scanItem && (
+        <div className={`mb-4 max-w-2xl mx-auto ${scanning ? 'sticky top-0 z-30' : ''}`}>
+          {scanning ? (
+            <OrderRecScanner
+              onScan={handleScan}
+              paused={!!editItem || !!missingItem}
+              status={scanStatus}
+              onClose={() => setScanning(false)}
+            />
+          ) : (
+            <Button type="button" variant="outline" onClick={() => { setScanStatus(''); setScanning(true) }}>
+              Scan items
+            </Button>
+          )}
+        </div>
+      )}
 
       <Dialog open={!!missingItem} onOpenChange={(open: boolean) => !open && !missingSending && setMissingItem(null)}>
         <DialogContent>
@@ -1357,6 +1360,23 @@ function RouteComponent() {
               </div>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
+        <DialogContent className="sm:max-w-3xl p-2">
+          <DialogHeader className="px-4 pt-2">
+            <DialogTitle>{selectedImage?.name}</DialogTitle>
+          </DialogHeader>
+          <div className="flex h-[min(70vh,600px)] w-full items-center justify-center rounded-lg bg-slate-50 p-4">
+            {selectedImage && (
+              <img
+                src={selectedImage.url}
+                alt={selectedImage.name}
+                className="h-full w-full object-contain"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1412,6 +1432,7 @@ function RouteComponent() {
                     <tr>
                       {/* <th className="sticky top-0 bg-white z-10 px-4 py-3">GTIN</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">VIN</th> */}
+                      <th className="sticky top-0 bg-white z-10 px-4 py-3">Image</th>
                       <th className="sticky top-0 bg-white z-10 px-4 py-3">Item</th>
                       {/* DYNAMIC STRAIN HEADER */}
                       {cat.items.some((item: any) => item.strainName) && (
@@ -1491,6 +1512,24 @@ function RouteComponent() {
                         onClick={() => handleRowClick(catIdx, itemIdx, item.completed)}
                         style={{ height: '56px' }}
                       >
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            className={`flex h-12 w-12 items-center justify-center overflow-hidden rounded-lg border bg-slate-50 ${item.image_url ? 'cursor-zoom-in hover:ring-2 hover:ring-blue-400' : 'cursor-default'}`}
+                            disabled={!item.image_url}
+                            aria-label={item.image_url ? `View image of ${item.itemName}` : `No image for ${item.itemName}`}
+                            onClick={(event) => {
+                              event.stopPropagation()
+                              if (item.image_url) setSelectedImage({ url: item.image_url, name: item.itemName })
+                            }}
+                          >
+                            {item.image_url ? (
+                              <img src={item.image_url} alt="" loading="lazy" className="h-full w-full object-cover" />
+                            ) : (
+                              <ImageIcon className="h-5 w-5 text-slate-400" />
+                            )}
+                          </button>
+                        </td>
                         {/* <td className="px-4 py-3">{item.gtin}</td>
                         <td className="px-4 py-3">{item.vin}</td> */}
                         <td className="px-4 py-3 flex flex-col">
@@ -1594,7 +1633,7 @@ function RouteComponent() {
       </Accordion>
       {/* Modal for editing item */}
       <Dialog open={!!editItem} onOpenChange={(open: boolean) => !open && setEditItem(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle className="text-center">
               {editItem
@@ -1635,6 +1674,21 @@ function RouteComponent() {
               //   }}
               //   className="space-y-4"
               // >
+              <div className="grid gap-6 md:grid-cols-2 md:items-stretch">
+                <div className="flex min-h-[280px] items-center justify-center rounded-xl bg-slate-50 p-4">
+                  {item.image_url ? (
+                    <img
+                      src={item.image_url}
+                      alt={item.itemName}
+                      className="max-h-[360px] w-full object-contain"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center gap-2 text-slate-400">
+                      <ImageIcon className="h-12 w-12" />
+                      <span className="text-sm">No image available</span>
+                    </div>
+                  )}
+                </div>
               <form
                 onSubmit={async (e: React.FormEvent) => {
                   e.preventDefault();
@@ -1746,6 +1800,7 @@ function RouteComponent() {
                   </Button>
                 </div>
               </form>
+              </div>
             )
           })()}
         </DialogContent>

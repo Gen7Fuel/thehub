@@ -1,23 +1,25 @@
 import { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 import { SitePicker } from '@/components/custom/sitePicker';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { AlertTriangle, Info, PlusCircle, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, Info, PlusCircle, Search, Trash2, Image as ImageIcon } from 'lucide-react';
 import axios from 'axios';
 import { DatePicker } from '@/components/custom/datePicker';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/create')({
   component: RouteComponent,
-  validateSearch: (search: { site: string }) => ({ site: search.site }),
+  validateSearch: (search: Record<string, unknown>) => ({ site: search.site as string | undefined }),
   loaderDeps: ({ search: { site } }) => ({ site }),
 });
 
 interface WriteOffItem {
+  image_url?: string | null;
   gtin?: string;
   upc_barcode: string;
   name: string;
@@ -46,10 +48,14 @@ export const REASON_COLORS: Record<string, string> = {
 
 function RouteComponent() {
   const { user } = useAuth();
+  const { selectedSite } = useSite();
   const { site } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
+  const currentSite = selectedSite || site || user?.location || '';
 
-  const [draftList, setDraftList] = useState<WriteOffItem[]>([]);
+  const [workList, setWorkList] = useState<WriteOffItem[]>([]);
+  const [workListUpdatedAt, setWorkListUpdatedAt] = useState<string | null>(null);
+  const [workListTimezone, setWorkListTimezone] = useState('America/Toronto');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [formQuery, setFormQuery] = useState('');
   const [formResults, setFormResults] = useState<any[]>([]);
@@ -61,6 +67,7 @@ function RouteComponent() {
     reason: 'Damaged'
   });
   const [entryMode, setEntryMode] = useState<'regular' | 'bistro'>('regular');
+  const [showForm, setShowForm] = useState(false);
 
   const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
 
@@ -73,10 +80,37 @@ function RouteComponent() {
   maxExpiry.setDate(today.getDate() + 20); // 20 days from now
 
   useEffect(() => {
-    if (!site && user?.location) {
-      navigate({ search: { site: user.location } });
+    if (currentSite && site !== currentSite) {
+      navigate({ search: (prev: any) => ({ ...prev, site: currentSite }), replace: true });
     }
-  }, [site, user?.location]);
+  }, [site, currentSite, navigate]);
+
+  const fetchWorkList = async () => {
+    if (!currentSite) return;
+    const res = await axios.get('/api/write-off/work-list', {
+      params: { site: currentSite },
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
+    });
+    setWorkList(res.data.items || []);
+    setWorkListUpdatedAt(res.data.updatedAt || null);
+    setWorkListTimezone(res.data.siteTimezone || 'America/Toronto');
+  };
+
+  const formattedWorkListUpdatedAt = workListUpdatedAt
+    ? new Intl.DateTimeFormat('en-US', {
+      timeZone: workListTimezone,
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    }).format(new Date(workListUpdatedAt))
+    : null;
+
+  useEffect(() => {
+    fetchWorkList().catch(() => setWorkList([]));
+  }, [currentSite]);
 
   // useEffect(() => {
   //   const delay = setTimeout(async () => {
@@ -107,12 +141,12 @@ function RouteComponent() {
   useEffect(() => {
     const delay = setTimeout(async () => {
       // Check if we have a valid text query string and an active site string before sending
-      if (formQuery.length > 2 && site) {
+      if (formQuery.length > 2 && currentSite) {
         setIsSearching(true);
         try {
           const res = await axios.get(`/api/cycle-count/search`, {
             params: {
-              site: site, // Sends the plain text string name like "Sarnia" or "Jocko Point"
+              site: currentSite, // Sends the plain text string name like "Sarnia" or "Jocko Point"
               q: formQuery
             },
             headers: {
@@ -133,7 +167,7 @@ function RouteComponent() {
     }, 300);
 
     return () => clearTimeout(delay);
-  }, [formQuery, site, navigate]); // Matches the name string field context beautifully // Swapped dependency array watch context to look at site
+  }, [formQuery, currentSite, navigate]); // Matches the name string field context beautifully // Swapped dependency array watch context to look at site
 
   const selectFromSearch = (item: any) => {
     setFormData({
@@ -142,12 +176,14 @@ function RouteComponent() {
       upc_barcode: item.upc_barcode,
       gtin: item.gtin,
       onHandAtWriteOff: item.onHandCSO
+      ,image_url: item.image_url || null
     });
     setFormQuery('');
     setFormResults([]);
+    setShowForm(true);
   };
 
-  const addItemToList = () => {
+  const addItemToList = async () => {
     if (!formData.name || !formData.upc_barcode) return;
 
     // Validation for ATE items
@@ -156,8 +192,7 @@ function RouteComponent() {
       return;
     }
 
-    setDraftList([
-      {
+    const item = {
         ...formData as WriteOffItem,
         name: formData.name!,
         upc_barcode: formData.upc_barcode!,
@@ -165,31 +200,61 @@ function RouteComponent() {
         reason: formData.reason || 'Damaged',
         expiryDate: formData.reason === 'About to Expire' ? expiryDate : undefined, // Attach date
         tempId: Math.random(),
-      },
-      ...draftList
-    ]);
+      };
+
+    try {
+      const res = await axios.post('/api/write-off/work-list', { site: currentSite, item }, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
+      });
+      setWorkList(res.data.items || []);
+      await fetchWorkList();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Unable to add item to the work list.');
+      return;
+    }
 
     // Reset
     setFormData({ name: '', upc_barcode: '', qty: 1, reason: 'Damaged' });
     setExpiryDate(undefined);
+    setShowForm(false);
     setIsDialogOpen(false);
   };
 
-  const updateDraftItem = (index: number, field: string, value: any) => {
-    setDraftList(prev => prev.map((item, i) =>
-      i === index ? { ...item, [field]: value } : item
-    ));
+  const updateWorkListItem = async (item: WriteOffItem, field: string, value: any) => {
+    const res = await axios.put(`/api/write-off/work-list/${(item as any)._id}`, { site: currentSite, [field]: value }, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
+    });
+    setWorkList(res.data.items || []);
+    await fetchWorkList();
+  };
+
+  const removeWorkListItem = async (item: WriteOffItem) => {
+    const res = await axios.delete(`/api/write-off/work-list/${(item as any)._id}`, {
+      params: { site: currentSite },
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
+    });
+    setWorkList(res.data.items || []);
+    await fetchWorkList();
+  };
+
+  const clearWorkList = async () => {
+    const res = await axios.delete('/api/write-off/work-list', {
+      params: { site: currentSite },
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
+    });
+    setWorkList(res.data.items || []);
+    await fetchWorkList();
   };
 
   const submitWriteOff = async () => {
-    if (!draftList.length) return;
+    if (!workList.length) return;
     if (!window.confirm("Are you sure you want to submit this write-off? The list cannot be edited after submission and the page will be reloaded.")) return;
 
     try {
       const res = await axios.post('/api/write-off', {
-        site,
+        site: currentSite,
         submittedBy: user?.email,
-        items: draftList, // Backend will split these
+        items: workList, // Backend will split these
         timestamp: Date.now()
       }, {
         headers: {
@@ -202,9 +267,8 @@ function RouteComponent() {
       const listNames = res.data.lists.join(" and ");
       alert(`Successfully created: ${listNames}`);
 
-      setDraftList([]);
       // Optional: navigate to the dashboard to see the new lists
-      navigate({ to: '/write-off' });
+      navigate({ to: '/write-off', search: { site: currentSite } });
     } catch (e: any) {
       if (e.response?.status === 403) navigate({ to: "/no-access" });
       alert("Submission failed. Please try again.");
@@ -215,14 +279,9 @@ function RouteComponent() {
     <div className="min-w-2xl mx-auto p-6 flex flex-col h-[calc(100vh-100px)] space-y-6 antialiased font-sans">
 
       {/* Header */}
-      <div className="flex items-center justify-between bg-white p-4 rounded-xl border border-slate-200 shadow-sm gap-4">
-        {/* Site Picker pinned to the left */}
-        <div className="shrink-0">
-          <SitePicker value={site} onValueChange={(s) => navigate({ search: { site: s } })} />
-        </div>
-
+      <div className="hidden">
         {/* Warning Message centered with equal gaps */}
-        {draftList.length > 0 && (
+        {workList.length > 0 && (
           <div className="flex-1 max-w-md mx-auto px-4 py-2 rounded-lg bg-amber-50 border border-amber-200 flex items-center gap-3">
             <div className="bg-amber-100 p-1.5 rounded-full shrink-0">
               <AlertTriangle className="w-4 h-4 text-amber-600" />
@@ -234,8 +293,8 @@ function RouteComponent() {
             </p>
           </div>
         )}
-        {/* Add Item Button pinned to the right */}
-        <div className="shrink-0">
+        {/* Legacy dialog trigger retained temporarily while the inline tablet flow is used below. */}
+        <div className="shrink-0 hidden">
           <Dialog open={isDialogOpen} onOpenChange={(o) => { setIsDialogOpen(o); if (!o) setFormQuery(''); }}>
             <DialogTrigger asChild>
               <Button className="gap-2">
@@ -424,30 +483,109 @@ function RouteComponent() {
         </div>
       </div>
 
+      {/* Tablet-friendly add-item workspace and draft cart */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 min-h-0">
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          <div className="flex justify-start">
+            <SitePicker value={currentSite} onValueChange={(s) => navigate({ search: (prev: any) => ({ ...prev, site: s }), replace: true })} />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-slate-900">Find a product</h2>
+              <p className="text-xs text-slate-500">Select a result to review it before adding.</p>
+            </div>
+            <div className="flex rounded-lg bg-slate-100 p-1">
+              <button className={`px-3 py-1.5 text-xs rounded-md ${entryMode === 'regular' ? 'bg-white shadow-sm font-semibold' : 'text-slate-500'}`} onClick={() => { setEntryMode('regular'); setShowForm(false); setFormData({ name: '', upc_barcode: '', qty: 1, reason: 'Damaged' }); }}>Regular</button>
+              <button className={`px-3 py-1.5 text-xs rounded-md ${entryMode === 'bistro' ? 'bg-white shadow-sm font-semibold' : 'text-slate-500'}`} onClick={() => { setEntryMode('bistro'); setShowForm(true); setFormData({ name: '', upc_barcode: 'Bistro', qty: 1, reason: 'Spoilage' }); }}>Bistro</button>
+            </div>
+          </div>
+
+          {/* Temporarily hidden write-off guidelines.
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Info className="w-4 h-4 text-blue-600" />
+              <span className="text-xs font-bold text-blue-900 uppercase tracking-tight">
+                Write-Off Guidelines (About to Expire)
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+              {[
+                { cat: "Deli / Fresh Food", days: "1–3 days" },
+                { cat: "Dairy", days: "5–7 days" },
+                { cat: "Bakery Items", days: "1–2 days" },
+                { cat: "Packaged Grocery", days: "14–30 days" },
+                { cat: "Beverages", days: "14–30 days" },
+              ].map((row) => (
+                <div key={row.cat} className="flex justify-between text-[11px] border-b border-blue-100/50 pb-0.5">
+                  <span className="text-slate-600">{row.cat}</span>
+                  <span className="font-bold text-blue-700">{row.days}</span>
+                </div>
+              ))}
+            </div>
+          </div> */}
+
+          {entryMode === 'regular' && <>
+            <Button type="button" variant="outline" className="w-full h-11" onClick={() => { setShowForm(true); setFormData({ name: '', upc_barcode: '', qty: 1, reason: 'Damaged' }); }}>
+              {formQuery.trim() ? 'Not Found? Enter Manually' : 'Enter Manually'}
+            </Button>
+            <div className="relative">
+              <Search className="absolute left-4 top-4 h-5 w-5 text-slate-400" />
+              <Input className="h-14 pl-12 text-base" placeholder="Search product name or upc barcode…" value={formQuery} onChange={(e) => setFormQuery(e.target.value)} />
+              {isSearching && <div className="absolute right-4 top-4 h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />}
+            </div>
+            {formResults.length > 0 && <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200 divide-y">
+              {formResults.map((item: any) => <button type="button" key={item._id} onClick={() => selectFromSearch(item)} className="flex w-full items-center gap-4 p-4 text-left hover:bg-slate-50">
+                <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl border bg-slate-100 flex items-center justify-center">{item.image_url ? <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" /> : <ImageIcon className="h-6 w-6 text-slate-400" />}</div>
+                <div><p className="font-semibold text-slate-900">{item.name}</p><p className="mt-1 text-sm font-mono text-slate-500">{item.upc_barcode}</p></div>
+              </button>)}
+            </div>}
+          </>}
+
+          {showForm && <div className="rounded-xl border bg-slate-50 p-4 space-y-3">
+            <div className="flex items-center gap-3">{formData.name && <div className="h-14 w-14 rounded-lg overflow-hidden border bg-white flex items-center justify-center">{formData.image_url ? <img src={formData.image_url} alt={formData.name} className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-slate-400" />}</div>}<p className="font-semibold text-slate-900">{formData.name || 'Manual product entry'}</p></div>
+            <Input placeholder="Product name" value={formData.name || ''} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+            {entryMode === 'regular' && <Input placeholder="UPC barcode" value={formData.upc_barcode || ''} onChange={(e) => setFormData({ ...formData, upc_barcode: e.target.value })} />}
+            <div className="grid grid-cols-2 gap-3"><Input type="number" min="1" placeholder="Quantity" value={formData.qty || 1} onChange={(e) => setFormData({ ...formData, qty: Number(e.target.value) })} /><Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{REASONS.filter((r) => entryMode === 'bistro' ? r !== 'About to Expire' : true).map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent></Select></div>
+            {formData.reason === 'About to Expire' && <DatePicker date={expiryDate} setDate={setExpiryDate as any} />}
+            <Button type="button" className="w-full h-11" onClick={addItemToList} disabled={!formData.name || !formData.upc_barcode}>Add to list</Button>
+          </div>}
+        </section>
+
       {/* Draft List */}
       <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b bg-slate-50 flex justify-between items-center">
-          <h2 className="font-semibold tracking-tight text-slate-900">Write-Off List</h2>
-          <span className="text-xs font-semibold bg-slate-200 px-2.5 py-1 rounded-full text-slate-700">
-            {draftList.length} Items
-          </span>
+          <div>
+            <h2 className="font-semibold tracking-tight text-slate-900">Write-Off List</h2>
+            {formattedWorkListUpdatedAt && workList.length > 0 && (
+              <div className="mt-1 text-[11px] text-slate-500">Last updated: <strong>{formattedWorkListUpdatedAt}</strong></div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold bg-slate-200 px-2.5 py-1 rounded-full text-slate-700">{workList.length} Items</span>
+            {workList.length > 0 && <Button type="button" variant="ghost" size="sm" className="text-destructive" onClick={clearWorkList}>Clear list</Button>}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
-          {draftList.length === 0 ? (
+          {workList.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400">
               <Search className="w-10 h-10 opacity-20 mb-2" />
               <p className="text-sm italic">Your write-off list is empty</p>
             </div>
           ) : (
             <Accordion type="single" collapsible className="space-y-3">
-              {draftList.map((item, idx) => (
-                <AccordionItem key={item.tempId} value={`item-${idx}`} className="border rounded-xl bg-white">
+              {workList.map((item, idx) => (
+                <AccordionItem key={(item as any)._id || item.tempId} value={`item-${idx}`} className="border rounded-xl bg-white">
                   <AccordionTrigger className="px-4 py-4 hover:no-underline">
                     <div className="flex justify-between w-full items-center pr-4">
-                      <div className="space-y-1 text-left">
+                      <div className="flex items-center gap-3 space-y-1 text-left">
+                        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-lg border bg-slate-100 flex items-center justify-center">
+                          {item.image_url ? <img src={item.image_url} alt={item.name} loading="lazy" className="h-full w-full object-cover" /> : <ImageIcon className="h-5 w-5 text-slate-400" />}
+                        </div>
+                        <div>
                         <p className="font-medium text-slate-900">{item.name}</p>
                         <p className="text-xs font-mono text-slate-400">{item.upc_barcode}</p>
+                        </div>
                       </div>
 
                       <div className="flex items-center gap-6">
@@ -481,14 +619,14 @@ function RouteComponent() {
                           type="number"
                           min="1"
                           value={item.qty}
-                          onChange={(e) => updateDraftItem(idx, 'qty', Number(e.target.value))}
+                          onChange={(e) => updateWorkListItem(item, 'qty', Number(e.target.value))}
                         />
                       </div>
 
                       <Button
                         variant="ghost"
                         className="text-destructive font-semibold gap-2 hover:bg-red-50"
-                        onClick={() => setDraftList(draftList.filter((_, i) => i !== idx))}
+                        onClick={() => removeWorkListItem(item)}
                       >
                         <Trash2 className="w-4 h-4" />
                         Remove
@@ -501,13 +639,14 @@ function RouteComponent() {
           )}
         </div>
 
-        {draftList.length > 0 && (
+        {workList.length > 0 && (
           <div className="p-6 border-t bg-white flex justify-end shadow-[0_-4px_16px_-10px_rgba(0,0,0,0.15)]">
             <Button className="px-10 h-11 rounded-xl font-semibold" onClick={submitWriteOff}>
-              Submit Write-Off List ({draftList.length})
+              Submit Write-Off List ({workList.length})
             </Button>
           </div>
         )}
+      </div>
       </div>
     </div >
   );

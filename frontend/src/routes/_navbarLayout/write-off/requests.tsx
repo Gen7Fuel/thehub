@@ -151,14 +151,18 @@
 import { useEffect, useMemo } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from "@/context/AuthContext";
+import { useSite } from "@/context/SiteContext";
 import { SitePicker } from '@/components/custom/sitePicker';
 import { ChevronRight, Package } from 'lucide-react';
 import axios from 'axios';
+import { DatePicker } from '@/components/custom/datePicker';
 
 // 1. Define the Search Interface to fix the TypeScript 'type' error
 interface WriteOffSearch {
   site: string;
   type?: 'WO' | 'ATE' | 'BT';
+  from?: string;
+  to?: string;
 }
 
 export const Route = createFileRoute('/_navbarLayout/write-off/requests')({
@@ -166,16 +170,18 @@ export const Route = createFileRoute('/_navbarLayout/write-off/requests')({
   validateSearch: (search: Record<string, unknown>): WriteOffSearch => ({
     site: (search.site as string) || '',
     type: (search.type as 'WO' | 'ATE' | 'BT') || 'WO',
+    from: (search.from as string) || '',
+    to: (search.to as string) || '',
   }),
-  loaderDeps: ({ search: { site, type } }) => ({ site, type }),
+  loaderDeps: ({ search: { site, type, from, to } }) => ({ site, type, from, to }),
   staleTime: 0, 
   gcTime: 0,
-  loader: async ({ deps: { site, type } }) => {
+  loader: async ({ deps: { site, type, from, to } }) => {
     if (!site) return { data: [], accessDenied: false };
 
     try {
       const res = await axios.get(`/api/write-off/list`, {
-        params: { site, listType: type },
+        params: { site, listType: type, from, to },
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
           "X-Required-Permission": "writeOff.requests"
@@ -199,8 +205,11 @@ export const getStatusStyles = (status: string) => {
 
 function RouteComponent() {
   const { user } = useAuth();
+  const { selectedSite } = useSite();
   // Destructuring site and type now works thanks to the Search interface above
-  const { site, type } = Route.useSearch();
+  const { site, type, from, to } = Route.useSearch();
+  const currentSite = selectedSite || site || user?.location || '';
+  const canViewCost = Boolean(user?.access?.writeOff?.requests?.list?.viewWritOffCost);
   const navigate = useNavigate({ from: Route.fullPath });
   const { data, accessDenied } = Route.useLoaderData() as any;
 
@@ -209,10 +218,18 @@ function RouteComponent() {
   }, [accessDenied, navigate]);
 
   useEffect(() => {
-    if (!site && user?.location) {
-      navigate({ search: (prev: any) => ({ ...prev, site: user.location }) });
+    const today = new Date();
+    const twoMonthsAgo = new Date(today);
+    twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
+    if (site !== currentSite || !from || !to) {
+      navigate({ search: (prev: any) => ({
+        ...prev,
+        site: currentSite,
+        from: from || twoMonthsAgo.toISOString().slice(0, 10),
+        to: to || today.toISOString().slice(0, 10),
+      }) });
     }
-  }, [site, user?.location, navigate]);
+  }, [site, selectedSite, from, to, user?.location, navigate]);
 
   const sortedData = useMemo(() => {
     const statusPriority: Record<string, number> = { Incomplete: 0, Partial: 1, Complete: 2 };
@@ -238,6 +255,12 @@ function RouteComponent() {
   };
 
   const theme = getTypeStyles(type || 'WO');
+  const defaultTo = new Date();
+  const defaultFrom = new Date(defaultTo);
+  defaultFrom.setMonth(defaultFrom.getMonth() - 2);
+  const fromDate = from ? new Date(`${from}T00:00:00`) : defaultFrom;
+  const toDate = to ? new Date(`${to}T00:00:00`) : defaultTo;
+  const formatSearchDate = (date: Date) => date.toISOString().slice(0, 10);
 
   return (
     <div className="min-w-2xl mx-auto p-6 h-[calc(100vh-120px)] flex flex-col antialiased font-sans">
@@ -245,9 +268,34 @@ function RouteComponent() {
       {/* Site Picker */}
       <div className="flex justify-center mb-8">
         <SitePicker
-          value={site}
+          value={currentSite}
           onValueChange={(s) => navigate({ search: (prev: any) => ({ ...prev, site: s }) })}
         />
+      </div>
+
+      <div className="flex justify-center gap-4 mb-6">
+        <div className="w-56">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">From</label>
+          <DatePicker
+            date={fromDate}
+            setDate={(value) => {
+              const next = typeof value === 'function' ? value(fromDate) : value;
+              if (next) navigate({ search: (prev: any) => ({ ...prev, from: formatSearchDate(next) }) });
+            }}
+            restrictToPast
+          />
+        </div>
+        <div className="w-56">
+          <label className="mb-1 block text-xs font-semibold text-slate-500">To</label>
+          <DatePicker
+            date={toDate}
+            setDate={(value) => {
+              const next = typeof value === 'function' ? value(toDate) : value;
+              if (next) navigate({ search: (prev: any) => ({ ...prev, to: formatSearchDate(next) }) });
+            }}
+            restrictToPast
+          />
+        </div>
       </div>
 
       {/* Container */}
@@ -300,7 +348,7 @@ function RouteComponent() {
               {sortedData.map((wo: any) => (
                 <li
                   key={wo._id}
-                  onClick={() => navigate({ to: `/write-off/$id`, params: { id: wo._id } })}
+                  onClick={() => navigate({ to: `/write-off/$id`, params: { id: wo._id }, search: (prev: any) => ({ ...prev, site, type, from, to }) })}
                   className="group px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
                 >
                   <div className="flex flex-col gap-1">
@@ -327,6 +375,14 @@ function RouteComponent() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {canViewCost && wo.submitted && wo.items.reduce((total: number, item: any) => total + (Number(item.writeOffCost) || 0), 0) > 0 && (
+                      <div className="text-right mr-2">
+                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Total Cost</div>
+                        <div className="text-sm font-bold text-slate-700">
+                          ${wo.items.reduce((total: number, item: any) => total + (Number(item.writeOffCost) || 0), 0).toFixed(2)}
+                        </div>
+                      </div>
+                    )}
                     <div className="p-2 rounded-full group-hover:bg-slate-100 transition-colors">
                       <ChevronRight className={`w-4 h-4 text-slate-300 group-hover:${theme.text}`} />
                     </div>

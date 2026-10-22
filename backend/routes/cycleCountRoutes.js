@@ -3003,9 +3003,9 @@ router.get('/search', async (req, res) => {
         'description as name',
         'upc_barcode',
         'gtin',
+        'image_url',
         'on_hand_qty as onHandQty'
-      )
-      .limit(20);
+      );
 
     res.json(items);
   } catch (err) {

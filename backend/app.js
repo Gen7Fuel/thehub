@@ -15,6 +15,7 @@ require("./queues/priceTimeoutQueue"); // Just runs the worker
 require("./queues/gasBuddyQueue"); // Just runs the worker
 require("./queues/gvmQueue"); // Just runs the worker
 require("./queues/fuelOrderDraftQueue"); // Just runs the worker
+const { initWriteOffAutomationWorker } = require("./queues/writeOffAutomationQueue");
 const { initPriceScheduleWorker } = require("./queues/priceScheduleQueue");
 const { initCsoInvoiceWorker } = require("./queues/csoInvoiceQueue"); // 1. Import worker initializer
 require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
@@ -196,6 +197,7 @@ app.set("io", io);
 
 initPriceScheduleWorker(io);
 initCsoInvoiceWorker(io);
+initWriteOffAutomationWorker(io);
 initWeeklyInstanceCron(io); 
 
 const PORT = process.env.PORT || 5000;

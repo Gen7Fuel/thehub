@@ -5,12 +5,14 @@ const OrderRec = require('../models/OrderRec');
 const Vendor = require('../models/Vendor');
 const CycleCount = require('../models/CycleCount');
 const ProductCategory = require('../models/ProductCategory');
+const Location = require('../models/Location');
 const Role = require('../models/Role');
 const User = require('../models/User');
 const { getUPC_barcode, getCoreMarkPriceBookByUPCs } = require('../services/sqlService');
 const { isOffPlanogram, loadPlanogramGtinSet } = require('../utils/planogram');
 const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime');
 const { pushNotification } = require('../services/notificationService');
+const { getPg } = require('../config/pg');
 
 // Get all
 router.get('/', async (req, res) => {
@@ -151,6 +153,23 @@ router.get('/:id', async (req, res) => {
     const orderRec = await OrderRec.findById(req.params.id).lean();
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
 
+    const gtins = [...new Set((orderRec.categories || [])
+      .flatMap((category) => category.items || [])
+      .map((item) => String(item.gtin || '').trim())
+      .filter(Boolean))];
+    const location = await Location.findOne({
+      $or: [{ site: orderRec.site }, { stationName: orderRec.site }]
+    }).select('_id').lean();
+    const itemBookRows = location && gtins.length
+      ? await getPg()('item_bk')
+        .select('gtin', 'image_url')
+        .where('site', String(location._id))
+        .whereIn('gtin', gtins)
+      : [];
+    const imageByGtin = new Map(
+      itemBookRows.map((row) => [String(row.gtin).trim(), row.image_url || null])
+    );
+
     // Load product categories (your master category table)
     const productCategories = await ProductCategory.find().lean();
 
@@ -163,6 +182,10 @@ router.get('/:id', async (req, res) => {
     // Enrich categories in this OrderRec
     orderRec.categories = orderRec.categories.map(cat => ({
       ...cat,
+      items: (cat.items || []).map((item) => ({
+        ...item,
+        image_url: imageByGtin.get(String(item.gtin || '').trim()) || null
+      })),
       name: categoryMap[String(cat.number)] ?? cat.name // fallback to existing name
     }));
 

@@ -4,7 +4,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { getStatusStyles } from "./requests"
 import { REASON_COLORS, REASONS } from './create'
 import { Button } from '@/components/ui/button'
-import { MessageSquareText, MessageSquarePlus } from "lucide-react";
+import { MessageSquareText, MessageSquarePlus, Pencil, Image as ImageIcon, Barcode as BarcodeIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Package, CheckCircle2, CheckSquare, Square, Minus, Plus } from 'lucide-react'
 import Barcode from 'react-barcode'
@@ -14,6 +14,12 @@ import { Input } from '@/components/ui/input';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
   component: RouteComponent,
+  validateSearch: (search: Record<string, unknown>) => ({
+    site: search.site as string | undefined,
+    type: search.type as 'WO' | 'ATE' | 'BT' | undefined,
+    from: search.from as string | undefined,
+    to: search.to as string | undefined,
+  }),
   // This ensures the loader runs every time you visit the page
   staleTime: 0, 
   gcTime: 0,
@@ -29,14 +35,49 @@ function RouteComponent() {
   const { user } = useAuth();
   const data = Route.useLoaderData()
   const [writeOff, setWriteOff] = useState(data)
-  const [barcodeValue, setBarcodeValue] = useState<string | null>(null)
+  const [activeBarcodeItem, setActiveBarcodeItem] = useState<{ name: string; upc: string; image: string | null } | null>(null)
   const navigate = useNavigate();
+
+  // Item mutation endpoints return the write-off document without the
+  // PostgreSQL item-book enrichment performed by the GET endpoint. Preserve
+  // that display-only metadata when applying their responses locally.
+  const mergeWriteOffResponse = (next: any) => {
+    if (!next || !Array.isArray(next.items)) return next;
+    const existingItems = new Map<string, any>(
+      (writeOff.items || []).map((item: any) => [String(item._id), item])
+    );
+    return {
+      ...next,
+      items: next.items.map((item: any) => {
+        const existing = existingItems.get(String(item._id));
+        return {
+          ...item,
+          image_url: item.image_url ?? existing?.image_url ?? null,
+          itemBookName: item.itemBookName ?? existing?.itemBookName ?? null,
+          itemBookGtin: item.itemBookGtin ?? existing?.itemBookGtin ?? null,
+        };
+      }),
+    };
+  };
 
   // Inside WriteOffDetailsPage component
   const [editItem, setEditItem] = useState<any | null>(null);
+  const [upcItem, setUpcItem] = useState<any | null>(null);
+  const [upcValue, setUpcValue] = useState('');
 
   const isATE = writeOff.listType === 'ATE';
   const isBT = writeOff.listType === 'BT';
+  const canViewCost = Boolean(user?.access?.writeOff?.requests?.list?.viewWritOffCost);
+  const canViewMissingStatus = Boolean(user?.access?.writeOff?.requests?.list?.viewMissingStatus);
+  const canPushMissingItems = Boolean(user?.access?.writeOff?.requests?.list?.pushMissingItems);
+  const canViewSubmissionProof = Boolean(user?.access?.writeOff?.requests?.list?.viewCsoSubmissionProof);
+  const canUpdateMissingUpc = Boolean(user?.access?.writeOff?.requests?.list?.updateMissingItemsUpc);
+  const isSubmitted = Boolean(writeOff.submitted);
+  const hasCostData = isSubmitted && writeOff.items.some((item: any) => item.writeOffCost !== undefined && item.writeOffCost !== null);
+  const hasFoundData = isSubmitted && writeOff.items.some((item: any) => item.found !== undefined && item.found !== null);
+  const totalWriteOffCost = writeOff.items.reduce((total: number, item: any) => total + (Number(item.writeOffCost) || 0), 0);
+  const showCostColumn = !isATE && !isBT && canViewCost && hasCostData && totalWriteOffCost > 0;
+  const showMissingStatusColumn = !isATE && !isBT && canViewMissingStatus && hasFoundData;
 
   // State for Comments
   const [viewCommentsItemId, setViewCommentsItemId] = useState<string | null>(null);
@@ -69,7 +110,7 @@ function RouteComponent() {
       );
 
       // Update the local state with the returned list data
-      setWriteOff(res.data);
+      setWriteOff(mergeWriteOffResponse(res.data));
     } catch (err: any) {
       if (err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Failed to add comment", err);
@@ -102,7 +143,7 @@ function RouteComponent() {
         }
       );
 
-      setWriteOff(res.data);
+      setWriteOff(mergeWriteOffResponse(res.data));
       setEditItem(null);
     } catch (err: any) {
       if (err.response?.status === 403) return navigate({ to: "/no-access" });
@@ -123,7 +164,7 @@ function RouteComponent() {
           }
         }
       );
-      setWriteOff(res.data);
+      setWriteOff(mergeWriteOffResponse(res.data));
     } catch (err: any) {
       if (err.response?.status === 403) return navigate({ to: "/no-access" });
       // This will now show the actual error message from the backend
@@ -148,12 +189,37 @@ function RouteComponent() {
           }
         }
       );
-      setWriteOff(res.data);
+      // Finalize queues background automation and may return an empty/legacy
+      // response body. Preserve the loaded write-off shape so the page can
+      // render immediately without losing `items`.
+      setWriteOff((current: any) => ({
+        ...current,
+        ...(res.data && !Array.isArray(res.data) ? res.data : {}),
+        submitted: true,
+      }));
       // Optional: add a success toast notification here
     } catch (err: any) {
       if (err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Finalization failed", err);
     }
+  };
+
+  const handleUpdateMissingUpc = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const res = await axios.patch(`/api/write-off/${writeOff._id}/items/${upcItem._id}/upc`, { upc_barcode: upcValue }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.requests.list.updateMissingItemsUpc' } });
+      setWriteOff(mergeWriteOffResponse(res.data));
+      setUpcItem(null);
+    } catch (err: any) { alert(err.response?.data?.error || 'Failed to update UPC.'); }
+  };
+
+  const handleResubmitMissing = async () => {
+    if (!window.confirm('Resubmit all missing items to CStore?')) return;
+    try {
+      const res = await axios.patch(`/api/write-off/${writeOff._id}/resubmit-missing`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.requests.list.pushMissingItems' } });
+      setWriteOff(mergeWriteOffResponse(res.data));
+      window.alert('Your request is queued. Check back in a few minutes to view the current status.');
+    } catch (err: any) { alert(err.response?.data?.error || 'Failed to resubmit missing items.'); }
   };
 
   // Helper to determine if the page should be read-only
@@ -259,7 +325,31 @@ function RouteComponent() {
             </div>
           </div>
 
-          <div className="flex items-center">
+          <div className="flex items-center gap-3">
+            {showCostColumn && (
+              <div className="mr-2 text-right">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total Write-Off Cost</div>
+                <div className="text-lg font-bold text-slate-800">${totalWriteOffCost.toFixed(2)}</div>
+              </div>
+            )}
+            {!isATE && !isBT && canViewSubmissionProof && writeOff.csoSubmissionProof && (
+              <Button
+                variant="outline"
+                className="h-12 rounded-xl font-bold text-xs uppercase tracking-wide"
+                onClick={() => window.open(`/cdn/download/${encodeURIComponent(writeOff.csoSubmissionProof)}`, '_blank', 'noopener,noreferrer')}
+              >
+                View Submission Proof
+              </Button>
+            )}
+            {!isATE && !isBT && canPushMissingItems && isSubmitted && hasFoundData && writeOff.items.some((item: any) => item.found === false) && (
+              <Button
+                variant="outline"
+                className="h-12 rounded-xl font-bold text-xs uppercase tracking-wide border-amber-300 text-amber-700 hover:bg-amber-50"
+                onClick={handleResubmitMissing}
+              >
+                Push Missing Items
+              </Button>
+            )}
             <Button
               // Button is disabled if:
               // 1. The overall list status isn't 'Complete' (meaning items are still pending)
@@ -379,7 +469,11 @@ function RouteComponent() {
                       } ${item.completed ? 'bg-slate-50/30' : ''}`}
                   >
                     <td className="px-6 py-4">
-                      <div className="flex flex-col">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex-shrink-0 flex items-center justify-center">
+                          {item.image_url ? <img src={item.image_url} alt={item.name} loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-gray-400" />}
+                        </div>
+                        <div className="flex flex-col">
                         <span className="text-sm font-semibold text-slate-800">{item.name}</span>
                         <span className="text-xs font-bold text-indigo-400">
                           EXP: {new Date(item.expiryDate).toLocaleDateString('en-US', {
@@ -389,6 +483,7 @@ function RouteComponent() {
                             year: 'numeric',
                           })}
                         </span>
+                        </div>
                       </div>
                     </td>
                     <td
@@ -396,11 +491,7 @@ function RouteComponent() {
                       onClick={(e) => {
                         e.stopPropagation();
                         // New check:
-                        if (item.completed) {
-                          alert("This item is already checked. Please uncheck it to view barcode.");
-                          return;
-                        }
-                        setBarcodeValue(item.upc_barcode);
+                        setActiveBarcodeItem({ name: item.name, upc: item.upc_barcode, image: item.image_url || null });
                       }}
                     >
                       {item.upc_barcode}
@@ -496,6 +587,7 @@ function RouteComponent() {
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead className="sticky top-0 bg-slate-50 z-10 border-b border-slate-200">
                 <tr>
+                  <th className="px-4 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-center">Image</th>
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Item Name
                   </th>
@@ -511,6 +603,12 @@ function RouteComponent() {
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     Reason
                   </th>
+                  {showCostColumn && (
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">Cost</th>
+                  )}
+                  {showMissingStatusColumn && (
+                    <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-center">Found</th>
+                  )}
                   <th className="px-6 py-4 text-xs font-semibold text-slate-500 uppercase tracking-wide text-right">
                     Action
                   </th>
@@ -524,6 +622,11 @@ function RouteComponent() {
                     className={`transition-colors cursor-pointer ${isLocked ? 'cursor-default' : 'hover:bg-slate-50'
                       } ${item.completed ? 'bg-slate-50/30' : ''}`}
                   >
+                    <td className="px-4 py-4 text-center">
+                      <div className="w-10 h-10 rounded-lg bg-gray-100 overflow-hidden border border-gray-200 flex items-center justify-center mx-auto">
+                        {item.image_url ? <img src={item.image_url} alt={item.name} loading="lazy" className="w-full h-full object-cover" /> : <ImageIcon className="w-4 h-4 text-gray-400" />}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col">
                         <span className="text-sm font-semibold text-slate-800">
@@ -540,14 +643,10 @@ function RouteComponent() {
                       onClick={(e) => {
                         e.stopPropagation();
                         // New check:
-                        if (item.completed) {
-                          alert("This item is already checked. Please uncheck it to view barcode.");
-                          return;
-                        }
-                        setBarcodeValue(item.upc_barcode)
+                        setActiveBarcodeItem({ name: item.name, upc: item.upc_barcode, image: item.image_url || null });
                       }}
                     >
-                      <span className="text-sm">{item.upc_barcode}</span>
+                      <span className="inline-flex items-center gap-1.5 text-sm font-mono font-bold"><BarcodeIcon className="w-3.5 h-3.5" />{item.upc_barcode}</span>
                     </td>
 
                     <td className="px-6 py-4 text-center"
@@ -605,7 +704,29 @@ function RouteComponent() {
                       </div>
                     </td>
 
+                    {showCostColumn && (
+                      <td className="px-6 py-4 text-right font-semibold text-slate-700">
+                        ${Number(item.writeOffCost || 0).toFixed(2)}
+                      </td>
+                    )}
+                    {showMissingStatusColumn && (
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border ${item.found === true
+                          ? 'bg-green-100 border-green-200 text-green-700'
+                          : 'bg-red-100 border-red-200 text-red-700'
+                          }`}>
+                          {item.found === true ? 'Found' : 'Missing'}
+                        </span>
+                      </td>
+                    )}
+
                     <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                      {canUpdateMissingUpc && isLocked && item.found === false && (
+                        <button type="button" className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100" onClick={(e) => { e.stopPropagation(); setUpcItem(item); setUpcValue(item.upc_barcode || ''); }} title="Update UPC">
+                          <Pencil size={16} />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -621,6 +742,7 @@ function RouteComponent() {
                           <Square size={28} className="text-slate-300" strokeWidth={2} />
                         )}
                       </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -631,14 +753,28 @@ function RouteComponent() {
       </div>
 
       {/* Barcode Dialog */}
-      <Dialog open={!!barcodeValue} onOpenChange={() => setBarcodeValue(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>UPC Barcode</DialogTitle>
-          </DialogHeader>
-          <div className="flex justify-center items-center py-4">
-            {barcodeValue && <Barcode value={barcodeValue} />}
+      <Dialog open={!!activeBarcodeItem} onOpenChange={(open) => { if (!open) setActiveBarcodeItem(null); }}>
+        <DialogContent className="sm:max-w-md rounded-3xl overflow-hidden p-0 border-none bg-white">
+          <div className="w-full pt-5 pb-2 text-center"><span className="bg-gray-100 px-3 py-1 rounded-full text-[9px] uppercase tracking-tighter font-black text-gray-500">Verify Product Identity</span></div>
+          <div className="w-full h-44 bg-white border-b border-gray-100 flex items-center justify-center">
+            {activeBarcodeItem?.image ? <img src={activeBarcodeItem.image} alt={activeBarcodeItem.name} className="w-full h-full object-contain px-6 pb-4" /> : <div className="text-gray-300 flex flex-col items-center"><ImageIcon className="w-12 h-12 opacity-20" /><span className="text-xs font-bold uppercase">No Image Available</span></div>}
           </div>
+          <div className="flex flex-col items-center p-8 pt-6">
+            <div className="w-full p-6 rounded-2xl border-2 border-gray-100 mb-6 flex justify-center"><Barcode value={activeBarcodeItem?.upc || ''} width={2.2} height={100} displayValue={false} /></div>
+            <h3 className="text-base font-black text-gray-900 text-center">{activeBarcodeItem?.name}</h3>
+            <div className="mt-2 bg-blue-50 px-4 py-1.5 rounded-lg text-sm font-mono font-black text-blue-700">{activeBarcodeItem?.upc}</div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!upcItem} onOpenChange={(open) => !open && setUpcItem(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader><DialogTitle>Update Missing UPC</DialogTitle></DialogHeader>
+          {upcItem && <form onSubmit={handleUpdateMissingUpc} className="space-y-4">
+            <p className="text-sm text-slate-500">Enter the corrected UPC for {upcItem.name}.</p>
+            <Input value={upcValue} onChange={(e) => setUpcValue(e.target.value)} autoFocus required />
+            <DialogFooter><Button type="submit">Save UPC</Button></DialogFooter>
+          </form>}
         </DialogContent>
       </Dialog>
 
