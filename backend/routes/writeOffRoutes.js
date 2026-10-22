@@ -582,8 +582,8 @@ router.patch("/:id/finalize", async (req, res) => {
     const location = await Location.findOne({ site: list.site });
 
     if (location) {
-      // targetStationCsoCode = location.csoCode || "0";
-      targetStationCsoCode = '31750'; // Hardcoded for testing purposes
+      targetStationCsoCode = location.csoCode || "0";
+      // targetStationCsoCode = '31750'; // Hardcoded for testing purposes
       const stationTimezone = location.timezone || "America/Toronto";
 
       // Convert UTC createdAt date to the station's exact local timezone
@@ -620,16 +620,18 @@ router.patch("/:id/finalize", async (req, res) => {
 
     // 4. Notification & Email Configuration
     const hubLink = `https://app.gen7fuel.com/write-off/${list._id}`;
+    
+    const categoryUsers = await User.find({ is_active: true })
+      .populate("role", "role_name name")
+      .select("email role");
+    const categoryEmails = categoryUsers
+      .filter((user) => /inventory\s*team/i.test(user.role?.role_name || user.role?.name || ""))
+      .map((user) => user.email)
+      .filter(Boolean);
+
     const emailRecipients = {
-      primaryTo: "grayson@gen7fuel.com",
-      categoryTeam: [
-        "daksh@gen7fuel.com",
-        "karthikeyan@gen7fuel.com",
-        "vasu@gen7fuel.com",
-        "Saeid@gen7fuel.com",
-        "zyannic@bosservicesltd.com",
-        "tejasvini@gen7fuel.com",
-      ],
+      primaryTo: ["grayson@gen7fuel.com", "daksh@gen7fuel.com"],
+      categoryTeam: categoryEmails
     };
 
     const subject = isBT
@@ -662,20 +664,20 @@ router.patch("/:id/finalize", async (req, res) => {
       </td>`;
     }
 
-    // await pushNotification({
-    //   io: req.app.get("io"),
-    //   recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
-    //   slug: "write-off-finalized",
-    //   subject: subject,
-    //   fieldValues: {
-    //     site: list.site,
-    //     listNumber: list.listNumber,
-    //     bannerColor: bannerColor,
-    //     headerTitle: headerTitle,
-    //     mainMessage: mainMessage,
-    //     buttonsHTML: buttonsHTML,
-    //   },
-    // });
+    await pushNotification({
+      io: req.app.get("io"),
+      recipientEmails: [emailRecipients.primaryTo, ...emailRecipients.categoryTeam],
+      slug: "write-off-finalized",
+      subject: subject,
+      fieldValues: {
+        site: list.site,
+        listNumber: list.listNumber,
+        bannerColor: bannerColor,
+        headerTitle: headerTitle,
+        mainMessage: mainMessage,
+        buttonsHTML: buttonsHTML,
+      },
+    });
 
     res.json(finalizedList);
   } catch (err) {
