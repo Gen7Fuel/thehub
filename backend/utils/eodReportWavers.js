@@ -18,6 +18,16 @@ const h = React.createElement;
 // Helper function to map site names for PDF display
 const { formatReportSiteName } = require('./siteDisplayName');
 
+const formatNumber = (value, decimals) => Number(value || 0).toLocaleString('en-CA', {
+  minimumFractionDigits: decimals,
+  maximumFractionDigits: decimals,
+});
+
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  return amount >= 0 ? `$${formatNumber(amount, 2)}` : `-$${formatNumber(Math.abs(amount), 2)}`;
+};
+
 const styles = StyleSheet.create({
   page: {
     padding: 30,
@@ -139,10 +149,7 @@ function EodReportDoc({ site, date, data }) {
   ) => {
     let amtStr = "";
     if (typeof amount === "number") {
-      amtStr =
-        amount >= 0
-          ? `$${amount.toFixed(2)}`
-          : `-$${Math.abs(amount).toFixed(2)}`;
+      amtStr = formatCurrency(amount);
     }
 
     const rowStyle = isTotalHighlight ? styles.totalRow : styles.tableRow;
@@ -341,16 +348,12 @@ function EodReportDoc({ site, date, data }) {
             h(
               Text,
               { style: styles.arColAmt },
-              item.incurred >= 0
-                ? `$${item.incurred.toFixed(2)}`
-                : `-$${Math.abs(item.incurred).toFixed(2)}`,
+              formatCurrency(item.incurred),
             ),
             h(
               Text,
               { style: styles.arColAmt },
-              item.paid >= 0
-                ? `$${item.paid.toFixed(2)}`
-                : `-$${Math.abs(item.paid).toFixed(2)}`,
+              formatCurrency(item.paid),
             ),
           ),
         ),
@@ -361,16 +364,12 @@ function EodReportDoc({ site, date, data }) {
         h(
           Text,
           { style: [styles.arColAmt, styles.textBold] },
-          totalArIncurred >= 0
-            ? `$${totalArIncurred.toFixed(2)}`
-            : `-$${Math.abs(totalArIncurred).toFixed(2)}`,
+          formatCurrency(totalArIncurred),
         ),
         h(
           Text,
           { style: [styles.arColAmt, styles.textBold] },
-          totalArPaid >= 0
-            ? `$${totalArPaid.toFixed(2)}`
-            : `-$${Math.abs(totalArPaid).toFixed(2)}`,
+          formatCurrency(totalArPaid),
         ),
       ),
 
@@ -498,33 +497,33 @@ function EodReportDoc({ site, date, data }) {
           View,
           { key: idx, style: styles.fuelGridRow },
           h(Text, { style: styles.fuelColDesc }, row.description),
-          h(Text, { style: styles.fuelColVal }, row.totalLitres.toFixed(3)),
+          h(Text, { style: styles.fuelColVal }, formatNumber(row.totalLitres, 3)),
           h(
             Text,
             { style: styles.fuelColVal },
-            `$${row.totalAmount.toFixed(2)}`,
+            formatCurrency(row.totalAmount),
           ),
-          h(Text, { style: styles.fuelColVal }, row.treatyLitres.toFixed(3)),
+          h(Text, { style: styles.fuelColVal }, formatNumber(row.treatyLitres, 3)),
           h(
             Text,
             { style: styles.fuelColVal },
-            `$${row.treatyAmount.toFixed(2)}`,
+            formatCurrency(row.treatyAmount),
           ),
-          h(Text, { style: styles.fuelColVal }, row.nonTreatyLitres.toFixed(3)),
+          h(Text, { style: styles.fuelColVal }, formatNumber(row.nonTreatyLitres, 3)),
           h(
             Text,
             { style: styles.fuelColVal },
-            `$${row.nonTreatyAmount.toFixed(2)}`,
+            formatCurrency(row.nonTreatyAmount),
           ),
           h(
             Text,
             { style: styles.fuelColWide },
-            `$${row.taxableNonTreaty.toFixed(2)}`,
+            formatCurrency(row.taxableNonTreaty),
           ),
           h(
             Text,
             { style: styles.fuelColWide },
-            `$${row.remittableGst.toFixed(2)}`,
+            formatCurrency(row.remittableGst),
           ),
         ),
       ),
@@ -545,42 +544,42 @@ function EodReportDoc({ site, date, data }) {
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          data.fuelRemittanceTotals.totalLitres.toFixed(3),
+          formatNumber(data.fuelRemittanceTotals.totalLitres, 3),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          `$${data.fuelRemittanceTotals.totalAmount.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.totalAmount),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          data.fuelRemittanceTotals.treatyLitres.toFixed(3),
+          formatNumber(data.fuelRemittanceTotals.treatyLitres, 3),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          `$${data.fuelRemittanceTotals.treatyAmount.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.treatyAmount),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          data.fuelRemittanceTotals.nonTreatyLitres.toFixed(3),
+          formatNumber(data.fuelRemittanceTotals.nonTreatyLitres, 3),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          `$${data.fuelRemittanceTotals.nonTreatyAmount.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.nonTreatyAmount),
         ),
         h(
           Text,
           { style: [styles.fuelColWide, styles.textBold] },
-          `$${data.fuelRemittanceTotals.taxableNonTreaty.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.taxableNonTreaty),
         ),
         h(
           Text,
           { style: [styles.fuelColWide, styles.textBold] },
-          `$${data.fuelRemittanceTotals.remittableGst.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.remittableGst),
         ),
       ),
     ),
