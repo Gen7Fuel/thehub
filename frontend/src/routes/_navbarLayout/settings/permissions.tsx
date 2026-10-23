@@ -1,47 +1,25 @@
 import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import axios from "axios";
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
+import { isApiError } from '@/api/core/errors';
+import { permissionQueries } from '@/api/permissions/permissions.queries';
+import type { Permission } from '@/api/permissions/permissions.types';
 
 export const Route = createFileRoute('/_navbarLayout/settings/permissions')({
   component: RouteComponent,
-  loader: async () => {
+  loader: async ({ context }) => {
     try {
-      // Fetch all permissions from backend
-      const response = await axios.get('/api/permissions', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "settings",
-        },
-      });
-
-      if (response.status === 403) {
-        // explicitly catch 403s even if backend responds oddly
-        return { permissions: [], accessDenied: true };
-      }
-
-      return { permissions: response.data, accessDenied: false };
-    } catch (error: any) {
+      const permissions = await context.queryClient.ensureQueryData(permissionQueries.list());
+      return { permissions, accessDenied: false };
+    } catch (error: unknown) {
       console.error('Error fetching permissions:', error);
-
-      // detect 403 inside error block
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         return { permissions: [], accessDenied: true };
       }
-
       return { permissions: [], accessDenied: false };
     }
   },
 });
-
-interface Permission {
-  _id: string;
-  module_name: string;
-  components: {
-    name: string;
-    children: string[];
-  }[];
-}
 
 function RouteComponent() {
   const navigate = useNavigate();

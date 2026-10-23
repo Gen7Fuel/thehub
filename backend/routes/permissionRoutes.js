@@ -4,6 +4,7 @@ const Permission = require("../models/Permission");
 const User = require('../models/User');
 const Role = require("../models/Role");
 const { initializePermissionMap } = require("../utils/permissionStore.js");
+const { logAction } = require('../middleware/actionLogger');
 
 // For normalising permission names and structure
 // const normalizeStructure = (nodes = []) => {
@@ -199,6 +200,17 @@ router.post("/", async (req, res) => {
     // 🔥 REFRESH THE IN-MEMORY MAP
     await initializePermissionMap();
 
+    await logAction(req, {
+      action: 'create',
+      resourceType: 'permission',
+      resourceId: newPermission._id,
+      success: true,
+      statusCode: 201,
+      message: `Permission module ${newPermission.module_name} created`,
+      after: newPermission.toObject(),
+      source: 'settings.permissions',
+    });
+
     /**
      * NOTE: We do NOT need to update User customPermissionsArray here.
      * Users only store overrides. Since the module is brand new, 
@@ -222,6 +234,18 @@ router.delete("/:id", async (req, res) => {
   try {
     const deleted = await Permission.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Not found" });
+
+    await initializePermissionMap();
+    await logAction(req, {
+      action: 'delete',
+      resourceType: 'permission',
+      resourceId: deleted._id,
+      success: true,
+      statusCode: 200,
+      message: `Permission module ${deleted.module_name} deleted`,
+      before: deleted.toObject(),
+      source: 'settings.permissions',
+    });
 
     res.status(200).json({ message: "Deleted successfully and removed from users" });
   } catch (err) {
@@ -387,6 +411,8 @@ router.put("/:id", async (req, res) => {
     const permission = await Permission.findById(req.params.id);
     if (!permission) return res.status(404).json({ message: "Permission not found" });
 
+    const beforePermission = permission.toObject();
+
     permission.module_name = module_name;
     permission.structure = structure;
     
@@ -462,6 +488,18 @@ router.put("/:id", async (req, res) => {
     await Promise.all([...rolePromises, ...userPromises]);
     // 🔥 REFRESH THE IN-MEMORY MAP
     await initializePermissionMap();
+
+    await logAction(req, {
+      action: 'update',
+      resourceType: 'permission',
+      resourceId: permission._id,
+      success: true,
+      statusCode: 200,
+      message: `Permission tree ${permission.module_name} updated`,
+      before: beforePermission,
+      after: permission.toObject(),
+      source: 'settings.permissions',
+    });
 
     res.status(200).json({
       message: "Permission and associated Roles/Users synced successfully",

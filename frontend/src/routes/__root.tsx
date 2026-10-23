@@ -1,4 +1,5 @@
-import { ErrorComponent, Outlet, createRootRoute } from '@tanstack/react-router'
+import { ErrorComponent, Outlet, createRootRouteWithContext } from '@tanstack/react-router'
+import type { QueryClient } from '@tanstack/react-query'
 import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 import { PwaInstallBanner } from '@/components/custom/PwaInstallBanner'
 import { Button } from '@/components/ui/button'
@@ -60,7 +61,7 @@ function RootComponent() {
   )
 }
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   component: RootComponent,
   errorComponent: RootErrorComponent,
 })

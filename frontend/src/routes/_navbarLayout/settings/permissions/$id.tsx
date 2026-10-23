@@ -1,26 +1,23 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import axios from "axios";
+import { useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PermissionTree } from "@/components/custom/PermissionTree"; // Import the improved UI component
+import { isApiError } from '@/api/core/errors';
+import { permissionsApi } from '@/api/permissions/permissions.api';
+import { permissionKeys, permissionQueries } from '@/api/permissions/permissions.queries';
+import type { Permission, PermissionNode } from '@/api/permissions/permissions.types';
 
 export const Route = createFileRoute('/_navbarLayout/settings/permissions/$id')({
   component: RouteComponent,
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     try {
-      const response = await axios.get(`/api/permissions/${params.id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "settings",
-        },
-      });
-      return { permission: response.data || null };
-    } catch (error: any) {
+      const permission = await context.queryClient.ensureQueryData(permissionQueries.detail(params.id));
+      return { permission, noAccess: false };
+    } catch (error: unknown) {
       console.error("Error fetching permission:", error);
-
-      // Check if it's a 403 error
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         return { permission: null, noAccess: true };
       }
-
       return { permission: null, noAccess: false };
     }
   },
@@ -28,41 +25,40 @@ export const Route = createFileRoute('/_navbarLayout/settings/permissions/$id')(
 
 function RouteComponent() {
   const navigate = useNavigate();
-  const { permission, noAccess } = Route.useLoaderData() as { permission: any; noAccess?: boolean };
+  const queryClient = useQueryClient();
+  const { permission, noAccess } = Route.useLoaderData() as { permission: Permission | null; noAccess: boolean };
 
-  // Redirect to /no-access if 403
-  if (noAccess) {
-    navigate({to:'/no-access'});
-    return null; // Prevent rendering anything else
-  }
+  useEffect(() => {
+    if (noAccess) navigate({ to: '/no-access' });
+  }, [navigate, noAccess]);
 
-  if (!permission) return <div className="p-4 text-red-500">Permission not found.</div>;
-
-  // Handle save callback
-  // const handleSave = async (structure: any[], moduleName: string, oldModuleName: string) => {
-  const handleSave = async (structure: any[], moduleName: string) => {
-    try {
-      await axios.put(`/api/permissions/${permission._id}`, {
-        module_name: moduleName,
-        // old_module_name: oldModuleName,
-        structure,
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "settings",
-        },
-      });
+  const updatePermission = useMutation({
+    mutationFn: ({ structure, moduleName }: { structure: PermissionNode[]; moduleName: string }) =>
+      permissionsApi.update(permission!._id, { module_name: moduleName, structure }),
+    onSuccess: async (updated) => {
+      queryClient.setQueryData(permissionKeys.detail(updated._id), updated);
+      await queryClient.invalidateQueries({ queryKey: permissionKeys.lists() });
       alert("Permission updated successfully!");
       navigate({ to: "/settings/permissions" });
-    } catch (error: any) {
-      if (error.response?.status === 403) {
-        // Redirect to no-access page
+    },
+    onError: (error: unknown) => {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: "/no-access" });
       } else {
         console.error(error);
         alert("Failed to update permission.");
       }
-    }
+    },
+  });
+
+  if (noAccess) return null;
+
+  if (!permission) return <div className="p-4 text-red-500">Permission not found.</div>;
+
+  // Handle save callback
+  // const handleSave = async (structure: any[], moduleName: string, oldModuleName: string) => {
+  const handleSave = (structure: PermissionNode[], moduleName: string) => {
+    updatePermission.mutate({ structure, moduleName });
   };
 
   return <PermissionTree permission={permission} onSave={handleSave} />;

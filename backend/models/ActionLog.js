@@ -3,6 +3,13 @@ const { attachSiteAlias } = require('../utils/attachSiteAlias');
 
 const ActionLogSchema = new mongoose.Schema(
   {
+    eventId: { type: String, unique: true, sparse: true },
+    eventType: {
+      type: String,
+      enum: ['access', 'change'],
+      default: 'change',
+      index: true,
+    },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     username: { type: String },
     role: { type: String },
@@ -32,6 +39,9 @@ const ActionLogSchema = new mongoose.Schema(
     success: { type: Boolean, required: true, index: true },
     statusCode: { type: Number },
     message: { type: String },
+    source: { type: String, index: true },
+    method: { type: String },
+    path: { type: String },
 
     ip: { type: String },
     userAgent: { type: String },

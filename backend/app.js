@@ -6,6 +6,7 @@ const { connectPG, migratePG } = require("./config/pg");
 const http = require("http");
 const { Server } = require("socket.io");
 const requestId = require("./middleware/requestId");
+const actionAccessLogger = require("./middleware/actionAccessLogger");
 
 // throw new Error("ROLLBACK_TEST_CRASH");
 
@@ -48,7 +49,6 @@ const purchaseOrderRoutes = require("./routes/purchaseOrder");
 const payablesRoutes = require("./routes/payablesRoute");
 const atmRoutes = require("./routes/atmRoutes");
 const cashSummaryRoutes = require("./routes/cashSummaryNewRoutes");
-const payPointRoutes = require("./routes/payPointRoutes");
 const kardpollTransactionsRoutes = require("./routes/kardpollTransactions");
 const fleetRoutes = require("./routes/fleetRoutes");
 const fleetCustomers = require("./routes/fleetCustomerRoutes");
@@ -118,6 +118,7 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 app.use(requestId());
+app.use(actionAccessLogger());
 
 
 // Health check
@@ -143,7 +144,6 @@ app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/payables", payablesRoutes);
 app.use("/api/atm", atmRoutes);
 app.use("/api/cash-summary", cashSummaryRoutes);
-app.use("/api/paypoints", payPointRoutes);
 app.use("/api/kardpoll-transactions", kardpollTransactionsRoutes);
 app.use("/api/fleet", fleetRoutes);
 app.use("/api/fleet-customers", fleetCustomers);
