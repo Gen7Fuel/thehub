@@ -49,6 +49,9 @@ const ActionLogSchema = new mongoose.Schema(
     correlationId: { type: String },
 
     changes: { type: Object, default: undefined },
+    changeSummary: { type: Object, default: undefined },
+    changesTruncated: { type: Boolean, default: undefined },
+    bulk: { type: Object, default: undefined },
     beforeSnapshot: { type: Object, default: undefined },
     afterSnapshot: { type: Object, default: undefined },
 

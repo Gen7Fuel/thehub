@@ -4,7 +4,7 @@ const Permission = require("../models/Permission");
 const User = require('../models/User');
 const Role = require("../models/Role");
 const { initializePermissionMap } = require("../utils/permissionStore.js");
-const { logAction } = require('../middleware/actionLogger');
+const { logChange } = require('../middleware/changeLogger');
 
 // For normalising permission names and structure
 // const normalizeStructure = (nodes = []) => {
@@ -200,14 +200,14 @@ router.post("/", async (req, res) => {
     // 🔥 REFRESH THE IN-MEMORY MAP
     await initializePermissionMap();
 
-    await logAction(req, {
+    await logChange(req, {
       action: 'create',
       resourceType: 'permission',
       resourceId: newPermission._id,
       success: true,
       statusCode: 201,
-      message: `Permission module ${newPermission.module_name} created`,
       after: newPermission.toObject(),
+      resourceLabel: newPermission.module_name,
       source: 'settings.permissions',
     });
 
@@ -236,14 +236,14 @@ router.delete("/:id", async (req, res) => {
     if (!deleted) return res.status(404).json({ error: "Not found" });
 
     await initializePermissionMap();
-    await logAction(req, {
+    await logChange(req, {
       action: 'delete',
       resourceType: 'permission',
       resourceId: deleted._id,
       success: true,
       statusCode: 200,
-      message: `Permission module ${deleted.module_name} deleted`,
       before: deleted.toObject(),
+      resourceLabel: deleted.module_name,
       source: 'settings.permissions',
     });
 
@@ -489,15 +489,18 @@ router.put("/:id", async (req, res) => {
     // 🔥 REFRESH THE IN-MEMORY MAP
     await initializePermissionMap();
 
-    await logAction(req, {
+    await logChange(req, {
       action: 'update',
       resourceType: 'permission',
       resourceId: permission._id,
       success: true,
       statusCode: 200,
-      message: `Permission tree ${permission.module_name} updated`,
       before: beforePermission,
       after: permission.toObject(),
+      resourceLabel: permission.module_name,
+      diffOptions: {
+        arrayKeys: { structure: 'permId' },
+      },
       source: 'settings.permissions',
     });
 

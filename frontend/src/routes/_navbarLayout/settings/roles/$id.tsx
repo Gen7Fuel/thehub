@@ -138,8 +138,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RolePermissionEditor } from "@/components/custom/RolePermissionEditor";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import axios from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from '@tanstack/react-query';
+import { isApiError } from '@/api/core/errors';
+import { rolesApi } from '@/api/roles/roles.service';
+import { roleKeys } from '@/api/roles/roles.queries';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
@@ -171,6 +174,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/roles/$id")({
 export function RouteComponent() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [role, setRole] = useState<Role | null>(null);
   // const [templates, setTemplates] = useState<PermissionTemplate[]>([]);
@@ -186,20 +190,9 @@ export function RouteComponent() {
   // Combined Fetching Logic
   const fetchInitialData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        "X-Required-Permission": "settings"
-      };
-
       // Fetch Role and Users in parallel
-      const [roleRes, usersRes] = await Promise.all([
-        axios.get(`/api/roles/${id}`, { headers }),
-        axios.get("/api/users/populate-roles", { headers })
-      ]);
-
-      const fetchedRole = roleRes.data;
-      const allUsers = usersRes.data;
+      const fetchedRole = await rolesApi.get(id);
+      const allUsers = await rolesApi.listAssignableUsers(fetchedRole.role_name);
 
       setRole(fetchedRole);
       setUsers(allUsers);
@@ -215,7 +208,7 @@ export function RouteComponent() {
       setSelectedUsers(currentlyAssigned);
     } catch (err: any) {
       console.error("Error fetching data:", err);
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
       }
     } finally {
@@ -233,14 +226,12 @@ export function RouteComponent() {
   const handleSave = async (updatedPermissions: PermissionNode[]) => {
     if (!role) return;
     try {
-      await axios.put(
-        `/api/roles/${id}`,
-        { ...role, permissions: updatedPermissions },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, "X-Required-Permission": "settings", } }
-      );
+      const updated = await rolesApi.update(id, { ...role, permissions: updatedPermissions }, 'definition');
+      setRole({ ...role, ...updated, permissions: updatedPermissions });
+      await queryClient.invalidateQueries({ queryKey: roleKeys.all });
       alert("Role updated successfully!");
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {
@@ -255,13 +246,12 @@ export function RouteComponent() {
     if (!role) return;
     if (!confirm("Are you sure you want to delete this role?")) return;
     try {
-      await axios.delete(`/api/roles/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, "X-Required-Permission": "settings" },
-      });
+      await rolesApi.remove(id, role.role_name);
+      await queryClient.invalidateQueries({ queryKey: roleKeys.all });
       alert("Role deleted successfully!");
       navigate({ to: "/settings/roles/" });
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {
@@ -285,12 +275,8 @@ export function RouteComponent() {
     if (!role) return;
     setIsUpdatingType(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `/api/roles/${id}`,
-        { ...role, inStoreAccount: pendingInStoreAccount },
-        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
-      );
+      await rolesApi.update(id, { ...role, inStoreAccount: pendingInStoreAccount }, 'account-type');
+      await queryClient.invalidateQueries({ queryKey: roleKeys.all });
 
       // Update main role state only after success
       setRole({ ...role, inStoreAccount: pendingInStoreAccount });
@@ -329,13 +315,10 @@ export function RouteComponent() {
   const openAssignUsersDialog = async () => {
     setDialogOpen(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("/api/users/populate-roles", {
-        headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" }
-      });
-      setUsers(res.data);
+      const refreshedUsers = await rolesApi.listAssignableUsers(role?.role_name || id);
+      setUsers(refreshedUsers);
 
-      const assignedIds = res.data
+      const assignedIds = refreshedUsers
         .filter((u: any) => {
           const userRoleId = typeof u.role === 'object' ? u.role?._id : u.role;
           return userRoleId === id;
@@ -357,15 +340,17 @@ export function RouteComponent() {
   // };
 
   const saveUserAssignments = async () => {
+    if (!role) return;
+    const roleName = role.role_name;
     try {
-      await axios.put(`/api/roles/${id}/assign-users`,
-        { userIds: selectedUsers },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, "X-Required-Permission": "settings", } }
-      );
+      await rolesApi.assignUsers(id, roleName, selectedUsers);
+      const refreshedUsers = await rolesApi.listAssignableUsers(roleName);
+      setUsers(refreshedUsers);
+      await queryClient.invalidateQueries({ queryKey: roleKeys.users(id) });
       alert("User role updated successfully!");
       setDialogOpen(false);
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {

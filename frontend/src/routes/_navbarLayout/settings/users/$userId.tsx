@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -12,25 +11,21 @@ import {
 } from "@/components/custom/input-otp-masked";
 import { RolePermissionEditor } from "@/components/custom/RolePermissionEditor";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
+import { isApiError } from '@/api/core/errors';
+import { usersApi } from '@/api/users/users.service';
+import { userQueries } from '@/api/users/users.queries';
 
 export const Route = createFileRoute("/_navbarLayout/settings/users/$userId")({
   component: RouteComponent,
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`/api/users/${params.userId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "settings"
-        },
-      });
-
-      return { user: response.data, noAccess: false };
-    } catch (error: any) {
+      const user = await context.queryClient.ensureQueryData(userQueries.detail(params.userId));
+      return { user, noAccess: false };
+    } catch (error: unknown) {
       console.error("Error fetching user:", error);
 
       // Check for 403 and set noAccess flag
-      const noAccess = axios.isAxiosError(error) && error.response?.status === 403;
+      const noAccess = isApiError(error) && error.status === 403;
       return { user: null, noAccess };
     }
   },
@@ -64,7 +59,7 @@ export function RouteComponent() {
       is_inOffice: boolean;
       is_logged_in: boolean;
       last_login: Date;
-      role?: { _id: string; role_name: string };
+      role?: { _id: string; role_name: string; inStoreAccount?: boolean };
       merged_permissions?: PermissionNode[];
       site_access: Record<string, boolean>;
     } | null;
@@ -101,11 +96,8 @@ export function RouteComponent() {
 
     const fetchLocations = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get("/api/locations", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        setLocations(res.data);
+        const sites = await usersApi.listSites(`${user?.firstName || ''} ${user?.lastName || ''}`.trim());
+        setLocations(sites);
       } catch (err) {
         console.error("Error loading locations:", err);
       }
@@ -115,21 +107,7 @@ export function RouteComponent() {
 
   const [isTargetStoreAccount, setIsTargetStoreAccount] = useState<boolean | null>(null);
 
-  // Identify target user's account type
-  useEffect(() => {
-    const checkTargetType = async () => {
-      if (!user?.email) return;
-      try {
-        // Use the email of the user being viewed, not the admin's email
-        const res = await axios.post("/api/auth/identify", { email: user.email });
-        setIsTargetStoreAccount(res.data.inStoreAccount);
-      } catch (err) {
-        console.error("Identity check failed", err);
-        setIsTargetStoreAccount(false); // Fallback to password
-      }
-    };
-    checkTargetType();
-  }, [user?.email]);
+  useEffect(() => setIsTargetStoreAccount(user?.role?.inStoreAccount ?? false), [user?.role]);
 
   const toggleSiteAccess = (site: string) => {
     setSiteAccess((prev) => ({
@@ -141,15 +119,10 @@ export function RouteComponent() {
   const handleSaveSiteAccess = async () => {
     try {
       setSavingAccess(true);
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `/api/users/${params.userId}/site-access`,
-        { siteAccess },
-        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
-      );
+      await usersApi.updateSiteAccess(params.userId, `${user?.firstName} ${user?.lastName}`, siteAccess);
       alert("Site access updated!");
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {
@@ -168,13 +141,10 @@ export function RouteComponent() {
   useEffect(() => {
     const fetchRoles = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await axios.get("/api/roles", {
-          headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" },
-        });
-        setRoles(res.data);
+        const availableRoles = await usersApi.listRoles(`${user?.firstName || ''} ${user?.lastName || ''}`.trim());
+        setRoles(availableRoles);
       } catch (error: any) {
-        if (error.response?.status === 403) {
+        if (isApiError(error) && error.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {
@@ -189,18 +159,13 @@ export function RouteComponent() {
     e.preventDefault();
     setResetStatus(null);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "/api/auth/reset-password",
-        { userId: params.userId, newPassword },
-        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
-      );
+      await usersApi.resetPassword(params.userId, `${user?.firstName} ${user?.lastName}`, newPassword);
       setResetStatus("Password reset successfully!");
       setNewPassword("");
       alert("User Password Reset Succesfull!");
       navigate({ to: `/settings/users/${user?._id}` });
     } catch (error: any) {
-      if (error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       }
@@ -224,13 +189,7 @@ export function RouteComponent() {
   // };
   const verifyPassword = async () => {
     try {
-      const token = localStorage.getItem("token");
-
-      await axios.post(
-        "/api/auth/verify-password",
-        { password },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await usersApi.verifyAdministrator(password, `Administrator verification requested before managing ${user?.firstName} ${user?.lastName}`);
 
       setShowPasswordDialog(false);
 
@@ -252,17 +211,12 @@ export function RouteComponent() {
 
   const handleRoleChange = async () => {
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `/api/users/${params.userId}/role`,
-        { roleId: selectedRole },
-        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
-      );
+      await usersApi.updateRole(params.userId, `${user?.firstName} ${user?.lastName}`, selectedRole);
       alert("User role updated!");
       setShowConfirmDialog(false);
       window.location.reload();
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {
@@ -274,15 +228,11 @@ export function RouteComponent() {
 
   const handleSavePermissions = async () => {
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `/api/users/${params.userId}/permissions`,
-        { mergedPermissions, roleId: user?.role?._id },
-        { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
-      );
+      if (!user?.role?._id) throw new Error('User must have a role before permissions can be updated');
+      await usersApi.updatePermissions(params.userId, `${user.firstName} ${user.lastName}`, mergedPermissions, user.role._id);
       alert("Permissions updated!");
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {
@@ -572,12 +522,7 @@ export function RouteComponent() {
               className="bg-red-600 text-white"
               onClick={async () => {
                 try {
-                  const token = localStorage.getItem("token");
-                  await axios.post(
-                    `/api/users/${user._id}/logout`,
-                    {},
-                    { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "settings" } }
-                  );
+                  await usersApi.logout(user._id, `${user.firstName} ${user.lastName}`);
                   setShowLogoutConfirmDialog(false)
                   alert("User logged out successfully!");
                   navigate({ to: `/settings/users/${user._id}` });

@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
-import { permissionsApi } from './permissions.api'
+import { permissionsApi } from './permissions.service'
 
 export const permissionKeys = {
   all: ['permissions'] as const,

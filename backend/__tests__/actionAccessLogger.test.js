@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const enqueueActionLog = vi.fn().mockResolvedValue(undefined)
+const enqueueAccessLog = vi.fn().mockResolvedValue(undefined)
 const { default: actionAccessLogger } = await import('../middleware/actionAccessLogger.js')
 
 function request(headers = {}) {
@@ -38,19 +38,19 @@ const actionHeaders = {
 }
 
 describe('actionAccessLogger', () => {
-  beforeEach(() => enqueueActionLog.mockClear())
+  beforeEach(() => enqueueAccessLog.mockClear())
 
   it('queues the actual backend response status after the response finishes', async () => {
     const req = request(actionHeaders)
     const res = response(403)
     const next = vi.fn()
 
-    actionAccessLogger({ enqueueActionLog })(req, res, next)
+    actionAccessLogger({ enqueueAccessLog })(req, res, next)
     res.emit('finish')
     await Promise.resolve()
 
     expect(next).toHaveBeenCalledOnce()
-    expect(enqueueActionLog).toHaveBeenCalledWith(expect.objectContaining({
+    expect(enqueueAccessLog).toHaveBeenCalledWith(expect.objectContaining({
       eventType: 'access',
       action: 'read',
       resourceType: 'permission',
@@ -63,8 +63,8 @@ describe('actionAccessLogger', () => {
 
   it('does not log unannotated requests', () => {
     const res = response(200)
-    actionAccessLogger({ enqueueActionLog })(request(), res, vi.fn())
+    actionAccessLogger({ enqueueAccessLog })(request(), res, vi.fn())
     res.emit('finish')
-    expect(enqueueActionLog).not.toHaveBeenCalled()
+    expect(enqueueAccessLog).not.toHaveBeenCalled()
   })
 })

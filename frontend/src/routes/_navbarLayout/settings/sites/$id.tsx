@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import axios from "axios";
 import { useEffect, useState } from "react";
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,9 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Building2, CheckCircle2 } from "lucide-react";
+import { isApiError } from '@/api/core/errors';
+import { sitesApi } from '@/api/sites/sites.service';
+import { siteKeys } from '@/api/sites/sites.queries';
 
 export const Route = createFileRoute("/_navbarLayout/settings/sites/$id")({
   component: RouteComponent,
@@ -139,6 +142,7 @@ function RouteComponent() {
 
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
   const access = user?.access || {};
   const [location, setLocation] = useState<any | null>(null);
@@ -202,22 +206,11 @@ function RouteComponent() {
     }
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`/api/locations/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      const locData = response.data.location || null;
+      const locData = await sitesApi.get(id);
       setLocation(locData);
 
       if (locData?.stationName) {
-        const sheetCheck = await axios.get(
-          `/api/safesheets/${locData.stationName}`,
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          },
-        );
-        setHasSafesheet(sheetCheck.data.exists);
+        setHasSafesheet(await sitesApi.hasSafesheet(locData.stationName));
       }
     } catch (error) {
       console.error("Error fetching location:", error);
@@ -266,19 +259,18 @@ function RouteComponent() {
     e.preventDefault();
     setLoading(true);
     try {
-      await axios.put(
-        `/api/locations/${id}`,
+      await sitesApi.update(
+        id,
         {
           ...formData,
           managerCode: otp,
           sellsLottery: !!formData.sellsLottery,
           bankStmtAccess: formData.bankStmtAccess !== false,
         },
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        },
+        'details',
       );
 
+      await queryClient.invalidateQueries({ queryKey: siteKeys.all });
       alert(`Location: ${formData.stationName} has been updated successfully!`);
       await fetchLocation(); // Pull clean database states
     } catch (error) {
@@ -292,41 +284,25 @@ function RouteComponent() {
   const handleGenerateSafesheet = async () => {
     if (!initialBalance) return alert("Please enter an initial balance.");
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "/api/safesheets",
-        {
-          site: location?.stationName,
-          initialBalance: Number(initialBalance),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "settings",
-          },
-        },
-      );
+      if (!location?.stationName) return;
+      await sitesApi.createSafesheet(location.stationName, Number(initialBalance));
 
       alert(`Safesheet created successfully for ${location?.stationName}`);
       setHasSafesheet(true);
       setShowDialog(false);
     } catch (err: any) {
-      if (err.status == 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }
       console.error(err);
-      alert(err.response?.data?.error || "Failed to create safesheet.");
+      alert(err instanceof Error ? err.message : "Failed to create safesheet.");
     }
   };
 
   const fetchUsersData = async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("/api/users/populate-roles", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const allUsers = res.data;
+      const allUsers = await sitesApi.listAssignableUsers(location?.stationName || 'site');
       setUsers(allUsers);
 
       if (location?.stationName) {
@@ -360,17 +336,8 @@ function RouteComponent() {
   const saveUserAssignments = async () => {
     setIsSavingUsers(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `/api/locations/${id}/assign-users`,
-        {
-          userIds: selectedUsers,
-          stationName: location?.stationName,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      if (!location?.stationName) return;
+      await sitesApi.assignUsers(id, location.stationName, selectedUsers);
       alert("User assignments updated successfully");
       setAssignDialogOpen(false);
     } catch (err) {
@@ -421,18 +388,16 @@ function RouteComponent() {
   const handleSavePushoverConfiguration = async () => {
     setIsSavingPushover(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `/api/locations/${id}`,
+      await sitesApi.update(
+        id,
         {
           ...formData,
           managerCode: otp,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        'pushover',
       );
 
+      await queryClient.invalidateQueries({ queryKey: siteKeys.all });
       alert("Pushover notification routing array updated successfully!");
       setPushoverDialogOpen(false);
       await fetchLocation();
@@ -493,13 +458,13 @@ function RouteComponent() {
 
     setIsSavingRegisters(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `/api/locations/${id}`,
+      await sitesApi.update(
+        id,
         { ...formData, registers: trimmed, managerCode: otp },
-        { headers: { Authorization: `Bearer ${token}` } },
+        'registers',
       );
 
+      await queryClient.invalidateQueries({ queryKey: siteKeys.all });
       alert("Registers updated successfully!");
       setRegistersDialogOpen(false);
       await fetchLocation();

@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PermissionTree } from "@/components/custom/PermissionTree"; // Import the improved UI component
 import { isApiError } from '@/api/core/errors';
-import { permissionsApi } from '@/api/permissions/permissions.api';
+import { permissionsApi } from '@/api/permissions/permissions.service';
 import { permissionKeys, permissionQueries } from '@/api/permissions/permissions.queries';
 import type { Permission, PermissionNode } from '@/api/permissions/permissions.types';
 

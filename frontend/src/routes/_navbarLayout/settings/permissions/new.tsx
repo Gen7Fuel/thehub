@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PermissionTree } from "@/components/custom/PermissionTree";
 import { isApiError } from '@/api/core/errors';
-import { permissionsApi } from '@/api/permissions/permissions.api';
+import { permissionsApi } from '@/api/permissions/permissions.service';
 import { permissionKeys } from '@/api/permissions/permissions.queries';
 import type { PermissionNode } from '@/api/permissions/permissions.types';
 

@@ -1,18 +1,13 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
 import { slugify } from '@/lib/utils';
-import axios from "axios"
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
+import { quickCustomerQueries } from '@/api/quick-customers/quick-customers.queries';
 
 export const Route = createFileRoute('/_navbarLayout/settings/quick-customers')({
   component: RouteComponent,
-  loader: async () => {
+  loader: async ({ context }) => {
     try {
-      const response = await axios.get('/api/locations', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      return { locations: response.data };
+      return { locations: await context.queryClient.ensureQueryData(quickCustomerQueries.sites()) };
     } catch (error) {
       console.error('Error fetching locations:', error);
       return { locations: [] };

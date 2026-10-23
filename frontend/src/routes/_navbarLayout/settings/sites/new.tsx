@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useRouter } from '@tanstack/react-router';
-import axios from "axios";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Building2 } from "lucide-react";
+import { sitesApi } from '@/api/sites/sites.service';
+import { siteKeys, siteQueries } from '@/api/sites/sites.queries';
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites/new')({
   component: NewSiteRouteComponent,
@@ -42,10 +44,6 @@ function NewSiteRouteComponent() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const access = user?.access || {}
-  if (!access?.settings?.value) {
-    navigate({ to: "/no-access" });
-    return;
-  }
   const [formData, setFormData] = useState({
     type: "store", // default type
     stationName: "",
@@ -64,26 +62,36 @@ function NewSiteRouteComponent() {
   const [managerCode, setManagerCode] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter(); // ✅ get router instance here
+  const queryClient = useQueryClient();
 
-  const [users, setUsers] = useState<any[]>([]);
   const [managerDialogOpen, setManagerDialogOpen] = useState(false);
 
-  // --- EFFECTS ---
+  const { data: users = [] } = useQuery({
+    ...siteQueries.users('new-site'),
+    enabled: Boolean(access?.settings?.value),
+  });
+
   useEffect(() => {
-    // Fetch users so we can pick managers even for a new site
-    const fetchUsers = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get('/api/users/populate-roles', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setUsers(res.data);
-      } catch (err) {
-        console.error("Failed to load users", err);
-      }
-    };
-    fetchUsers();
-  }, []);
+    if (!access?.settings?.value) navigate({ to: '/no-access' });
+  }, [access?.settings?.value, navigate]);
+
+  const createSite = useMutation({
+    mutationFn: sitesApi.create,
+    onSuccess: async (createdLocation) => {
+      await queryClient.invalidateQueries({ queryKey: siteKeys.all });
+      alert(`Location: ${createdLocation.stationName} has been created successfully!`);
+      router.load();
+      navigate({
+        to: "/settings/sites/$id",
+        params: { id: createdLocation._id },
+      });
+    },
+    onError: (error) => {
+      console.error(error);
+      alert("Failed to create location. Please try again.");
+    },
+    onSettled: () => setLoading(false),
+  });
 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -93,31 +101,13 @@ function NewSiteRouteComponent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      const response = await axios.post("/api/locations", {
+    createSite.mutate({
         ...formData,
         managerCode, // include OTP value
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-
-      const createdLocation = response.data; // this will have the _id
-      alert(`Location: ${createdLocation.stationName} has been created successfully!`);
-      router.load();
-
-      // Navigate to the newly created location's edit page
-      navigate({
-        to: "/settings/sites/$id",
-        params: { id: createdLocation._id },
-      });
-
-    } catch (err) {
-      console.error(err);
-      alert("Failed to create location. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
+
+  if (!access?.settings?.value) return null;
 
 
   return (

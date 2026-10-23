@@ -1,27 +1,19 @@
 import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
 import { useEffect } from 'react';
-import axios from "axios";
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
+import { isApiError } from '@/api/core/errors';
+import { roleQueries } from '@/api/roles/roles.queries';
+import type { Role } from '@/api/roles/roles.types';
 
 export const Route = createFileRoute('/_navbarLayout/settings/roles')({
   component: RouteComponent,
-  loader: async () => {
+  loader: async ({ context }) => {
     try {
-      // Fetch all roles from backend
-      const response = await axios.get('/api/roles', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "settings",
-        },
-      });
-      if (response.status === 403) {
-        // explicitly catch 403s even if backend responds oddly
-        return { roles: [], accessDenied: true };
-      }
-      return { roles: response.data, accessDenied: false };
-    } catch (error) {
+      const roles = await context.queryClient.ensureQueryData(roleQueries.list());
+      return { roles, accessDenied: false };
+    } catch (error: unknown) {
       console.error('Error fetching roles:', error);
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         return { roles: [], accessDenied: true };
       }
       
@@ -29,15 +21,6 @@ export const Route = createFileRoute('/_navbarLayout/settings/roles')({
     }
   },
 });
-
-interface Role {
-  _id: string;
-  role_name: string;
-  permissions: {
-    name: string;
-    children: { name: string }[];
-  }[];
-}
 
 function RouteComponent() {
   const navigate = useNavigate();

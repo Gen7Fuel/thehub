@@ -1,6 +1,6 @@
 const { randomUUID } = require('crypto');
-const { computeChanges } = require('../utils/diff');
 const { enqueueActionLog } = require('../queues/actionLogQueue');
+const { computeAuditDiff, buildAuditMessage } = require('../utils/auditDiff');
 
 function getActor(req) {
   const user = req.user || {};
@@ -28,10 +28,22 @@ async function logAction(req, {
   source,
   method,
   path,
+  changes: suppliedChanges,
+  changeSummary: suppliedChangeSummary,
+  changesTruncated: suppliedChangesTruncated,
+  resourceLabel,
+  bulk,
+  diffOptions,
 }) {
   try {
     const actor = getActor(req);
-    const changes = computeChanges(before, after);
+    const computed = suppliedChanges
+      ? {
+          changes: suppliedChanges,
+          changeSummary: suppliedChangeSummary,
+          changesTruncated: suppliedChangesTruncated,
+        }
+      : computeAuditDiff(before, after, diffOptions);
     const ip = (req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()) || req.ip;
     const userAgent = req.headers['user-agent'];
 
@@ -44,7 +56,14 @@ async function logAction(req, {
       resourceId,
       success: !!success,
       statusCode,
-      message,
+      message: message || buildAuditMessage({
+        action,
+        resourceType,
+        resourceLabel,
+        changeSummary: computed.changeSummary,
+        changes: computed.changes,
+        bulk,
+      }),
       source,
       method,
       path,
@@ -52,7 +71,10 @@ async function logAction(req, {
       userAgent,
       requestId: req.requestId,
       correlationId,
-      changes,
+      changes: computed.changes,
+      changeSummary: computed.changeSummary,
+      changesTruncated: computed.changesTruncated,
+      bulk,
       beforeSnapshot: undefined,
       afterSnapshot: undefined,
       expiresAt,

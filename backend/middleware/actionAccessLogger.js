@@ -23,8 +23,8 @@ function actorFrom(req) {
 }
 
 module.exports = function actionAccessLogger(options = {}) {
-  const enqueue = options.enqueueActionLog
-    || require('../queues/actionLogQueue').enqueueActionLog;
+  const enqueue = options.enqueueAccessLog
+    || require('../queues/accessLogQueue').enqueueAccessLog;
 
   return function logAnnotatedRequest(req, res, next) {
     const message = readHeader(req, 'X-Action-Message', 500);

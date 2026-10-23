@@ -190,30 +190,25 @@
 //   );
 // }
 import { createFileRoute, Link, Outlet, useNavigate } from '@tanstack/react-router';
-import axios from "axios";
 import { useState, useEffect, useMemo } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
+import { isApiError } from '@/api/core/errors';
+import { usersApi } from '@/api/users/users.service';
+import { userQueries } from '@/api/users/users.queries';
 
 export const Route = createFileRoute('/_navbarLayout/settings/users')({
   component: RouteComponent,
-  loader: async () => {
+  loader: async ({ context }) => {
     try {
-      const response = await axios.get('/api/users', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "settings",
-        },
-      });
-
-      if (response.status === 403) return { users: [], accessDenied: true };
-      return { users: response.data, accessDenied: false };
-    } catch (error: any) {
+      const users = await context.queryClient.ensureQueryData(userQueries.list());
+      return { users, accessDenied: false };
+    } catch (error: unknown) {
       console.error('Error fetching users:', error);
-      const accessDenied = axios.isAxiosError(error) && error.response?.status === 403;
+      const accessDenied = isApiError(error) && error.status === 403;
       return { users: [], accessDenied };
     }
   },
@@ -265,37 +260,20 @@ function RouteComponent() {
         prev.map(user => user._id === userId ? { ...user, is_active: updatedValue } : user)
       );
 
-      await axios.patch(
-        `/api/users/${userId}/active`,
-        { is_active: updatedValue },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "settings",
-          },
-        }
-      );
+      const target = users.find((user) => user._id === userId);
+      await usersApi.setActive(userId, target ? `${target.firstName} ${target.lastName}` : userId, updatedValue);
     } catch (err: any) {
       setUsers(prev =>
         prev.map(user => user._id === userId ? { ...user, is_active: !user.is_active } : user)
       );
-      if (err.response?.status === 403) navigate({ to: "/no-access" });
+      if (isApiError(err) && err.status === 403) navigate({ to: "/no-access" });
       else console.error("Failed to update user status:", err);
     }
   };
 
   const handleLogoutAll = async () => {
     try {
-      await axios.post(
-        "/api/users/logout-multiple",
-        {}, // <-- IMPORTANT
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "settings",
-          },
-        }
-      );
+      await usersApi.logoutAll();
 
       alert("All users logged out successfully!");
     } catch (err) {
@@ -309,13 +287,7 @@ function RouteComponent() {
 
   const verifyPassword = async () => {
     try {
-      const token = localStorage.getItem("token");
-
-      await axios.post(
-        "/api/auth/verify-password",
-        { password },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await usersApi.verifyAdministrator(password, 'Administrator verification requested before logging out all users');
 
       // Password correct → close this dialog & open confirmation
       setShowPasswordDialog(false);
