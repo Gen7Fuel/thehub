@@ -40,6 +40,7 @@ const CashSummarySchema = new mongoose.Schema(
 
     // NEW: Tenders field storing key-value pairs
     tenders: [TenderItemSchema],
+    afdTenders: [TenderItemSchema],
     fuelGrades: [FuelGradeItemSchema],
     arCustomers: [ArCustomerItemSchema],
     tobaccoCig: { type: Number },

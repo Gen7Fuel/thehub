@@ -1,7 +1,7 @@
 /**
  * Maps an internal site name to the name used on customer-facing reports.
  *
- * Shared by the daily EOD reports (eodReportWavers, eodCDReportWavers) and the
+ * Shared by the daily EOD reports (eodReport, eodCDReportWavers) and the
  * monthly A/R paid report so the same site never appears under two names.
  *
  * Pure, no dependencies — safe to require from unit tests with no DB.
@@ -20,3 +20,4 @@ const formatReportSiteName = (rawSite) => {
 };
 
 module.exports = { formatReportSiteName };
+

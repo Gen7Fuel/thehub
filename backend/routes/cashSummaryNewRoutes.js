@@ -17,7 +17,7 @@ const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
-const { generateEodReportPdf } = require('../utils/eodReportWavers');
+const { generateEodReportPdf } = require('../utils/eodReport');
 const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWavers');
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
@@ -2592,3 +2592,4 @@ router.getDepositSlipAttachment = getDepositSlipAttachment;
 router.attachmentContentToBase64 = attachmentContentToBase64;
 
 module.exports = router;
+

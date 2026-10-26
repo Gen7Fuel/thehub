@@ -221,7 +221,7 @@ function buildSiteSection({ site, displayName }, allDocs, monthLabel) {
 
     // Merge duplicate names within a single shift so the detail table never shows
     // two rows with an identical Date/Customer/Shift#. Matches the name-keyed merge
-    // in eodReportWavers.js — trimmed, but not case-folded.
+    // in eodReport.js — trimmed, but not case-folded.
     const merged = new Map();
     for (const cust of doc.arCustomers) {
       if (!cust) continue;
@@ -335,3 +335,4 @@ module.exports = {
   docToYmd,
   compareShiftNumber,
 };
+
