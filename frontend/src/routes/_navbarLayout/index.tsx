@@ -229,6 +229,16 @@ function App() {
                   search={{ site: user?.location || '' }} 
                 />
               )}
+
+              {access?.fuelDipReadings?.addNewReadings && (
+                <NavButton
+                  to="/fuel-dip-readings"
+                  label="Fuel Dips Reading"
+                  icon={Fuel}
+                  theme="sky"
+                  search={{ site: user?.location || '' }}
+                />
+              )}
               
               {/* DYNAMIC FUEL PRICING NAV BUTTON */}
               {canShowFuelPricing && (
