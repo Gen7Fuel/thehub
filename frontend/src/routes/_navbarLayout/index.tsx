@@ -214,7 +214,7 @@ function App() {
           )}
 
           {/* FUEL OPERATIONS - SKY */}
-          {(access?.fuelManagement?.workspace?.value || canShowFuelPricing || access?.fuelSettings?.value) && (
+          {(access?.fuelManagement?.workspace?.value || access?.fuelDipReadings?.addNewReadings || canShowFuelPricing || access?.fuelSettings?.value) && (
             <Section 
               title="Fuel Operations" 
               accentColor="border-t-sky-500"
