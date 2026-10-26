@@ -270,6 +270,20 @@ const pickPosTotalSales = (tenderLabel, text) => {
 };
 
 /**
+ * Extracts the Sales value for a tender strictly within the AFD credit POS
+ * totals block. This is intentionally separate from POS TOTALS because the
+ * same tender labels can appear in both sections.
+ */
+const pickAfdPosTotalSales = (tenderLabel, text) => {
+  const blockMatch = text.match(/AFD\s+CREDIT\s+POS\s+TOTALS[\s\S]*?----------------------------/i);
+  if (!blockMatch) return null;
+
+  const re = new RegExp(`^\\s*${tenderLabel}\\s+\\d{3}\\s+([-\\d.,]+)`, 'mi');
+  const m = blockMatch[0].match(re);
+  return m ? toNumber(m[1]) : null;
+};
+
+/**
  * HELPER: Scans the entire text for any of the fuel section blocks,
  * extracts volume and amount for each grade, and aggregates them.
  */
@@ -604,6 +618,11 @@ function parseSftReport(text) {
     visa: pickPosTotalSales('VISA', text),
     mastercard: pickPosTotalSales('MASTERCARD', text),
     amex: pickPosTotalSales('AMEX', text),
+    afdTenders: {
+      visa: pickAfdPosTotalSales('VISA', text),
+      mastercard: pickAfdPosTotalSales('MASTERCARD', text),
+      amex: pickAfdPosTotalSales('AMEX', text),
+    },
     fuelGrades: parseFuelGrades(text),
     arCustomers: parseArCustomers(text) || [],
 

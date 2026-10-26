@@ -140,7 +140,7 @@ function App() {
               )}
               {access?.accounting?.fuelRec?.value && (
                 <NavButton 
-                  to={access?.accounting?.fuelRec?.bol ? `/fuel-rec` : `/fuel-rec/list`} 
+                  to={access?.accounting?.fuelRec?.postBol ? `/fuel-rec/list` : `/fuel-rec`} 
                   label="Fuel Rec" 
                   icon={Droplets} 
                   theme="amber" 
@@ -214,7 +214,7 @@ function App() {
           )}
 
           {/* FUEL OPERATIONS - SKY */}
-          {(access?.fuelManagement?.workspace?.value || canShowFuelPricing || access?.fuelSettings?.value) && (
+          {(access?.fuelManagement?.workspace?.value || access?.fuelDipReadings?.addNewReadings || canShowFuelPricing || access?.fuelSettings?.value) && (
             <Section 
               title="Fuel Operations" 
               accentColor="border-t-sky-500"
@@ -227,6 +227,16 @@ function App() {
                   icon={Droplets} 
                   theme="sky" 
                   search={{ site: user?.location || '' }} 
+                />
+              )}
+
+              {access?.fuelDipReadings?.addNewReadings && (
+                <NavButton
+                  to="/fuel-dip-readings"
+                  label="Fuel Dips Reading"
+                  icon={Fuel}
+                  theme="sky"
+                  search={{ site: user?.location || '' }}
                 />
               )}
               

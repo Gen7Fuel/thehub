@@ -284,10 +284,19 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
         // Attach tenders array if not Chicken Delight
         if (!isChickenDelight) {
           rawUpdate.tenders = [
-            { key: "debit", value: norm(parsed.debit) },
-            { key: "visa", value: norm(parsed.visa) },
-            { key: "mastercard", value: norm(parsed.mastercard) },
-            { key: "amex", value: norm(parsed.amex) },
+            { key: "debit", value: norm((parsed.debit || 0) + (parsed.kioskDebit || 0)) ?? 0 },
+            { key: "visa", value: norm(parsed.visa) ?? 0 },
+            { key: "mastercard", value: norm(parsed.mastercard) ?? 0 },
+            { key: "amex", value: norm(parsed.amex) ?? 0 },
+            { key: "giftcards", value: norm(parsed.kioskGiftCard) ?? 0 },
+          ];
+
+          rawUpdate.afdTenders = [
+            { key: "debit", value: norm(parsed.afdDebit) ?? 0 },
+            { key: "visa", value: norm(parsed.afdTenders?.visa) ?? 0 },
+            { key: "mastercard", value: norm(parsed.afdTenders?.mastercard) ?? 0 },
+            { key: "amex", value: norm(parsed.afdTenders?.amex) ?? 0 },
+            { key: "giftcards", value: norm(parsed.afdGiftCard) ?? 0 },
           ];
         }
 
