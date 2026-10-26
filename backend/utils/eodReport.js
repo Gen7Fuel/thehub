@@ -91,6 +91,7 @@ const styles = StyleSheet.create({
   },
   subSectionHeaderRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 3,
     paddingHorizontal: 4,
     marginTop: 4,
@@ -104,6 +105,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333333",
     textDecoration: "underline",
+  },
+  subSectionAmount: {
+    width: 90,
+    textAlign: "right",
   },
   colDesc: { flex: 2, textAlign: "left" },
   colAmount: { width: 90, textAlign: "right" },
@@ -190,17 +195,27 @@ function EodReportDoc({ site, date, data }) {
     );
   };
 
-  const renderSubSectionHeader = (title) => {
+  const renderSubSectionHeader = (title, amount = null) => {
     return h(
       View,
       { style: styles.subSectionHeaderRow },
       h(Text, { style: styles.subSectionHeaderText }, title),
+      amount !== null
+        ? h(Text, { style: [styles.subSectionHeaderText, styles.subSectionAmount] }, formatCurrency(amount))
+        : null,
     );
   };
 
-  const totalTenders =
-    Object.values(data.tenders).reduce((a, b) => a + (b || 0), 0) +
-    (data.reportCanadianCash || 0);
+  const posTendersTotal = Object.values(data.tenders || {}).reduce(
+    (a, b) => a + (b || 0),
+    0,
+  ) + (data.reportCanadianCash || 0);
+  const afdTendersTotal = Object.values(data.afdTenders || {}).reduce(
+    (a, b) => a + (b || 0),
+    0,
+  );
+  const showAfdTenders = !String(site || '').startsWith('Wavers');
+  const grandTendersTotal = posTendersTotal + (showAfdTenders ? afdTendersTotal : 0);
 
   // Calculate A/R Grand Totals from object properties
   const totalArIncurred = Object.values(data.arCustomers).reduce(
@@ -313,11 +328,20 @@ function EodReportDoc({ site, date, data }) {
 
       // 3. Tenders Section Block
       renderSectionHeader("Tenders"),
+      renderSubSectionHeader("POS Tenders", showAfdTenders ? posTendersTotal : null),
       ...Object.entries(data.tenders).map(([name, val]) =>
-        renderRow(name, val),
+        renderRow(name === "GIFTCARDS" ? "GiftCard Redemption" : name, val, false, null, true),
       ),
-      renderRow("Cash", data.reportCanadianCash),
-      renderRow("Total Tenders", totalTenders, true),
+      renderRow("Cash", data.reportCanadianCash, false, null, true),
+      ...(showAfdTenders
+        ? [
+            renderSubSectionHeader("AFD POS Totals", afdTendersTotal),
+            ...Object.entries(data.afdTenders || {}).map(([name, val]) =>
+              renderRow(name === "GIFTCARDS" ? "GiftCard Redemption" : name, val, false, null, true),
+            ),
+          ]
+        : []),
+      renderRow("Grand Total Tenders", grandTendersTotal, true),
 
       // 4. UPDATED: A/R Details Section Block (Multi-Column Grid View Layout)
       renderSectionHeader("A/R Details"),
@@ -617,6 +641,7 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
 
   // 1️⃣ Aggregate Tenders
   const tendersAgg = {};
+  const afdTendersAgg = {};
   rows.forEach((r) => {
     if (r.tenders && Array.isArray(r.tenders)) {
       r.tenders.forEach((t) => {
@@ -632,7 +657,18 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
       tendersAgg["MASTERCARD"] = (tendersAgg["MASTERCARD"] || 0) + r.mastercard;
     if (r.amex) tendersAgg["AMEX"] = (tendersAgg["AMEX"] || 0) + r.amex;
     if (r.debit) tendersAgg["DEBIT"] = (tendersAgg["DEBIT"] || 0) + r.debit;
+    if (r.afdTenders && Array.isArray(r.afdTenders)) {
+      r.afdTenders.forEach((t) => {
+        const tenderKey = (t.key || t.name)?.toUpperCase().trim();
+        if (tenderKey) {
+          afdTendersAgg[tenderKey] =
+            (afdTendersAgg[tenderKey] || 0) + (t.value || t.amount || 0);
+        }
+      });
+    }
   });
+
+  const isWavers = String(site || '').startsWith('Wavers');
 
   // 2️⃣ Aggregate A/R Customer objects
   const arCustomersAgg = {};
@@ -796,6 +832,7 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
         ? Number(adjFuelVariance.toFixed(2))
         : 0,
     tenders: tendersAgg,
+    afdTenders: isWavers ? {} : afdTendersAgg,
     arCustomers: arCustomersAgg,
     tobaccoCig,
     tobaccoOthers,
@@ -832,6 +869,7 @@ function combineEodData(dailyDataArray) {
     overShortCash: 0,
     adjFuelVariance: 0,
     tenders: {},
+    afdTenders: {},
     arCustomers: {},
     tobaccoCig: 0,
     tobaccoOthers: 0,
@@ -879,6 +917,9 @@ function combineEodData(dailyDataArray) {
     // Sum Tenders
     Object.entries(d.tenders || {}).forEach(([k, v]) => {
       combined.tenders[k] = (combined.tenders[k] || 0) + (v || 0);
+    });
+    Object.entries(d.afdTenders || {}).forEach(([k, v]) => {
+      combined.afdTenders[k] = (combined.afdTenders[k] || 0) + (v || 0);
     });
 
     // Sum A/R Details

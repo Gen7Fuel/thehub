@@ -11,7 +11,7 @@
 // const {
 //   fetchEodDataForDate,
 //   combineEodData
-// } = require('../utils/eodReportWavers'); // Adjust path as needed
+// } = require('../utils/eodReport'); // Adjust path as needed
 
 // /**
 //  * Date range generator helper (YYYY-MM-DD strings)
@@ -227,7 +227,7 @@ const Location = require('../models/Location');
 const {
   fetchEodDataForDate,
   combineEodData
-} = require('../utils/eodReportWavers'); // Adjust path as needed
+} = require('../utils/eodReport'); // Adjust path as needed
 
 /**
  * Date range generator helper (YYYY-MM-DD strings)
