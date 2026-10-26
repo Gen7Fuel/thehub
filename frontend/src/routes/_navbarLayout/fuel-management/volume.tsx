@@ -49,7 +49,7 @@ function VolumeDashboard() {
       const res = await axios.get('/api/fuel-station-tanks/sync-all-volumes', {
         headers: { 
           Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Permission-Required": "fuelManagement.volume.fetchLatestReading"
+          "X-Required-Permission": "fuelManagement.volume.fetchLatestReading"
         }
       })
       setAllTanks(res.data)
@@ -68,7 +68,7 @@ function VolumeDashboard() {
       const res = await axios.get(`/api/fuel-station-tanks/reconciliation/${stationId}`, {
         headers: { 
           Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Permission-Required": "fuelManagement.volume.viewHistoricalSalesVolumeChart"
+          "X-Required-Permission": "fuelManagement.volume.viewHistoricalSalesVolumeChart"
         }      
       });
 
@@ -319,7 +319,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
         { 
           headers: { 
             Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Permission-Required": "fuelManagement.volume.addPhysicalReading"
+            "X-Required-Permission": "fuelManagement.volume.addPhysicalReading"
           }   
         }
       );
@@ -340,7 +340,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
       const res = await axios.get(`/api/fuel-station-tanks/history/${tank._id}?date=${dateStr}`, { 
           headers: { 
             Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Permission-Required": "fuelManagement.volume.viewHistoricalVolume"
+            "X-Required-Permission": "fuelManagement.volume.viewHistoricalVolume"
           }   
       });
       setChartData(res.data);
