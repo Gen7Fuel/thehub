@@ -140,7 +140,7 @@ function App() {
               )}
               {access?.accounting?.fuelRec?.value && (
                 <NavButton 
-                  to={access?.accounting?.fuelRec?.bol ? `/fuel-rec` : `/fuel-rec/list`} 
+                  to={access?.accounting?.fuelRec?.postBol ? `/fuel-rec/list` : `/fuel-rec`} 
                   label="Fuel Rec" 
                   icon={Droplets} 
                   theme="amber" 
