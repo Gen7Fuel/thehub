@@ -38,6 +38,7 @@ AccessLogSchema.index({ resourceType: 1, createdAt: -1 });
 AccessLogSchema.index({ userId: 1, createdAt: -1 });
 AccessLogSchema.index({ requestId: 1, createdAt: -1 });
 AccessLogSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+AccessLogSchema.index({ createdAt: 1, _id: 1 });
 
 attachSiteAlias(AccessLogSchema, 'locationName');
 

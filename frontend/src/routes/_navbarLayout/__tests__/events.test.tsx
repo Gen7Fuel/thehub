@@ -126,13 +126,17 @@ describe("Events — compose dialog basic flow", () => {
     mockUseLoaderData.mockReturnValue({ events: [] });
   });
 
+  const clickToday = () => {
+    const todayLabel = screen
+      .getAllByText(today.getDate().toString())
+      .find((element) => element.classList.contains("bg-primary"));
+    expect(todayLabel).toBeDefined();
+    fireEvent.click(todayLabel!);
+  };
+
   it("opens compose modal when clicking today tile", async () => {
     renderWithSuspense(<EventsComponent />);
-
-    const todayCell = screen
-      .getByText(today.getDate().toString())
-      .closest("div");
-    if (todayCell) fireEvent.click(todayCell);
+    clickToday();
 
     await waitFor(() => {
       expect(
@@ -143,11 +147,7 @@ describe("Events — compose dialog basic flow", () => {
 
   it("enforces max length constraint on title input", async () => {
     renderWithSuspense(<EventsComponent />);
-
-    const todayCell = screen
-      .getByText(today.getDate().toString())
-      .closest("div");
-    if (todayCell) fireEvent.click(todayCell);
+    clickToday();
 
     await waitFor(() => {
       const input = screen.getByPlaceholderText(/Event title/i);

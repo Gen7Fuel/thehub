@@ -43,6 +43,7 @@ ChangeLogSchema.index({ resourceType: 1, resourceId: 1, createdAt: -1 });
 ChangeLogSchema.index({ userId: 1, createdAt: -1 });
 ChangeLogSchema.index({ requestId: 1, createdAt: -1 });
 ChangeLogSchema.index({ action: 1, createdAt: -1 });
+ChangeLogSchema.index({ createdAt: 1, _id: 1 });
 
 attachSiteAlias(ChangeLogSchema, 'locationName');
 

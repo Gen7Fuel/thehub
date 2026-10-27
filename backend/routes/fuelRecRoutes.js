@@ -357,6 +357,7 @@ router.post('/request-again', async (req, res) => {
 });
 
 // GET /api/fuel-rec/:id/linkable-pos?daysBack=2
+// Returns orders from T-daysBack through T+2, where T is the BOL date.
 router.get('/:id/linkable-pos', async (req, res) => {
   try {
     const id = String(req.params.id || '').trim()
@@ -374,7 +375,7 @@ router.get('/:id/linkable-pos', async (req, res) => {
 
     const tz = location.timezone || 'America/Toronto'
     const start = moment.tz(bol.date, tz).subtract(daysBack, 'days').startOf('day').toDate()
-    const end = moment.tz(bol.date, tz).endOf('day').toDate()
+    const end = moment.tz(bol.date, tz).add(2, 'days').endOf('day').toDate()
 
     const linkedPoNumbers = getLinkedPoNumbers(bol)
 
@@ -407,7 +408,7 @@ router.get('/:id/linkable-pos', async (req, res) => {
         poLinked: linkedPoNumbers.length > 0,
       },
       from: moment(start).tz(tz).format('YYYY-MM-DD'),
-      to: bol.date,
+      to: moment(end).tz(tz).format('YYYY-MM-DD'),
       count: otherOrders.length,
       orders: otherOrders,
       linkedOrders,

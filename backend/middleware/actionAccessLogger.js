@@ -2,6 +2,36 @@ const { randomUUID } = require('crypto');
 
 const ACTIONS = new Set(['create', 'read', 'update', 'delete', 'approve', 'reject']);
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9._-]+$/;
+const METHOD_ACTIONS = {
+  GET: 'read',
+  HEAD: 'read',
+  POST: 'create',
+  PUT: 'update',
+  PATCH: 'update',
+  DELETE: 'delete',
+};
+
+// These reads are application-level polling/health checks rather than a
+// deliberate user access to a business module. Successful checks add noise to
+// AccessLog, but failures are still recorded so authentication, permission,
+// and operational problems remain visible.
+const SYSTEM_POLL_PATHS = new Set([
+  '/api/health',
+  '/api/maintenance',
+  '/api/fuel-pricing/prices-ticker',
+  '/api/fuel-pricing/check-pending-verification',
+]);
+
+// These endpoints are initiated by the application shell/bootstrap process.
+// Unlike normal business routes, their fallback message must not imply that
+// the user deliberately opened the corresponding module.
+const APPLICATION_REQUEST_PATHS = new Set([
+  ...SYSTEM_POLL_PATHS,
+  '/api/locations',
+  '/api/notification',
+  '/api/notification/unread-count',
+  '/api/notification/unread-summary',
+]);
 
 function readHeader(req, name, maxLength) {
   const value = req.get(name);
@@ -22,26 +52,64 @@ function actorFrom(req) {
   };
 }
 
+function requestPath(req) {
+  return String(req.originalUrl || req.url || '/')
+    .split('?')[0]
+    .slice(0, 250);
+}
+
+function resourceFromPath(path) {
+  const segments = path.split('/').filter(Boolean);
+  const apiIndex = segments.indexOf('api');
+  const candidate = segments[apiIndex >= 0 ? apiIndex + 1 : 0];
+  return candidate && SAFE_IDENTIFIER.test(candidate) ? candidate : 'unknown';
+}
+
+function isSuccessfulSystemPoll(method, path, statusCode) {
+  return (method === 'GET' || method === 'HEAD')
+    && SYSTEM_POLL_PATHS.has(path)
+    && statusCode < 400;
+}
+
+function defaultMessage(method, path) {
+  if ((method === 'GET' || method === 'HEAD') && APPLICATION_REQUEST_PATHS.has(path)) {
+    return `Application request: ${method} ${path}`;
+  }
+  return `User accessed ${path}`;
+}
+
 module.exports = function actionAccessLogger(options = {}) {
   const enqueue = options.enqueueAccessLog
     || require('../queues/accessLogQueue').enqueueAccessLog;
 
-  return function logAnnotatedRequest(req, res, next) {
-    const message = readHeader(req, 'X-Action-Message', 500);
-    const source = readHeader(req, 'X-Action-Source', 100);
-    const resourceType = readHeader(req, 'X-Action-Resource', 80);
-    const action = readHeader(req, 'X-Action-Type', 20);
+  return function logAccessRequest(req, res, next) {
+    const path = requestPath(req);
+    const method = String(req.method || '').toUpperCase();
+    const methodAction = METHOD_ACTIONS[method];
 
-    const valid = message
-      && source && SAFE_IDENTIFIER.test(source)
-      && resourceType && SAFE_IDENTIFIER.test(resourceType)
-      && action && ACTIONS.has(action);
+    if (methodAction) {
+      const suppliedAction = readHeader(req, 'X-Action-Type', 20);
+      const suppliedSource = readHeader(req, 'X-Action-Source', 100);
+      const suppliedResourceType = readHeader(req, 'X-Action-Resource', 80);
+      const suppliedMessage = readHeader(req, 'X-Action-Message', 500);
 
-    if (valid) {
+      const action = suppliedAction && ACTIONS.has(suppliedAction)
+        ? suppliedAction
+        : methodAction;
+      const source = suppliedSource && SAFE_IDENTIFIER.test(suppliedSource)
+        ? suppliedSource
+        : 'unknown';
+      const resourceType = suppliedResourceType && SAFE_IDENTIFIER.test(suppliedResourceType)
+        ? suppliedResourceType
+        : resourceFromPath(path);
+      const message = suppliedMessage || defaultMessage(method, path);
+
       res.once('finish', () => {
         const statusCode = res.statusCode;
+
+        if (isSuccessfulSystemPoll(method, path, statusCode)) return;
+
         const ip = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip;
-        const path = req.originalUrl.split('?')[0].slice(0, 250);
 
         const payload = {
           eventId: randomUUID(),
@@ -53,7 +121,7 @@ module.exports = function actionAccessLogger(options = {}) {
           statusCode,
           message,
           source,
-          method: req.method,
+          method,
           path,
           ip,
           userAgent: req.headers['user-agent'],

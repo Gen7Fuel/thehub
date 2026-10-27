@@ -18,22 +18,6 @@ function CreateMaintenance() {
     scheduleClose: '',
   });
 
-  // const handleSubmit = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setLoading(true);
-  //   try {
-  //     await axios.post('/api/maintenance', formData, {
-  //       headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  //       'X-Required-Permission': 'settings.maintenance' }
-  //     });
-  //     navigate({ to: '/settings/maintenance/' });
-  //   } catch (err) {
-  //     console.error("Save error", err);
-  //     alert("Error creating schedule. Check console.");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
