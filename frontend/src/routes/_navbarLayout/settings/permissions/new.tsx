@@ -1,6 +1,10 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import axios from "axios";
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { PermissionTree } from "@/components/custom/PermissionTree";
+import { isApiError } from '@/api/core/errors';
+import { permissionsApi } from '@/api/permissions/permissions.service';
+import { permissionKeys } from '@/api/permissions/permissions.queries';
+import type { PermissionNode } from '@/api/permissions/permissions.types';
 
 export const Route = createFileRoute('/_navbarLayout/settings/permissions/new')({
   component: RouteComponent,
@@ -8,6 +12,7 @@ export const Route = createFileRoute('/_navbarLayout/settings/permissions/new')(
 
 function RouteComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   // Initialize empty permission for the new page
   const permission = {
@@ -16,26 +21,25 @@ function RouteComponent() {
   };
 
   // Handle save callback
-  const handleSave = async (structure: any[], moduleName: string) => {
-    try {
-      await axios.post(`/api/permissions`, {
-        module_name: moduleName,
-        structure,
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "settings", },
-      });
+  const createPermission = useMutation({
+    mutationFn: permissionsApi.create,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: permissionKeys.all });
       alert("Permission created successfully!");
       navigate({ to: "/settings/permissions" });
-    } catch (error: any) {
-      if (error.response?.status === 403) {
-        // Redirect to no-access page
+    },
+    onError: (error: unknown) => {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: "/no-access" });
       } else {
         console.error(error);
         alert("Failed to create permission.");
       }
-    }
+    },
+  });
+
+  const handleSave = (structure: PermissionNode[], moduleName: string) => {
+    createPermission.mutate({ module_name: moduleName, structure });
   };
 
   return (

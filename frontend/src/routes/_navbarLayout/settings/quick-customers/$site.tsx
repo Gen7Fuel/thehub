@@ -1,47 +1,22 @@
-import axios from "axios";
 import { slugToString } from '@/lib/utils';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useEffect, useMemo, useState } from 'react';
-
-interface ArCustomer {
-  _id: string
-  name: string
-}
-
-interface QuickSelectEntry {
-  _id: string
-  name: string
-  fleetCardNumber: string
-  label: string
-  order: number
-}
-
-const authHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem('token')}`,
-  'X-Required-Permission': 'po.manageQuickCustomers',
-})
+import { isApiError } from '@/api/core/errors';
+import { quickCustomersApi, type ArCustomer, type QuickSelectEntry } from '@/api/quick-customers/quick-customers.service';
+import { quickCustomerQueries } from '@/api/quick-customers/quick-customers.queries';
 
 export const Route = createFileRoute('/_navbarLayout/settings/quick-customers/$site')({
   component: RouteComponent,
-  loader: async ({ params }) => {
+  loader: async ({ params, context }) => {
     const { site } = params;
     const stationName = slugToString(site);
     try {
-      const response = await axios.get('/api/ar-customers/quick-select', {
-        params: { stationName },
-        headers: authHeaders(),
-      });
-
-      if (response.status === 403) {
-        return { entries: [], stationName, accessDenied: true };
-      }
-
-      const data = response.data;
+      const data = await context.queryClient.ensureQueryData(quickCustomerQueries.list(stationName));
       return { entries: Array.isArray(data) ? data : [], stationName, accessDenied: false };
     } catch (error: any) {
       console.error('Error fetching quick-select customers:', error);
 
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         return { entries: [], stationName, accessDenied: true };
       }
 
@@ -77,11 +52,8 @@ function RouteComponent() {
   }, [initialEntries]);
 
   const refresh = async () => {
-    const res = await axios.get('/api/ar-customers/quick-select', {
-      params: { stationName },
-      headers: authHeaders(),
-    });
-    if (Array.isArray(res.data)) setEntries(res.data);
+    const data = await quickCustomersApi.list(stationName);
+    if (Array.isArray(data)) setEntries(data);
   };
 
   // Autocomplete for adding a new quick-select customer
@@ -91,10 +63,8 @@ function RouteComponent() {
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    axios.get('/api/ar-customers', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-    }).then((res) => {
-      if (Array.isArray(res.data)) setArCustomers(res.data);
+    quickCustomersApi.listCustomers(stationName).then((data) => {
+      if (Array.isArray(data)) setArCustomers(data);
     }).catch(() => {});
   }, []);
 
@@ -113,16 +83,14 @@ function RouteComponent() {
     setSearch('');
     setShowSuggestions(false);
     try {
-      await axios.post(`/api/ar-customers/${customer._id}/quick-select`, { stationName }, {
-        headers: authHeaders(),
-      });
+      await quickCustomersApi.add(customer, stationName);
       await refresh();
     } catch (error: any) {
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
-      alert(error?.response?.data?.error || 'Failed to add quick-select customer.');
+      alert(isApiError(error) ? error.message : 'Failed to add quick-select customer.');
     } finally {
       setAdding(false);
     }
@@ -130,29 +98,25 @@ function RouteComponent() {
 
   const handleMove = async (id: string, direction: 'up' | 'down') => {
     try {
-      const res = await axios.put('/api/ar-customers/quick-select/move', { stationName, id, direction }, {
-        headers: authHeaders(),
-      });
-      if (Array.isArray(res.data)) setEntries(res.data);
+      const entry = entries.find((item) => item._id === id);
+      const data = await quickCustomersApi.move(id, entry?.name || id, stationName, direction);
+      if (Array.isArray(data)) setEntries(data);
     } catch (error: any) {
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
-      alert(error?.response?.data?.error || 'Failed to reorder.');
+      alert(isApiError(error) ? error.message : 'Failed to reorder.');
     }
   };
 
   const handleRemove = async (entry: QuickSelectEntry) => {
     if (!confirm(`Remove "${entry.name}" from quick-select for ${stationName}?`)) return;
     try {
-      await axios.delete(`/api/ar-customers/${entry._id}/quick-select`, {
-        params: { stationName },
-        headers: authHeaders(),
-      });
+      await quickCustomersApi.remove(entry, stationName);
       await refresh();
     } catch (error: any) {
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
@@ -164,12 +128,10 @@ function RouteComponent() {
     const draft = (labelDrafts[entry._id] || '').trim();
     setSavingLabelId(entry._id);
     try {
-      await axios.put(`/api/ar-customers/${entry._id}/quick-select/label`, { stationName, label: draft }, {
-        headers: authHeaders(),
-      });
+      await quickCustomersApi.updateLabel(entry, stationName, draft);
       await refresh();
     } catch (error: any) {
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
@@ -187,12 +149,10 @@ function RouteComponent() {
     }
     setSavingId(entry._id);
     try {
-      await axios.put(`/api/ar-customers/${entry._id}/fleet-card`, { fleetCardNumber: draft }, {
-        headers: authHeaders(),
-      });
+      await quickCustomersApi.updateFleetCard(entry, stationName, draft);
       await refresh();
     } catch (error: any) {
-      if (axios.isAxiosError(error) && error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }

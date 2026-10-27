@@ -5,6 +5,7 @@ const Permission = require("../models/Permission");
 const _ = require('lodash'); 
 const User = require('../models/User');
 const { hydrateTreeValues, flattenHydratedTree } = require("../utils/mergePermissionObjects")
+const { logChange } = require('../middleware/changeLogger');
 
 // GET all roles
 // router.get("/", async (req, res) => {
@@ -179,6 +180,19 @@ router.post("/", async (req, res) => {
 
     await newRole.save();
 
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'role',
+      resourceId: newRole._id,
+      success: true,
+      statusCode: 201,
+      source: 'settings.roles',
+      resourceLabel: newRole.role_name,
+      before: null,
+      after: newRole.toObject(),
+      diffOptions: { arrayKeys: { permissionsArray: 'permId' } },
+    });
+
     res.status(201).json({ 
       message: "Role created successfully", 
       role: newRole 
@@ -196,6 +210,8 @@ router.put("/:id", async (req, res) => {
     const role = await Role.findById(req.params.id);
     
     if (!role) return res.status(404).json({ message: "Role not found" });
+
+    const before = role.toObject();
 
     // 1. Update basic fields
     role.role_name = role_name || role.role_name;
@@ -223,6 +239,19 @@ router.put("/:id", async (req, res) => {
     }
 
     await role.save();
+
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'role',
+      resourceId: role._id,
+      success: true,
+      statusCode: 200,
+      source: 'settings.roles',
+      resourceLabel: role.role_name,
+      before,
+      after: role.toObject(),
+      diffOptions: { arrayKeys: { permissionsArray: 'permId' } },
+    });
 
     // 3. Emit updates to connected users (Real-time sync)
     const users = await User.find({ role: role._id });
@@ -277,7 +306,21 @@ router.put("/:id", async (req, res) => {
 // Delete role
 router.delete("/:id", async (req, res) => {
   try {
-    await Role.findByIdAndDelete(req.params.id);
+    const deleted = await Role.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "Role not found" });
+
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'role',
+      resourceId: deleted._id,
+      success: true,
+      statusCode: 200,
+      source: 'settings.roles',
+      resourceLabel: deleted.role_name,
+      before: deleted.toObject(),
+      after: null,
+      diffOptions: { arrayKeys: { permissionsArray: 'permId' } },
+    });
     res.json({ message: "Role deleted successfully" });
   } catch (err) {
     console.error(err);
@@ -290,8 +333,15 @@ router.put("/:id/assign-users", async (req, res) => {
   const roleId = req.params.id;
   const { userIds } = req.body;
   try {
+    if (!Array.isArray(userIds)) {
+      return res.status(400).json({ message: "userIds must be an array" });
+    }
+
     const role = await Role.findById(roleId);
     if (!role) return res.status(404).json({ message: "Role not found" });
+
+    const previouslyAssigned = await User.find({ role: roleId }).select('_id').lean();
+    const previousIds = previouslyAssigned.map((user) => String(user._id));
 
     // Assign role to selected users
     await User.updateMany(
@@ -305,6 +355,26 @@ router.put("/:id/assign-users", async (req, res) => {
       { _id: { $nin: userIds }, role: roleId },
       { $set: { role: null } }
     );
+
+    const affectedIds = [...new Set([...previousIds, ...userIds.map(String)])];
+
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'role-assignment',
+      resourceId: role._id,
+      success: true,
+      statusCode: 200,
+      source: 'settings.roles',
+      resourceLabel: role.role_name,
+      message: `User assignments for role ${role.role_name} updated — ${userIds.length} assigned`,
+      bulk: {
+        affectedCount: affectedIds.length,
+        resourceIds: affectedIds.slice(0, 100),
+        truncated: affectedIds.length > 100,
+      },
+      before: { userIds: previousIds },
+      after: { userIds: userIds.map(String) },
+    });
 
     // 🔑 Emit to all affected users
     const io = req.app.get("io");

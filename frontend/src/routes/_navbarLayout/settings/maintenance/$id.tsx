@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, useParams } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { maintenanceApi } from '@/api/maintenance/maintenance.service'
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calendar, FileText, Save } from 'lucide-react'
 
@@ -33,18 +33,13 @@ function EditMaintenance() {
   useEffect(() => {
     const fetchExisting = async () => {
       try {
-        const res = await axios.get(`/api/maintenance/${id}`, {
-          headers: { 
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'settings.maintenance' 
-          }
-        });
+        const data = await maintenanceApi.get<{ name: string; description: string; scheduleStart: string; scheduleClose: string }>(id);
         
         setFormData({
-          name: res.data.name,
-          description: res.data.description,
-          scheduleStart: formatToLocalInput(res.data.scheduleStart),
-          scheduleClose: formatToLocalInput(res.data.scheduleClose),
+          name: data.name,
+          description: data.description,
+          scheduleStart: formatToLocalInput(data.scheduleStart),
+          scheduleClose: formatToLocalInput(data.scheduleClose),
         });
       } catch (err) {
         console.error("Fetch error", err);
@@ -68,12 +63,7 @@ function EditMaintenance() {
         scheduleClose: new Date(formData.scheduleClose).toISOString(),
       };
 
-      await axios.put(`/api/maintenance/${id}`, payload, {
-        headers: { 
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'settings.maintenance' 
-        }
-      });
+      await maintenanceApi.update(id, payload, formData.name, 'details');
       
       navigate({ to: '/settings/maintenance/' });
     } catch (err) {

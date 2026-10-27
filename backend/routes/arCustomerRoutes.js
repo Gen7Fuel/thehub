@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const ArCustomer = require('../models/ArCustomer')
 const { syncArCustomers } = require('../utils/arCustomerSync')
+const { logChange } = require('../middleware/changeLogger')
 
 // GET / — all customers sorted by name asc
 router.get('/', async (req, res) => {
@@ -115,8 +116,10 @@ router.post('/:id/quick-select', async (req, res) => {
       return entry ? Math.max(max, entry.order) : max
     }, -1)
 
+    const before = customer.toObject()
     customer.quickSelectSites.push({ stationName, order: maxOrder + 1, label: (label || '').trim() })
     await customer.save()
+    await logChange(req, { action: 'create', resourceType: 'quick-customer', resourceId: customer._id, success: true, statusCode: 201, source: 'settings.quick-customers', resourceLabel: `${customer.name} at ${stationName}`, before, after: customer.toObject() })
     res.status(201).json(customer)
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -130,12 +133,14 @@ router.put('/:id/quick-select/label', async (req, res) => {
     const { stationName, label } = req.body
     if (!stationName) return res.status(400).json({ error: 'stationName is required' })
 
+    const previous = await ArCustomer.findById(req.params.id).lean()
     const customer = await ArCustomer.findOneAndUpdate(
       { _id: req.params.id, 'quickSelectSites.stationName': stationName },
       { $set: { 'quickSelectSites.$.label': (label || '').trim() } },
       { new: true }
     )
     if (!customer) return res.status(404).json({ error: 'Customer or quick-select entry not found' })
+    await logChange(req, { action: 'update', resourceType: 'quick-customer', resourceId: customer._id, success: true, statusCode: 200, source: 'settings.quick-customers', resourceLabel: `${customer.name} at ${stationName}`, before: previous, after: customer.toObject() })
     res.json(customer)
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -148,12 +153,14 @@ router.delete('/:id/quick-select', async (req, res) => {
     const { stationName } = req.query
     if (!stationName) return res.status(400).json({ error: 'stationName is required' })
 
+    const previous = await ArCustomer.findById(req.params.id).lean()
     const customer = await ArCustomer.findByIdAndUpdate(
       req.params.id,
       { $pull: { quickSelectSites: { stationName } } },
       { new: true }
     )
     if (!customer) return res.status(404).json({ error: 'Customer not found' })
+    await logChange(req, { action: 'delete', resourceType: 'quick-customer', resourceId: customer._id, success: true, statusCode: 200, source: 'settings.quick-customers', resourceLabel: `${customer.name} at ${stationName}`, before: previous, after: customer.toObject() })
     res.json(customer)
   } catch (error) {
     res.status(500).json({ error: error.message })
@@ -186,10 +193,20 @@ router.put('/quick-select/move', async (req, res) => {
       { _id: a.id, 'quickSelectSites.stationName': stationName },
       { $set: { 'quickSelectSites.$.order': b.order } }
     )
+
     await ArCustomer.updateOne(
       { _id: b.id, 'quickSelectSites.stationName': stationName },
       { $set: { 'quickSelectSites.$.order': a.order } }
     )
+
+    await logChange(req, {
+      action: 'update', resourceType: 'quick-customer-order', success: true, statusCode: 200,
+      source: 'settings.quick-customers',
+      message: `Quick Customers reordered for ${stationName}`,
+      changes: [{ operation: 'replace', path: 'order', before: ordered.map((item) => item.id), after: ordered.map((item, index) => index === idx ? b.id : index === swapIdx ? a.id : item.id) }],
+      changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+      bulk: { affectedCount: 2, resourceIds: [a.id, b.id], truncated: false },
+    })
 
     const customers = await ArCustomer.find({ 'quickSelectSites.stationName': stationName })
       .select('name fleetCardNumber quickSelectSites')
@@ -228,12 +245,14 @@ router.put('/:id/fleet-card', async (req, res) => {
     // Use $unset (not $set to null) when clearing — the sparse unique index only
     // excludes documents where the field is absent, not documents with value null.
     const update = raw ? { $set: { fleetCardNumber: raw } } : { $unset: { fleetCardNumber: '' } }
+    const previous = await ArCustomer.findById(req.params.id).lean()
     const customer = await ArCustomer.findByIdAndUpdate(
       req.params.id,
       update,
       { new: true, runValidators: true }
     )
     if (!customer) return res.status(404).json({ error: 'Customer not found' })
+    await logChange(req, { action: 'update', resourceType: 'ar-customer', resourceId: customer._id, success: true, statusCode: 200, source: 'settings.quick-customers', resourceLabel: customer.name, before: previous, after: customer.toObject(), diffOptions: { redactedPaths: ['fleetCardNumber'] } })
     res.json(customer)
   } catch (error) {
     res.status(500).json({ error: error.message })

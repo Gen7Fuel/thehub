@@ -48,7 +48,6 @@ export const Route = createFileRoute('/_navbarLayout/cycle-count/inventory')({
     const { site } = search
     if (!site) return
 
-    // @ts-expect-error
     const queryClient = context.queryClient
     
     // Prefetch partial inventory and categories in parallel
