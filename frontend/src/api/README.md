@@ -5,8 +5,8 @@ The API layer has two responsibilities that must remain separate.
 ## Resource APIs (`*.api.ts`)
 
 Resource APIs mirror backend route domains such as `locations`, `users`,
-`roles`, `permissions`, `safesheets`, `ar-customers`, `auth`, and
-`maintenance`.
+`roles`, `permissions`, `safesheets`, `ar-customers`, `academy`, `atm`,
+`accounting-reports`, `ai-customer`, `auth`, and `maintenance`.
 
 They own:
 

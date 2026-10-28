@@ -1,25 +1,12 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-
-interface Scenario {
-  id: string
-  name: string
-  character: string
-  description: string
-}
+import { aiCustomerService } from '@/api/ai-customer/ai-customer.service'
+import type { AiCustomerScenario as Scenario } from '@/api/ai-customer/ai-customer.types'
 
 export const Route = createFileRoute('/_navbarLayout/ai-customer/')({
   component: RouteComponent,
-  loader: async () => {
-    const res = await fetch('/api/ai-customer/scenarios', {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-      },
-    })
-    if (!res.ok) throw new Error('Failed to load scenarios')
-    return res.json() as Promise<{ success: boolean; data: Scenario[] }>
-  },
+  loader: async () => ({ success: true, data: await aiCustomerService.listScenarios() }),
 })
 
 function RouteComponent() {

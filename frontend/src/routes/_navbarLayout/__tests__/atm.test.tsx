@@ -4,10 +4,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockNavigate, mockAxiosPost, mockAxiosGet, mockUser } = vi.hoisted(() => ({
+const { mockNavigate, mockCreateATMRecord, mockListATMRecords, mockUser } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
-  mockAxiosPost: vi.fn().mockResolvedValue({ data: { _id: 'atm-001' } }),
-  mockAxiosGet: vi.fn().mockResolvedValue({ data: [] }),
+  mockCreateATMRecord: vi.fn().mockResolvedValue({ _id: 'atm-001' }),
+  mockListATMRecords: vi.fn().mockResolvedValue([]),
   mockUser: {
     id: 'user-1',
     location: 'Rankin',
@@ -65,10 +65,10 @@ vi.mock('@/lib/utils', async (importOriginal) => {
   }
 })
 
-vi.mock('axios', () => ({
-  default: {
-    get: mockAxiosGet,
-    post: mockAxiosPost,
+vi.mock('@/api/atm/atm.service', () => ({
+  atmService: {
+    create: mockCreateATMRecord,
+    list: mockListATMRecords,
   },
 }))
 
@@ -259,7 +259,7 @@ describe('ATM List — rendering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockAxiosGet.mockResolvedValue({ data: [] })
+    mockListATMRecords.mockResolvedValue([])
   })
 
   it('renders the New Record link', async () => {
@@ -270,11 +270,9 @@ describe('ATM List — rendering', () => {
     )
   })
 
-  it('calls /api/atm on mount', async () => {
+  it('loads ATM records through the ATM service on mount', async () => {
     renderWithSuspense(<ATMListComponent />)
-    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalled(), { timeout: 5000 })
-    const [url] = mockAxiosGet.mock.calls[0]
-    expect(url).toContain('/api/atm')
+    await waitFor(() => expect(mockListATMRecords).toHaveBeenCalled(), { timeout: 5000 })
   })
 
   it('shows "No records found." when there are no records', async () => {
@@ -286,8 +284,7 @@ describe('ATM List — rendering', () => {
   })
 
   it('renders records returned from the API', async () => {
-    mockAxiosGet.mockResolvedValue({
-      data: [
+    mockListATMRecords.mockResolvedValue([
         {
           _id: 'atm-1',
           date: '2026-04-01',
@@ -298,8 +295,7 @@ describe('ATM List — rendering', () => {
           image: null,
           createdAt: '2026-04-01T10:00:00Z',
         },
-      ],
-    })
+      ])
     renderWithSuspense(<ATMListComponent />)
     await waitFor(
       () => expect(screen.getByText('Rankin')).toBeInTheDocument(),
@@ -310,8 +306,7 @@ describe('ATM List — rendering', () => {
   })
 
   it('prefers the "site" field over "stationName" when both are present', async () => {
-    mockAxiosGet.mockResolvedValue({
-      data: [
+    mockListATMRecords.mockResolvedValue([
         {
           _id: 'atm-2',
           date: '2026-04-01',
@@ -323,8 +318,7 @@ describe('ATM List — rendering', () => {
           image: null,
           createdAt: '2026-04-01T10:00:00Z',
         },
-      ],
-    })
+      ])
     renderWithSuspense(<ATMListComponent />)
     await waitFor(
       () => expect(screen.getByText('Rankin Fuel Bar')).toBeInTheDocument(),

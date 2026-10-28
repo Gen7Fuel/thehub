@@ -1,7 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import Hls from 'hls.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import axios from 'axios'
+import { academyService } from '@/api/academy/academy.service'
+import { isApiError } from '@/api/core/errors'
 import {
   DndContext,
   KeyboardSensor,
@@ -75,13 +76,6 @@ export const Route = createFileRoute('/_navbarLayout/academy/$courseId')({
   component: RouteComponent,
 })
 
-// ─── Helpers ──────────────────────────────────────────────
-
-function makeAuthHeaders() {
-  const token = localStorage.getItem('token')
-  return { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
-}
-
 function toEmbedUrl(url: string): string {
   const short = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/)
   if (short) return `https://www.youtube.com/embed/${short[1]}`
@@ -126,11 +120,11 @@ function RouteComponent() {
   const [completeError, setCompleteError] = useState<string | null>(null)
 
   useEffect(() => {
-    axios
-      .get(`/api/academy/learner/courses/${courseId}`, { headers: makeAuthHeaders() })
-      .then((res) => setCourse(res.data))
+    academyService
+      .getCourse<Course>(courseId)
+      .then(setCourse)
       .catch((err) => {
-        if (err.response?.status === 403) navigate({ to: '/no-access' })
+        if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' })
         else navigate({ to: '/academy' })
       })
       .finally(() => setLoading(false))
@@ -146,29 +140,22 @@ function RouteComponent() {
     setLookingUp(true)
     try {
       const [empRes, progressRes] = await Promise.all([
-        axios.get('/api/academy/learner/employee-lookup', {
-          params: { employeeNumber: num },
-          headers: makeAuthHeaders(),
-        }),
-        axios
-          .get(`/api/academy/learner/course-progress/${courseId}`, {
-            params: { employeeCode: num },
-            headers: makeAuthHeaders(),
-          })
-          .catch(() => ({ data: { currentPageIndex: 0, completedPages: [] } })),
+        academyService.lookupEmployee(num),
+        academyService.getCourseProgress(courseId, num)
+          .catch(() => ({ currentPageIndex: 0, completedPages: [] })),
       ])
-      const progress = progressRes.data
+      const progress = progressRes
       const hasProgress =
         (progress.currentPageIndex ?? 0) > 0 ||
         (progress.completedPages ?? []).length > 0
       setEmployeeCode(num)
-      setEmployeeName(empRes.data.name)
+      setEmployeeName(empRes.name)
       setCurrentPageIdx(progress.currentPageIndex ?? 0)
       setCompletedPages(new Set(progress.completedPages ?? []))
       setIsReturning(hasProgress)
     } catch (err: any) {
       setCodeError(
-        err.response?.status === 404
+        isApiError(err) && err.status === 404
           ? 'Employee number not found. Please try again.'
           : 'Unable to verify your employee number. Please try again.',
       )
@@ -190,9 +177,7 @@ function RouteComponent() {
 
   function saveProgressToBackend(update: { currentPageIndex?: number; completedPageIndex?: number }) {
     if (!employeeCode) return
-    axios
-      .put('/api/academy/learner/course-progress', { employeeCode, courseId, ...update }, { headers: makeAuthHeaders() })
-      .catch(() => {})
+    academyService.saveCourseProgress({ employeeCode, courseId, ...update }).catch(() => {})
   }
 
   function markPageComplete(pageIdx: number) {
@@ -213,15 +198,11 @@ function RouteComponent() {
     setCompleting(true)
     setCompleteError(null)
     try {
-      await axios.post(
-        `/api/academy/learner/courses/${courseId}/complete`,
-        { employeeCode },
-        { headers: makeAuthHeaders() },
-      )
+      await academyService.completeCourse(courseId, employeeCode)
       setCompleted(true)
     } catch (err: any) {
       setCompleteError(
-        err.response?.status === 404
+        isApiError(err) && err.status === 404
           ? 'Code not found — check with your manager.'
           : 'Failed to record completion. Please try again.',
       )
@@ -457,11 +438,12 @@ function VideoItemView({
 
   const saveProgress = useCallback(
     (seconds: number) => {
-      axios.put(
-        '/api/academy/learner/video-progress',
-        { employeeCode, courseId, itemId: item._id, progressSeconds: Math.floor(seconds) },
-        { headers: makeAuthHeaders() },
-      ).catch(() => {})
+      academyService.saveVideoProgress({
+        employeeCode,
+        courseId,
+        itemId: item._id,
+        progressSeconds: Math.floor(seconds),
+      }).catch(() => {})
     },
     [employeeCode, courseId, item._id],
   )
@@ -469,13 +451,10 @@ function VideoItemView({
   // Fetch saved playback position; apply it once metadata is loaded (handleLoadedMetadata)
   useEffect(() => {
     if (isEmbed || !employeeCode) return
-    axios
-      .get(`/api/academy/learner/video-progress/${courseId}/${item._id}`, {
-        params: { employeeCode },
-        headers: makeAuthHeaders(),
-      })
-      .then((res) => {
-        savedSecondsRef.current = res.data.progressSeconds ?? 0
+    academyService
+      .getVideoProgress(courseId, item._id, employeeCode)
+      .then((progressSeconds) => {
+        savedSecondsRef.current = progressSeconds
       })
       .catch(() => {})
   }, [isEmbed, employeeCode, courseId, item._id])

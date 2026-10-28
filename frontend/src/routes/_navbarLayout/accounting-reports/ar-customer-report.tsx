@@ -13,7 +13,8 @@ import { DatePicker } from "@/components/custom/datePicker";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useSite } from "@/context/SiteContext";
 import { useAuth } from "@/context/AuthContext";
-import axios from "axios";
+import { accountingReportsService } from "@/api/accounting-reports/accounting-reports.service";
+import { isApiError } from "@/api/core/errors";
 
 export const Route = createFileRoute(
   "/_navbarLayout/accounting-reports/ar-customer-report"
@@ -88,43 +89,29 @@ function RouteComponent() {
       setLoading(true);
       setStatusMessage("Requesting A/R Customer reports...");
 
-      const token = localStorage.getItem("token");
-
-      const response = await axios.post(
-        "/api/accounting-reports/ar-customer-report",
-        {
-          stationName: site,
-          startDate: startDateStr,
-          endDate: endDateStr,
-          includeArPaidReport: includeArPaidReport,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission":
-              "accounting.accountingReports.arCustomerReport",
-          },
-        }
-      );
+      const response = await accountingReportsService.requestArCustomer({
+        stationName: site,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        includeArPaidReport,
+      });
 
       // Display response feedback message
       const targetEmail = user?.email || "your email address";
       setStatusMessage(
-        response.data?.message ||
+        response.message ||
           `Report generated! The report will be emailed directly to ${targetEmail} shortly.`
       );
     } catch (err: any) {
       console.error("Error generating A/R report:", err);
 
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }
 
       setErrorMessage(
-        err.response?.data?.error ||
-          err.message ||
+        (isApiError(err) ? err.message : err?.message) ||
           "Failed to generate A/R report."
       );
     } finally {

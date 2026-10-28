@@ -7,23 +7,11 @@ import { LocationPicker } from '@/components/custom/locationPicker'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { getStartAndEndOfToday } from '@/lib/utils'
 import { format } from 'date-fns'
-import { domain } from '@/lib/constants'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { Plus, ImageIcon } from 'lucide-react'
-import axios from 'axios'
-
-interface ATMRecord {
-  _id: string
-  date: string
-  amount: number
-  source: 'till' | 'safe'
-  image: string | null
-  stationName: string
-  site?: string
-  createdBy: string
-  createdAt: string
-}
+import { atmService } from '@/api/atm/atm.service'
+import type { ATMRecord } from '@/api/atm/atm.types'
 
 export const Route = createFileRoute('/_navbarLayout/atm/list')({
   component: RouteComponent,
@@ -46,17 +34,12 @@ function RouteComponent() {
   const fetchRecords = async () => {
     setLoading(true)
     try {
-      const token = localStorage.getItem('token')
       const params: Record<string, string> = {}
       if (location) params.stationName = location
       if (dateRange?.from) params.startDate = format(dateRange.from, 'yyyy-MM-dd')
       if (dateRange?.to) params.endDate = format(dateRange.to, 'yyyy-MM-dd')
 
-      const res = await axios.get(`${domain}/api/atm`, {
-        headers: { Authorization: `Bearer ${token}` },
-        params,
-      })
-      setRecords(res.data)
+      setRecords(await atmService.list(params))
     } catch {
       setRecords([])
     } finally {
