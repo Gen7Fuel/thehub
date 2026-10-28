@@ -8,7 +8,7 @@ const Lottery = LotteryModule.default || LotteryModule.Lottery || LotteryModule
 
 const cron = require('node-cron')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
-const { generateEodReportPdf } = require('../utils/eodReportWavers')
+const { generateEodReportPdf } = require('../utils/eodReport')
 const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWavers')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')

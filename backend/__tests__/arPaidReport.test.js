@@ -306,7 +306,7 @@ describe('aggregation', () => {
     expect(westOf(report).rows[0].amount).toBe(150)
   })
 
-  it('does not merge names differing by case (matches eodReportWavers)', () => {
+  it('does not merge names differing by case (matches eodReport)', () => {
     const report = build([
       shift('2026-07-16', '10012', [
         { name: 'SASco', paid: 100 },
@@ -488,3 +488,4 @@ describe('purity', () => {
     expect(EAST.site).toBe('Wavers East')
   })
 })
+

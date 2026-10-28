@@ -4,6 +4,7 @@ const Maintenance = require('../models/Maintenance');
 const User = require('../models/User');
 const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require('../services/notificationService');
+const { logChange } = require('../middleware/changeLogger');
 
 // function generateMaintenanceEmailHTML(maintenance) {
 //   // We force America/Toronto to ensure Eastern Time (EST/EDT)
@@ -137,6 +138,7 @@ router.post('/', async (req, res) => {
     });
 
     const saved = await maintenance.save();
+    await logChange(req, { action: 'create', resourceType: 'maintenance', resourceId: saved._id, success: true, statusCode: 201, source: 'settings.maintenance', resourceLabel: saved.name, before: null, after: saved.toObject() });
     const io = req.app.get("io");
     if (io) io.emit("maintenanceUpdated");
     res.status(201).json(saved);
@@ -232,8 +234,11 @@ router.post('/:id/notify', async (req, res) => {
       }
     });
 
+    const before = maintenance.toObject();
     maintenance.notificationSent = true;
     await maintenance.save();
+
+    await logChange(req, { action: 'update', resourceType: 'maintenance', resourceId: maintenance._id, success: true, statusCode: 200, source: 'settings.maintenance', resourceLabel: maintenance.name, message: `Maintenance notification sent for ${maintenance.name} to ${bccList.length} active users`, before, after: maintenance.toObject(), bulk: { affectedCount: bccList.length, truncated: true } });
 
     res.json({ message: `Maintenance notification broadcasted to ${bccList.length} users.` });
   } catch (err) {
@@ -279,6 +284,7 @@ router.post('/:id/cancel', async (req, res) => {
     const maintenance = await Maintenance.findById(req.params.id);
     if (!maintenance) return res.status(404).json({ message: "Record not found" });
 
+    const before = maintenance.toObject();
     maintenance.status = 'cancelled';
     await maintenance.save();
 
@@ -308,6 +314,8 @@ router.post('/:id/cancel', async (req, res) => {
     const io = req.app.get("io");
     if (io) io.emit("maintenanceUpdated");
 
+    await logChange(req, { action: 'update', resourceType: 'maintenance', resourceId: maintenance._id, success: true, statusCode: 200, source: 'settings.maintenance', resourceLabel: maintenance.name, message: `Maintenance ${maintenance.name} cancelled${maintenance.notificationSent ? ' and users notified' : ''}`, before, after: maintenance.toObject() });
+
     res.json({ message: "Maintenance cancelled and users notified." });
   } catch (err) {
     console.error("Cancellation Error:", err);
@@ -321,6 +329,8 @@ router.post('/:id/cancel', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
+    const previous = await Maintenance.findById(req.params.id).lean();
+    if (!previous) return res.status(404).json({ message: "Record not found" });
 
     // Logic for tracking who starts/ends the maintenance
     if (updateData.status === 'ongoing') {
@@ -338,6 +348,7 @@ router.put('/:id', async (req, res) => {
     );
 
     if (!updated) return res.status(404).json({ message: "Record not found" });
+    await logChange(req, { action: 'update', resourceType: 'maintenance', resourceId: updated._id, success: true, statusCode: 200, source: 'settings.maintenance', resourceLabel: updated.name, before: previous, after: updated.toObject() });
     const io = req.app.get("io");
     if (io) io.emit("maintenanceUpdated");
     res.json(updated);
@@ -358,6 +369,7 @@ router.delete('/:id', async (req, res) => {
     }
 
     await record.deleteOne();
+    await logChange(req, { action: 'delete', resourceType: 'maintenance', resourceId: record._id, success: true, statusCode: 200, source: 'settings.maintenance', resourceLabel: record.name, before: record.toObject(), after: null });
     res.json({ message: "Maintenance record deleted" });
   } catch (err) {
     res.status(500).json({ message: "Delete failed" });

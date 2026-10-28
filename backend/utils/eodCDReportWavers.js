@@ -18,6 +18,16 @@ async function streamToBuffer(stream) {
 // Helper function to map site names for PDF display
 const { formatReportSiteName } = require('./siteDisplayName');
 
+const formatNumber = (value, decimals) => Number(value || 0).toLocaleString('en-CA', {
+  minimumFractionDigits: decimals,
+  maximumFractionDigits: decimals,
+});
+
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  return amount >= 0 ? `$${formatNumber(amount, 2)}` : `-$${formatNumber(Math.abs(amount), 2)}`;
+};
+
 const styles = StyleSheet.create({
   page: {
     padding: 30,
@@ -121,7 +131,7 @@ function ChickenDelightEodDoc({ site, date, data }) {
   const renderRow = (desc, amount, isTotalHighlight = false, customAmountStyle = null, isIndented = false) => {
     let amtStr = '';
     if (typeof amount === 'number') {
-      amtStr = amount >= 0 ? `$${amount.toFixed(2)}` : `-$${Math.abs(amount).toFixed(2)}`;
+      amtStr = formatCurrency(amount);
     }
 
     const rowStyle = isTotalHighlight ? styles.totalRow : styles.tableRow;
@@ -216,14 +226,14 @@ function ChickenDelightEodDoc({ site, date, data }) {
       activeArEntries.map(([custName, item]) => 
         h(View, { key: custName, style: styles.tableRow },
           h(Text, { style: styles.arColName }, custName),
-          h(Text, { style: styles.arColAmt }, item.incurred >= 0 ? `$${item.incurred.toFixed(2)}` : `-$${Math.abs(item.incurred).toFixed(2)}`),
-          h(Text, { style: styles.arColAmt }, item.paid >= 0 ? `$${item.paid.toFixed(2)}` : `-$${Math.abs(item.paid).toFixed(2)}`)
+          h(Text, { style: styles.arColAmt }, formatCurrency(item.incurred)),
+          h(Text, { style: styles.arColAmt }, formatCurrency(item.paid))
         )
       ),
       h(View, { style: styles.totalRow },
         h(Text, { style: [styles.arColName, styles.textBold] }, 'Total A/R'),
-        h(Text, { style: [styles.arColAmt, styles.textBold] }, totalArIncurred >= 0 ? `$${totalArIncurred.toFixed(2)}` : `-$${Math.abs(totalArIncurred).toFixed(2)}`),
-        h(Text, { style: [styles.arColAmt, styles.textBold] }, totalArPaid >= 0 ? `$${totalArPaid.toFixed(2)}` : `-$${Math.abs(totalArPaid).toFixed(2)}`)
+        h(Text, { style: [styles.arColAmt, styles.textBold] }, formatCurrency(totalArIncurred)),
+        h(Text, { style: [styles.arColAmt, styles.textBold] }, formatCurrency(totalArPaid))
       ),
 
       showArMissingNote && h(Text, { style: styles.warningNote }, '* Note: Over/Short threshold exceeded $50, but A/R details were not entered during the shift.')

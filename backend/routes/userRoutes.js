@@ -6,6 +6,17 @@ const _ = require("lodash");
 const Role = require("../models/Role");
 const Permission = require("../models/Permission");
 const { getMergedPermissions, hydrateTreeValues, flattenHydratedTree } = require("../utils/mergePermissionObjects")
+const { logChange } = require('../middleware/changeLogger');
+
+const userLabel = (user) => `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+const mapToObject = (value) => value instanceof Map ? Object.fromEntries(value) : value;
+const auditableUserState = (user) => ({
+  is_active: user.is_active,
+  role: user.role?._id || user.role || null,
+  site_access: mapToObject(user.site_access),
+  customPermissionsArray: user.customPermissionsArray,
+  is_loggedIn: user.is_loggedIn,
+});
 
 // Compare frontend permissions with role.permissions to find overrides for saving them as custom permissions in users
 // const getOverrides = (roleNodes = [], userNodes = []) => {
@@ -98,7 +109,7 @@ function buildParentMap(modules, map = new Map()) {
 // GET route to fetch all users
 router.get('/', async (req, res) => {
   try {
-    const users = await User.find(); // Fetch all users from the database
+    const users = await User.find().select('-password'); // Never expose credential hashes
     res.status(200).json(users); // Send the users as a JSON response
   } catch (error) {
     console.error('Error fetching users:', error);
@@ -207,7 +218,7 @@ router.get("/:userId", async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findById(userId).lean();
+    const user = await User.findById(userId).select('-password').lean();
     if (!user) return res.status(404).json({ error: "User not found" });
 
     // 1. Fetch necessary data for merging
@@ -247,7 +258,7 @@ router.get("/:userId", async (req, res) => {
     // 6. Respond
     res.status(200).json({
       ...user,
-      role: role ? { _id: role._id, role_name: role.role_name } : null,
+      role: role ? { _id: role._id, role_name: role.role_name, inStoreAccount: role.inStoreAccount } : null,
       merged_permissions: mergedPermissionsTree,
       is_logged_in: user.is_loggedIn,
       last_login: user.lastLoginDate
@@ -294,8 +305,15 @@ router.put("/:userId/role", async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
+    const before = auditableUserState(user);
+
     user.role = roleId;
     await user.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'user-role', resourceId: user._id,
+      success: true, statusCode: 200, source: 'settings.users',
+      resourceLabel: userLabel(user), before, after: auditableUserState(user),
+    });
     const io = req.app.get("io");
     if (io) {
       io.to(userId).emit("permissions-updated");
@@ -318,7 +336,16 @@ router.put("/:userId/site-access", async (req, res) => {
       return res.status(400).json({ message: "Invalid site access data" });
     }
 
-    await User.findByIdAndUpdate(userId, { site_access: siteAccess });
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    const before = auditableUserState(user);
+    user.site_access = siteAccess;
+    await user.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'user-site-access', resourceId: user._id,
+      success: true, statusCode: 200, source: 'settings.users',
+      resourceLabel: userLabel(user), before, after: auditableUserState(user),
+    });
     const io = req.app.get("io");
     if (io) {
       io.to(userId).emit("permissions-updated");
@@ -344,6 +371,7 @@ router.put("/:userId/permissions", async (req, res) => {
   try {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
+    const before = auditableUserState(user);
 
     // 1. Fetch BOTH the role and the Master Permissions structure
     const [role, allMasterPermissions] = await Promise.all([
@@ -404,6 +432,13 @@ router.put("/:userId/permissions", async (req, res) => {
     user.markModified('customPermissionsArray');
 
     await user.save();
+
+    await logChange(req, {
+      action: 'update', resourceType: 'user-permission', resourceId: user._id,
+      success: true, statusCode: 200, source: 'settings.users',
+      resourceLabel: userLabel(user), before, after: auditableUserState(user),
+      diffOptions: { arrayKeys: { customPermissionsArray: 'permId' } },
+    });
 
     // 5. Emit socket update
     const io = req.app.get("io");
@@ -466,12 +501,15 @@ router.patch("/:id/active", async (req, res) => {
     const user = await User.findById(id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    const before = auditableUserState(user);
+
     user.is_active = is_active;
 
     // If user is being deactivated, clear sensitive fields
     if (is_active === false) {
       user.role = null;
       user.custom_permissions = [];
+      user.customPermissionsArray = [];
 
       // Set all site_access values to false
       if (user.site_access && user.site_access.size > 0) {
@@ -482,6 +520,13 @@ router.patch("/:id/active", async (req, res) => {
     }
 
     await user.save();
+
+    await logChange(req, {
+      action: 'update', resourceType: 'user', resourceId: user._id,
+      success: true, statusCode: 200, source: 'settings.users',
+      resourceLabel: userLabel(user), before, after: auditableUserState(user),
+      diffOptions: { arrayKeys: { customPermissionsArray: 'permId' } },
+    });
 
     res.json({ message: "User status updated", user });
   } catch (error) {
@@ -510,6 +555,13 @@ router.post("/:id/logout", async (req, res) => {
     if (!updatedUser) {
       return res.status(404).json({ message: "User not found" });
     }
+
+    await logChange(req, {
+      action: 'update', resourceType: 'user-session', resourceId: updatedUser._id,
+      success: true, statusCode: 200, source: 'settings.users',
+      resourceLabel: userLabel(updatedUser),
+      before: { is_loggedIn: true }, after: { is_loggedIn: false },
+    });
 
     // Emit socket event to notify the user
     const io = req.app.get("io");
@@ -566,6 +618,16 @@ router.post("/logout-multiple", async (req, res) => {
         });
       }
     }
+
+    const affectedIds = usersToLogout.map((user) => String(user._id));
+    await logChange(req, {
+      action: 'update', resourceType: 'user-session', success: true, statusCode: 200,
+      source: 'settings.users',
+      message: `Administrative logout completed for ${affectedIds.length} non-admin user${affectedIds.length === 1 ? '' : 's'}`,
+      bulk: { affectedCount: affectedIds.length, resourceIds: affectedIds.slice(0, 100), truncated: affectedIds.length > 100 },
+      changes: [{ operation: 'replace', path: 'is_loggedIn', before: true, after: false }],
+      changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+    });
 
     res.json({
       message: "All non-admin active users logged out successfully",

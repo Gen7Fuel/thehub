@@ -18,6 +18,16 @@ const h = React.createElement;
 // Helper function to map site names for PDF display
 const { formatReportSiteName } = require('./siteDisplayName');
 
+const formatNumber = (value, decimals) => Number(value || 0).toLocaleString('en-CA', {
+  minimumFractionDigits: decimals,
+  maximumFractionDigits: decimals,
+});
+
+const formatCurrency = (value) => {
+  const amount = Number(value || 0);
+  return amount >= 0 ? `$${formatNumber(amount, 2)}` : `-$${formatNumber(Math.abs(amount), 2)}`;
+};
+
 const styles = StyleSheet.create({
   page: {
     padding: 30,
@@ -81,6 +91,7 @@ const styles = StyleSheet.create({
   },
   subSectionHeaderRow: {
     flexDirection: "row",
+    justifyContent: "space-between",
     paddingVertical: 3,
     paddingHorizontal: 4,
     marginTop: 4,
@@ -94,6 +105,10 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333333",
     textDecoration: "underline",
+  },
+  subSectionAmount: {
+    width: 90,
+    textAlign: "right",
   },
   colDesc: { flex: 2, textAlign: "left" },
   colAmount: { width: 90, textAlign: "right" },
@@ -139,10 +154,7 @@ function EodReportDoc({ site, date, data }) {
   ) => {
     let amtStr = "";
     if (typeof amount === "number") {
-      amtStr =
-        amount >= 0
-          ? `$${amount.toFixed(2)}`
-          : `-$${Math.abs(amount).toFixed(2)}`;
+      amtStr = formatCurrency(amount);
     }
 
     const rowStyle = isTotalHighlight ? styles.totalRow : styles.tableRow;
@@ -183,17 +195,27 @@ function EodReportDoc({ site, date, data }) {
     );
   };
 
-  const renderSubSectionHeader = (title) => {
+  const renderSubSectionHeader = (title, amount = null) => {
     return h(
       View,
       { style: styles.subSectionHeaderRow },
       h(Text, { style: styles.subSectionHeaderText }, title),
+      amount !== null
+        ? h(Text, { style: [styles.subSectionHeaderText, styles.subSectionAmount] }, formatCurrency(amount))
+        : null,
     );
   };
 
-  const totalTenders =
-    Object.values(data.tenders).reduce((a, b) => a + (b || 0), 0) +
-    (data.reportCanadianCash || 0);
+  const posTendersTotal = Object.values(data.tenders || {}).reduce(
+    (a, b) => a + (b || 0),
+    0,
+  ) + (data.reportCanadianCash || 0);
+  const afdTendersTotal = Object.values(data.afdTenders || {}).reduce(
+    (a, b) => a + (b || 0),
+    0,
+  );
+  const showAfdTenders = !String(site || '').startsWith('Wavers');
+  const grandTendersTotal = posTendersTotal + (showAfdTenders ? afdTendersTotal : 0);
 
   // Calculate A/R Grand Totals from object properties
   const totalArIncurred = Object.values(data.arCustomers).reduce(
@@ -306,11 +328,20 @@ function EodReportDoc({ site, date, data }) {
 
       // 3. Tenders Section Block
       renderSectionHeader("Tenders"),
+      renderSubSectionHeader("POS Tenders", showAfdTenders ? posTendersTotal : null),
       ...Object.entries(data.tenders).map(([name, val]) =>
-        renderRow(name, val),
+        renderRow(name === "GIFTCARDS" ? "GiftCard Redemption" : name, val, false, null, true),
       ),
-      renderRow("Cash", data.reportCanadianCash),
-      renderRow("Total Tenders", totalTenders, true),
+      renderRow("Cash", data.reportCanadianCash, false, null, true),
+      ...(showAfdTenders
+        ? [
+            renderSubSectionHeader("AFD POS Totals", afdTendersTotal),
+            ...Object.entries(data.afdTenders || {}).map(([name, val]) =>
+              renderRow(name === "GIFTCARDS" ? "GiftCard Redemption" : name, val, false, null, true),
+            ),
+          ]
+        : []),
+      renderRow("Grand Total Tenders", grandTendersTotal, true),
 
       // 4. UPDATED: A/R Details Section Block (Multi-Column Grid View Layout)
       renderSectionHeader("A/R Details"),
@@ -341,16 +372,12 @@ function EodReportDoc({ site, date, data }) {
             h(
               Text,
               { style: styles.arColAmt },
-              item.incurred >= 0
-                ? `$${item.incurred.toFixed(2)}`
-                : `-$${Math.abs(item.incurred).toFixed(2)}`,
+              formatCurrency(item.incurred),
             ),
             h(
               Text,
               { style: styles.arColAmt },
-              item.paid >= 0
-                ? `$${item.paid.toFixed(2)}`
-                : `-$${Math.abs(item.paid).toFixed(2)}`,
+              formatCurrency(item.paid),
             ),
           ),
         ),
@@ -361,16 +388,12 @@ function EodReportDoc({ site, date, data }) {
         h(
           Text,
           { style: [styles.arColAmt, styles.textBold] },
-          totalArIncurred >= 0
-            ? `$${totalArIncurred.toFixed(2)}`
-            : `-$${Math.abs(totalArIncurred).toFixed(2)}`,
+          formatCurrency(totalArIncurred),
         ),
         h(
           Text,
           { style: [styles.arColAmt, styles.textBold] },
-          totalArPaid >= 0
-            ? `$${totalArPaid.toFixed(2)}`
-            : `-$${Math.abs(totalArPaid).toFixed(2)}`,
+          formatCurrency(totalArPaid),
         ),
       ),
 
@@ -498,33 +521,33 @@ function EodReportDoc({ site, date, data }) {
           View,
           { key: idx, style: styles.fuelGridRow },
           h(Text, { style: styles.fuelColDesc }, row.description),
-          h(Text, { style: styles.fuelColVal }, row.totalLitres.toFixed(3)),
+          h(Text, { style: styles.fuelColVal }, formatNumber(row.totalLitres, 3)),
           h(
             Text,
             { style: styles.fuelColVal },
-            `$${row.totalAmount.toFixed(2)}`,
+            formatCurrency(row.totalAmount),
           ),
-          h(Text, { style: styles.fuelColVal }, row.treatyLitres.toFixed(3)),
+          h(Text, { style: styles.fuelColVal }, formatNumber(row.treatyLitres, 3)),
           h(
             Text,
             { style: styles.fuelColVal },
-            `$${row.treatyAmount.toFixed(2)}`,
+            formatCurrency(row.treatyAmount),
           ),
-          h(Text, { style: styles.fuelColVal }, row.nonTreatyLitres.toFixed(3)),
+          h(Text, { style: styles.fuelColVal }, formatNumber(row.nonTreatyLitres, 3)),
           h(
             Text,
             { style: styles.fuelColVal },
-            `$${row.nonTreatyAmount.toFixed(2)}`,
+            formatCurrency(row.nonTreatyAmount),
           ),
           h(
             Text,
             { style: styles.fuelColWide },
-            `$${row.taxableNonTreaty.toFixed(2)}`,
+            formatCurrency(row.taxableNonTreaty),
           ),
           h(
             Text,
             { style: styles.fuelColWide },
-            `$${row.remittableGst.toFixed(2)}`,
+            formatCurrency(row.remittableGst),
           ),
         ),
       ),
@@ -545,42 +568,42 @@ function EodReportDoc({ site, date, data }) {
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          data.fuelRemittanceTotals.totalLitres.toFixed(3),
+          formatNumber(data.fuelRemittanceTotals.totalLitres, 3),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          `$${data.fuelRemittanceTotals.totalAmount.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.totalAmount),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          data.fuelRemittanceTotals.treatyLitres.toFixed(3),
+          formatNumber(data.fuelRemittanceTotals.treatyLitres, 3),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          `$${data.fuelRemittanceTotals.treatyAmount.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.treatyAmount),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          data.fuelRemittanceTotals.nonTreatyLitres.toFixed(3),
+          formatNumber(data.fuelRemittanceTotals.nonTreatyLitres, 3),
         ),
         h(
           Text,
           { style: [styles.fuelColVal, styles.textBold] },
-          `$${data.fuelRemittanceTotals.nonTreatyAmount.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.nonTreatyAmount),
         ),
         h(
           Text,
           { style: [styles.fuelColWide, styles.textBold] },
-          `$${data.fuelRemittanceTotals.taxableNonTreaty.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.taxableNonTreaty),
         ),
         h(
           Text,
           { style: [styles.fuelColWide, styles.textBold] },
-          `$${data.fuelRemittanceTotals.remittableGst.toFixed(2)}`,
+          formatCurrency(data.fuelRemittanceTotals.remittableGst),
         ),
       ),
     ),
@@ -618,6 +641,7 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
 
   // 1️⃣ Aggregate Tenders
   const tendersAgg = {};
+  const afdTendersAgg = {};
   rows.forEach((r) => {
     if (r.tenders && Array.isArray(r.tenders)) {
       r.tenders.forEach((t) => {
@@ -633,7 +657,18 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
       tendersAgg["MASTERCARD"] = (tendersAgg["MASTERCARD"] || 0) + r.mastercard;
     if (r.amex) tendersAgg["AMEX"] = (tendersAgg["AMEX"] || 0) + r.amex;
     if (r.debit) tendersAgg["DEBIT"] = (tendersAgg["DEBIT"] || 0) + r.debit;
+    if (r.afdTenders && Array.isArray(r.afdTenders)) {
+      r.afdTenders.forEach((t) => {
+        const tenderKey = (t.key || t.name)?.toUpperCase().trim();
+        if (tenderKey) {
+          afdTendersAgg[tenderKey] =
+            (afdTendersAgg[tenderKey] || 0) + (t.value || t.amount || 0);
+        }
+      });
+    }
   });
+
+  const isWavers = String(site || '').startsWith('Wavers');
 
   // 2️⃣ Aggregate A/R Customer objects
   const arCustomersAgg = {};
@@ -797,6 +832,7 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
         ? Number(adjFuelVariance.toFixed(2))
         : 0,
     tenders: tendersAgg,
+    afdTenders: isWavers ? {} : afdTendersAgg,
     arCustomers: arCustomersAgg,
     tobaccoCig,
     tobaccoOthers,
@@ -833,6 +869,7 @@ function combineEodData(dailyDataArray) {
     overShortCash: 0,
     adjFuelVariance: 0,
     tenders: {},
+    afdTenders: {},
     arCustomers: {},
     tobaccoCig: 0,
     tobaccoOthers: 0,
@@ -880,6 +917,9 @@ function combineEodData(dailyDataArray) {
     // Sum Tenders
     Object.entries(d.tenders || {}).forEach(([k, v]) => {
       combined.tenders[k] = (combined.tenders[k] || 0) + (v || 0);
+    });
+    Object.entries(d.afdTenders || {}).forEach(([k, v]) => {
+      combined.afdTenders[k] = (combined.afdTenders[k] || 0) + (v || 0);
     });
 
     // Sum A/R Details

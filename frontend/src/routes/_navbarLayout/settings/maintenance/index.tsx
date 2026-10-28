@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { maintenanceApi } from '@/api/maintenance/maintenance.service'
 import { Plus, ChevronDown, ChevronUp, Clock, User } from 'lucide-react'
 import { Button } from "@/components/ui/button" // Assuming you use a UI library
 import { Badge } from "@/components/ui/badge"
@@ -56,14 +56,9 @@ function RouteComponent() {
 
   const fetchMaintenance = async () => {
     try {
-      const response = await axios.get('/api/maintenance', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'settings.maintenance'
-        }
-      });
+      const response = await maintenanceApi.list<IMaintenance>();
       // Map the response to include an open state for accordion logic if needed locally
-      setMaintenanceList(response.data);
+      setMaintenanceList(response);
     } catch (err) {
       console.error("Failed to fetch maintenance", err);
     }
@@ -95,11 +90,8 @@ function RouteComponent() {
   const handleStartMaintenance = async (id: string) => {
     if (!window.confirm("Are you sure you want to start this maintenance? The app will become inaccessible to all users immediately.")) return;
     try {
-      await axios.put(`/api/maintenance/${id}`, {
-        status: 'ongoing'
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 'X-Required-Permission': 'settings.maintenance' }
-      });
+      const item = maintenanceList.find((entry) => entry._id === id);
+      await maintenanceApi.update(id, { status: 'ongoing' }, item?.name || id, 'start');
       fetchMaintenance(); // Refresh the list
     } catch (err) {
       alert("Failed to start maintenance.");
@@ -110,11 +102,8 @@ function RouteComponent() {
     if (!window.confirm("Are you sure you want to end this maintenance early? The app will become accessible to all users immediately.")) return;
 
     try {
-      await axios.put(`/api/maintenance/${id}`, {
-        status: 'completed'
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 'X-Required-Permission': 'settings.maintenance' }
-      });
+      const item = maintenanceList.find((entry) => entry._id === id);
+      await maintenanceApi.update(id, { status: 'completed' }, item?.name || id, 'complete');
       fetchMaintenance(); // Refresh the list
     } catch (err) {
       alert("Failed to end maintenance.");
@@ -124,9 +113,8 @@ function RouteComponent() {
   const handleNotifyUsers = async (id: string) => {
     if (!window.confirm("Send maintenance notification emails to all active users?")) return;
     try {
-      await axios.post(`/api/maintenance/${id}/notify`, {}, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`, 'X-Required-Permission': 'settings.maintenance' }
-      });
+      const item = maintenanceList.find((entry) => entry._id === id);
+      await maintenanceApi.notify(id, item?.name || id);
       alert("Notification emails have been queued.");
       fetchMaintenance();
     } catch (err) {
@@ -137,12 +125,8 @@ function RouteComponent() {
   const handleCancelMaintenance = async (id: string) => {
     if (!window.confirm("Are you sure you want to cancel this maintenance? Users will be notified via email if they were already informed about it.")) return;
     try {
-      await axios.post(`/api/maintenance/${id}/cancel`, {}, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'settings.maintenance'
-        }
-      });
+      const item = maintenanceList.find((entry) => entry._id === id);
+      await maintenanceApi.cancel(id, item?.name || id);
       alert("Maintenance cancelled successfully.");
       fetchMaintenance();
     } catch (err) {

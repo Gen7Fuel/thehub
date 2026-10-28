@@ -8,7 +8,7 @@ const {
   fetchEodDataForDate,
   combineEodData,
   generateEodReportBuffer
-} = require('../utils/eodReportWavers');
+} = require('../utils/eodReport');
 
 // ==========================================
 // CONFIGURATION VARIABLES (UPDATE AS NEEDED)

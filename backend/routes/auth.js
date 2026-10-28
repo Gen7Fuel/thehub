@@ -9,6 +9,7 @@ const Role = require("../models/Role");
 const { getMergedPermissions, getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
 
 const { auth } = require("../middleware/authMiddleware.js");
+const { logChange } = require('../middleware/changeLogger');
 
 // Escape input for use in RegExp to avoid injection
 function escapeRegExp(str) {
@@ -325,6 +326,7 @@ router.post('/reset-password', auth, async (req, res) => {
   const hashed = await bcrypt.hash(newPassword, 10);
 
   const user = await User.findByIdAndUpdate(userId, { password: hashed });
+  if (!user) return res.status(404).json({ error: 'User not found.' });
 
   // Emit force-logout if user is logged in
   if (user.is_loggedIn) {
@@ -339,7 +341,18 @@ router.post('/reset-password', auth, async (req, res) => {
     await user.save();
   }
 
-  if (!user) return res.status(404).json({ error: 'User not found.' });
+  await logChange(req, {
+    action: 'update',
+    resourceType: 'user-credential',
+    resourceId: user._id,
+    success: true,
+    statusCode: 200,
+    source: 'settings.users',
+    resourceLabel: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+    message: `Credential reset completed for ${`${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email}`,
+    changes: [{ operation: 'replace', path: 'credentials.password', before: '[REDACTED]', after: '[REDACTED]' }],
+    changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+  });
   res.json({ success: true });
 });
 

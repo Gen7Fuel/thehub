@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import axios from 'axios'
+import { maintenanceApi } from '@/api/maintenance/maintenance.service'
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Calendar, FileText } from 'lucide-react'
 
@@ -18,22 +18,6 @@ function CreateMaintenance() {
     scheduleClose: '',
   });
 
-  // const handleSubmit = async (e: React.FormEvent) => {
-  //   e.preventDefault();
-  //   setLoading(true);
-  //   try {
-  //     await axios.post('/api/maintenance', formData, {
-  //       headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  //       'X-Required-Permission': 'settings.maintenance' }
-  //     });
-  //     navigate({ to: '/settings/maintenance/' });
-  //   } catch (err) {
-  //     console.error("Save error", err);
-  //     alert("Error creating schedule. Check console.");
-  //   } finally {
-  //     setLoading(false);
-  //   }
-  // };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -47,12 +31,7 @@ function CreateMaintenance() {
         scheduleClose: new Date(formData.scheduleClose).toISOString(),
       };
 
-      await axios.post('/api/maintenance', payload, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'settings.maintenance'
-        }
-      });
+      await maintenanceApi.create(payload);
 
       navigate({ to: '/settings/maintenance/' });
     } catch (err) {

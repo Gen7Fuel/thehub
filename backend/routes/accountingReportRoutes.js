@@ -35,7 +35,7 @@ const {
   fetchEodDataForDate,
   combineEodData,
   generateEodReportBuffer,
-} = require("../utils/eodReportWavers");
+} = require("../utils/eodReport");
 
 const {
   fetchChickenDelightEodDataForDate,
@@ -916,3 +916,4 @@ module.exports = router;
 // });
 
 // module.exports = router;
+

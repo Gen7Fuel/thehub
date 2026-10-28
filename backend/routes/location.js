@@ -5,6 +5,7 @@ const Role = require("../models/Role");
 const User = require('../models/User');
 const router = express.Router();
 const { auth } = require("../middleware/authMiddleware");
+const { logChange } = require('../middleware/changeLogger');
 
 // Create a new location
 // router.post("/", async (req, res) => {
@@ -66,6 +67,29 @@ router.get("/name/:stationName", async (req, res) => {
   }
 });
 
+// Authenticated Settings views. The public location reads above remain available
+// for login, registration, and shared pickers that intentionally do not require auth.
+router.get('/settings', auth, async (req, res) => {
+  try {
+    const locations = await Location.find({ type: 'store' });
+    res.status(200).json(locations);
+  } catch (error) {
+    console.error('Error fetching locations for Settings:', error);
+    res.status(500).json({ message: 'Failed to fetch locations.' });
+  }
+});
+
+router.get('/settings/:id', auth, async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    if (!location) return res.status(404).json({ message: 'Location not found.' });
+    res.status(200).json({ location });
+  } catch (error) {
+    console.error('Error fetching location for Settings:', error);
+    res.status(500).json({ message: 'Failed to fetch location.' });
+  }
+});
+
 //--GET LOCATION BY ID--
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
@@ -88,8 +112,11 @@ router.use(auth)
 
 router.post('/:id/assign-users', async (req, res) => {
   try {
-    const { userIds, stationName } = req.body;
+    const { userIds } = req.body;
     const io = req.app.get("io");
+    const location = await Location.findById(req.params.id).select('stationName');
+    if (!location) return res.status(404).json({ error: 'Location not found' });
+    const stationName = location.stationName;
 
     // Identify users losing access for socket notification
     const previouslyAssigned = await User.find({
@@ -115,6 +142,24 @@ router.post('/:id/assign-users', async (req, res) => {
       });
     }
 
+    const affectedIds = [...new Set([...userIds, ...previouslyAssignedIds])];
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'site-access',
+      resourceId: location._id,
+      success: true,
+      statusCode: 200,
+      resourceLabel: stationName,
+      before: { userIds: previouslyAssignedIds },
+      after: { userIds },
+      bulk: {
+        affectedCount: affectedIds.length,
+        resourceIds: affectedIds.slice(0, 100),
+        truncated: affectedIds.length > 100,
+      },
+      source: 'settings.sites',
+    });
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -127,14 +172,29 @@ router.put("/:id", async (req, res) => {
   const updateData = req.body;
 
   try {
+    const beforeLocation = await Location.findById(id);
+    if (!beforeLocation) {
+      return res.status(404).json({ message: "Location not found." });
+    }
     const location = await Location.findByIdAndUpdate(
       id,
       { $set: updateData },
       { new: true, runValidators: true }
     );
-    if (!location) {
-      return res.status(404).json({ message: "Location not found." });
-    }
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'location',
+      resourceId: location._id,
+      success: true,
+      statusCode: 200,
+      resourceLabel: location.stationName,
+      before: beforeLocation.toObject(),
+      after: location.toObject(),
+      diffOptions: {
+        redactedPaths: ['managerCode', 'pushOverUserKey'],
+      },
+      source: 'settings.sites',
+    });
     res.status(200).json({ message: "Location updated successfully.", location });
   } catch (err) {
     console.error(err);
@@ -200,6 +260,20 @@ router.post("/", async (req, res) => {
     if (bulkOps.length > 0) {
       await User.bulkWrite(bulkOps);
     }
+
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'location',
+      resourceId: location._id,
+      success: true,
+      statusCode: 201,
+      resourceLabel: location.stationName,
+      after: location.toObject(),
+      diffOptions: {
+        redactedPaths: ['managerCode', 'pushOverUserKey'],
+      },
+      source: 'settings.sites',
+    });
 
     res.status(201).json(location);
   } catch (err) {

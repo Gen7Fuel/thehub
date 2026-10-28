@@ -17,7 +17,7 @@ const { parseSftReport } = require('../utils/parseSftReport')
 const { dateFromYMDLocal } = require('../utils/dateUtils')
 const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
-const { generateEodReportPdf } = require('../utils/eodReportWavers');
+const { generateEodReportPdf } = require('../utils/eodReport');
 const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWavers');
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
@@ -430,9 +430,9 @@ router.get('/over-short', async (req, res) => {
       // B. Calculate Adjusted Reported Cash (Expected)
       let adjustedReported = totals.report_canadian_cash;
 
-      const isWavers = ['Wavers West', 'Wavers East'].includes(site);
+      const isManitoba = ['Wavers West', 'Wavers East', 'Sioux Valley'].includes(site);
 
-      if (sellsLottery && lotteryMap[dateStr] && !isWavers) {
+      if (sellsLottery && lotteryMap[dateStr] && !isManitoba) {
         const lotto = lotteryMap[dateStr];
 
         const onlineOverShort = (totals.shiftOnlineTotal || 0) - (
@@ -2592,3 +2592,4 @@ router.getDepositSlipAttachment = getDepositSlipAttachment;
 router.attachmentContentToBase64 = attachmentContentToBase64;
 
 module.exports = router;
+

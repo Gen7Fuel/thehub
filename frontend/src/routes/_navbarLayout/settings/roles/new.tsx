@@ -4,7 +4,10 @@ import { Button } from "@/components/ui/button";
 import { RolePermissionEditor } from "@/components/custom/RolePermissionEditor";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
-import axios from "axios";
+import { useQueryClient } from '@tanstack/react-query';
+import { isApiError } from '@/api/core/errors';
+import { rolesApi } from '@/api/roles/roles.service';
+import { roleKeys } from '@/api/roles/roles.queries';
 
 export interface PermissionNode {
   name: string;
@@ -33,6 +36,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/roles/new")({
 
 export function RouteComponent() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [role, setRole] = useState<Role>({
     role_name: "",
     description: "",
@@ -65,26 +69,21 @@ export function RouteComponent() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const [permRes, roleRes] = await Promise.all([
-          axios.get<PermissionTemplate[]>("/api/permissions", {
-            headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" },
-          }),
-          axios.get<Role[]>("/api/roles", {
-            headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" },
-          }),
+        const [permissions, roles] = await Promise.all([
+          rolesApi.listPermissionTemplates(),
+          rolesApi.list(),
         ]);
 
-        setPermissionTemplates(permRes.data);
-        setAllRoles(roleRes.data);
+        setPermissionTemplates(permissions);
+        setAllRoles(roles);
 
         // Default: show base permissions (no template)
-        const mappedPermissions = mapPermissionsToRole(permRes.data);
+        const mappedPermissions = mapPermissionsToRole(permissions);
         setRole((prev) => ({ ...prev, permissions: mappedPermissions }));
       } catch (err) {
         console.error("Error loading templates or roles:", err);
         // Handle 403 specifically
-        if (axios.isAxiosError(err) && err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           navigate({to:"/no-access"});
         }
       } finally {
@@ -134,14 +133,12 @@ const handleTemplateSelect = (templateId: string) => {
     }
 
     try {
-      const token = localStorage.getItem("token");
-      await axios.post("/api/roles", role, {
-        headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "settings" },
-      });
+      await rolesApi.create(role);
+      await queryClient.invalidateQueries({ queryKey: roleKeys.all });
       alert("Role created successfully!");
       navigate({ to: "/settings/roles/" });
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         // Redirect to no-access page
         navigate({ to: "/no-access" });
       } else {

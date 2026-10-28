@@ -445,6 +445,8 @@ interface BistroStackedChartRow {
   sales_134: number; // category 134 sales
   units_130: number; // category 130 units
   units_134: number; // category 134 units
+  sales_131: number;
+  units_131: number;
   growth: number | null; // WoW growth (same for both categories)
 }
 
@@ -1510,6 +1512,8 @@ function RouteComponent() {
           sales_134: 0,
           units_130: 0,
           units_134: 0,
+          sales_131: 0,
+          units_131: 0,
           growth: d.WoW_Growth_Pct, // same across categories
         };
       }
@@ -1522,6 +1526,11 @@ function RouteComponent() {
       if (d.Category === "134") {
         acc[key].sales_134 += d.BistroSales;
         acc[key].units_134 += d.UnitsSold;
+      }
+
+      if (String(d.Category) === "131" && site === "Silver Grizzly") {
+        acc[key].sales_131 += d.BistroSales;
+        acc[key].units_131 += d.UnitsSold;
       }
 
       return acc;
@@ -2520,7 +2529,7 @@ function RouteComponent() {
                   </h2>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <BistroBarLineChart data={bistroChartData} />
+                    <BistroBarLineChart data={bistroChartData} site={site} />
                     <Top10BistroChart data={top10BistroChartData} />
                   </div>
                 </section>

@@ -1,18 +1,14 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router';
-import axios from "axios"
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
+import { siteQueries } from '@/api/sites/sites.queries';
+import type { Site } from '@/api/sites/sites.types';
 
 export const Route = createFileRoute('/_navbarLayout/settings/sites')({
   component: RouteComponent,
-  loader: async () => {
+  loader: async ({ context }) => {
     try {
-      // add authorization header with bearer token
-      const response = await axios.get('/api/locations', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      return { locations : response.data };
+      const locations = await context.queryClient.ensureQueryData(siteQueries.list());
+      return { locations };
     } catch (error) {
       console.error('Error fetching users:', error);
       return { locations: [] };
@@ -20,19 +16,8 @@ export const Route = createFileRoute('/_navbarLayout/settings/sites')({
   },
 });
 
-interface Location {
-  _id: string;
-  stationName: string;
-  legalName: string;
-  INDNumber: string;
-  kardpollCode: string;
-  csoCode: string;
-  timezone: string;
-  email: string;
-}
-
 function RouteComponent() {
-  const { locations } = Route.useLoaderData() as { locations: Location[] };
+  const { locations } = Route.useLoaderData() as { locations: Site[] };
   const activeProps = {
     className: 'bg-gray-100 rounded-md',
   };
