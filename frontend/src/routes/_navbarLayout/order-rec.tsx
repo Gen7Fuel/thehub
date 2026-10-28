@@ -20,22 +20,28 @@ function RouteComponent() {
   const isUploadActive = matchRoute({ to: '/order-rec' })
   const isListActive = matchRoute({ to: '/order-rec/list' })
   const isDashboardActive = matchRoute({ to: '/order-rec/workflow' })
+  const isCreateActive = matchRoute({ to: '/order-rec/create' })
   const { user } = useAuth();
   // Retrieve access permissions from auth provider
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
 
   return (
-    <div className="pt-5 flex flex-col items-center">
+    <div className="pt-5 flex w-full min-w-0 flex-col items-center">
       {/* Grouped navigation buttons for Order Rec sections */}
-      <div className="flex mb-4">
+      <div className="flex flex-wrap justify-center gap-y-2 mb-4 px-2">
+        {access?.orderRec?.value && (
+          <Link to="/order-rec/create">
+            <Button variant={isCreateActive ? 'default' : 'outline'} className="h-11 rounded-r-none">Scan to Order</Button>
+          </Link>
+        )}
         {/* Upload tab button, shown only if user has upload access */}
         {/* {access.component_order_rec_upload && ( //markpoint */}
         {access?.orderRec?.upload && (
           <Link to="/order-rec" activeOptions={{ exact: true }}>
             <Button
               {...(isUploadActive ? {} : { variant: 'outline' } as object)}
-              className="rounded-r-none"
+              className="h-11 rounded-r-none"
             >
               Upload
             </Button>
@@ -47,7 +53,7 @@ function RouteComponent() {
           <Button
             {...(isListActive ? {} : { variant: 'outline' } as object)}
             // className={`${access.component_order_rec_upload ? 'rounded-l-none rounded-r-none' : ''}`} //markpoint
-            className={`${access?.orderRec?.upload ? 'rounded-l-none rounded-r-none' : ''}`}
+            className={`h-11 ${access?.orderRec?.upload ? 'rounded-l-none rounded-r-none' : ''}`}
           >
             List
           </Button>
@@ -60,7 +66,7 @@ function RouteComponent() {
             <Button
               {...(isDashboardActive ? {} : { variant: 'outline' } as object)}
               // className={`${access.component_order_rec_upload ? 'rounded-l-none' : ''}`} //markpoint
-              className={`${access?.orderRec?.upload ? 'rounded-l-none' : ''}`}
+              className={`h-11 ${access?.orderRec?.upload ? 'rounded-l-none' : ''}`}
             >
               Workflow
             </Button>
