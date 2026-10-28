@@ -464,8 +464,9 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).not.toHaveBeenCalledWith('')
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies', 'Oliver', 'Osoyoos'])('shows the Fleet Card switch (defaulting to no card) for site "%s"', async (site) => {
     mockStore.stationName = site
+    mockStore.poNumber = '12345'
     mockStore.receipt = null
     renderWithQuery(<POForm />)
 
@@ -474,12 +475,15 @@ describe('PO Form — index.tsx', () => {
     }, { timeout: 5000 })
 
     expect(screen.queryByText('Number')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'PO Number' })).not.toBeInTheDocument()
+    expect(mockStore.setPoNumber).toHaveBeenCalledWith('')
+    expect(mockStore.setNoFleetCard).toHaveBeenCalledWith(true)
     // Defaults off — OTP hidden, button not blocked on a card.
     expect(screen.queryByTestId('otp-input')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /upload receipt/i })).not.toBeDisabled()
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('auto-fills a fleet card from quick-select on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies', 'Oliver', 'Osoyoos'])('auto-fills a fleet card from quick-select on site "%s"', async (site) => {
     mockStore.stationName = site
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('quick-select')) {
@@ -523,7 +527,7 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerNameSelected).toHaveBeenCalledWith(false)
   })
 
-  it.each(['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
+  it.each(['Wavers West', 'Wavers East'])('shows the classic PO Number / Fleet Card toggle (no Switch) for site "%s"', async (site) => {
     mockStore.stationName = site
     renderWithQuery(<POForm />)
 
@@ -634,7 +638,7 @@ describe('PO Form — index.tsx', () => {
     expect(mockStore.setCustomerName).toHaveBeenCalledWith('Three fires development corporation')
   })
 
-  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
+  it.each(['Rankin', 'Sarnia', 'Walpole', 'Jocko Point', 'Charlies', 'Oliver', 'Osoyoos'])('does not pad poNumber to "00000" when clicking Upload Receipt on site "%s"', async (site) => {
     mockStore.stationName = site
     mockStore.receipt = null
     renderWithQuery(<POForm />)
