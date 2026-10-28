@@ -30,7 +30,7 @@ function RouteComponent() {
     <div className="pt-5 flex w-full min-w-0 flex-col items-center">
       {/* Grouped navigation buttons for Order Rec sections */}
       <div className="flex flex-wrap justify-center gap-y-2 mb-4 px-2">
-        {access?.orderRec?.value && (
+        {access?.orderRec?.value && access.orderRec.scanToOrder === true && (
           <Link to="/order-rec/create">
             <Button variant={isCreateActive ? 'default' : 'outline'} className="h-11 rounded-r-none">Scan to Order</Button>
           </Link>

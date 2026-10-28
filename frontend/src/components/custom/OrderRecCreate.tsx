@@ -25,7 +25,7 @@ interface ScannedItem {
 interface Draft { vendor: string; items: ScannedItem[] }
 const headers = () => ({
   Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  'X-Required-Permission': 'orderRec',
+  'X-Required-Permission': 'orderRec.scanToOrder',
   'Content-Type': 'application/json',
 })
 
@@ -41,6 +41,9 @@ export function OrderRecCreate() {
   const { selectedSite } = useSite()
   const navigate = useNavigate()
   const [site, setSite] = useState(selectedSite || user?.location || '')
+  if (!user?.access?.orderRec?.value || user.access.orderRec.scanToOrder !== true) {
+    return <p className="p-6" role="alert">You do not have access to Scan to Order.</p>
+  }
   // A separate keyed editor prevents requests or drafts crossing store boundaries.
   return <OrderRecScanEditor key={`${user?.id}:${site}`} site={site} setSite={setSite} navigate={navigate} />
 }
@@ -155,8 +158,6 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
       if (mounted.current) setSaving(false)
     }
   }
-
-  if (!user?.access?.orderRec?.value) return <p className="p-6" role="alert">You do not have access to Order Rec.</p>
 
   return (
     <main className="w-full max-w-2xl space-y-4 px-3 pb-8 sm:px-6">

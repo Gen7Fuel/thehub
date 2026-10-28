@@ -4,7 +4,7 @@ import { OrderRecCreate } from './OrderRecCreate'
 
 const { navigate, auth } = vi.hoisted(() => ({
   navigate: vi.fn(),
-  auth: { user: { id: 'store-user', location: 'Rankin', email: 'store@example.com', access: { orderRec: { value: true } } } },
+  auth: { user: { id: 'store-user', location: 'Rankin', email: 'store@example.com', access: { orderRec: { value: true, scanToOrder: true } } } },
 }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => auth }))
@@ -32,9 +32,26 @@ describe('Scan to Order', () => {
   beforeEach(() => {
     cleanup()
     vi.clearAllMocks()
+    auth.user.access.orderRec = { value: true, scanToOrder: true }
     sessionStorage.clear()
     localStorage.setItem('token', 'test-token')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(item)))
+  })
+
+  it('blocks direct access without the scanner permission before mounting the editor', () => {
+    auth.user.access.orderRec.scanToOrder = false
+    render(<OrderRecCreate />)
+    expect(screen.getByRole('alert')).toHaveTextContent('You do not have access to Scan to Order.')
+    expect(screen.queryByLabelText('UPC barcode')).not.toBeInTheDocument()
+    expect(fetch).not.toHaveBeenCalled()
+    expect(sessionStorage.length).toBe(0)
+  })
+
+  it('blocks access when the parent module is denied', () => {
+    auth.user.access.orderRec.value = false
+    render(<OrderRecCreate />)
+    expect(screen.getByRole('alert')).toHaveTextContent(/do not have access/)
+    expect(screen.queryByLabelText('UPC barcode')).not.toBeInTheDocument()
   })
 
   it('shows the scanner prompt only while the UPC textbox is focused', () => {
@@ -121,6 +138,7 @@ describe('Scan to Order', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: '/order-rec/$id', params: { id: 'new-order' } }))
     const [url, init] = vi.mocked(fetch).mock.calls[1]
     expect(url).toBe('/api/order-rec/scan')
+    expect(init!.headers).toMatchObject({ 'X-Required-Permission': 'orderRec.scanToOrder' })
     expect(JSON.parse(init!.body as string)).toEqual({ site: 'Rankin', vendor: 'vendor-1', items: [{ id: 7, quantity: 1 }] })
   })
 

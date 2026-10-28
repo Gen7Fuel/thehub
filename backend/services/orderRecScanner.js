@@ -10,10 +10,12 @@ function validateBarcode(value) {
 
 function requireStoreAccess(user, site, permissionMap) {
   if (!user) throw Object.assign(new Error('Authentication required.'), { status: 401 });
-  const permId = permissionMap.get('orderRec');
-  const override = user.customPermissionsArray?.find(p => p.permId === permId);
-  const allowed = permId != null && (override?.value ?? user.role?.permissionsArray?.find(p => p.permId === permId)?.value);
-  if (!allowed) throw Object.assign(new Error('Access denied for orderRec.'), { status: 403 });
+  for (const permission of ['orderRec', 'orderRec.scanToOrder']) {
+    const permId = permissionMap.get(permission);
+    const override = user.customPermissionsArray?.find(p => p.permId === permId);
+    const allowed = permId != null && (override?.value ?? user.role?.permissionsArray?.find(p => p.permId === permId)?.value);
+    if (allowed !== true) throw Object.assign(new Error(`Access denied for ${permission}.`), { status: 403 });
+  }
   if (typeof site !== 'string' || !site.trim()) {
     throw Object.assign(new Error('Site is required.'), { status: 400 });
   }

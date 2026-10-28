@@ -3,8 +3,8 @@ info:
   title: Store-created Order Rec
   version: 1.0.0
   description: >-
-    Additive scanner endpoints. Requires the existing orderRec permission and
-    access to the selected store. Saving creates a Created order rec using the
+    Additive scanner endpoints. Requires orderRec.scanToOrder, its parent
+    orderRec permission, and access to the selected store. Saving creates a Created order rec using the
     existing review, planogram check, and orderCreated socket event; it does not
     place an order. Quantities are cases. Repeat scans are handled by the client.
 security:
@@ -99,7 +99,7 @@ components:
   responses:
     InvalidInput: { description: Missing or invalid input, duplicate IDs, invalid quantities, or vendor outside this store }
     Unauthenticated: { description: Missing or invalid authentication }
-    Forbidden: { description: Missing orderRec permission or access to this store }
+    Forbidden: { description: Missing orderRec.scanToOrder or parent orderRec permission, or access to this store }
   schemas:
     ScanItem:
       type: object

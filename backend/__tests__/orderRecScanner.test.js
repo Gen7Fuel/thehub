@@ -5,8 +5,8 @@ import knex from 'knex'
 import { createOrderRecScanRouter } from '../routes/orderRecScanRoutes.js'
 import { validateBarcode, validateScanLines, buildScanCategories, requireStoreAccess, lookupScanItem } from '../services/orderRecScanner.js'
 
-const permissionMap = new Map([['orderRec', 42]])
-const user = () => ({ stationName: 'Rankin', email: 'store@example.com', role: { permissionsArray: [{ permId: 42, value: true }] } })
+const permissionMap = new Map([['orderRec', 42], ['orderRec.scanToOrder', 43]])
+const user = () => ({ stationName: 'Rankin', email: 'store@example.com', role: { permissionsArray: [{ permId: 42, value: true }, { permId: 43, value: true }] } })
 const row = { id: 7, gtin: '00012345678905', upc: '12345678905', upc_barcode: '012345678905',
   description: 'Coffee', category_id: 100, on_hand_qty: '12.5000', pk_in_crt: 6, crt_in_case: 4, active: true, last_inv_date: '2026-10-26' }
 
@@ -49,6 +49,16 @@ describe('scanned order validation', () => {
     expect(() => requireStoreAccess({ ...user(), customPermissionsArray: [{ permId: 42, value: false }] }, 'Rankin', permissionMap)).toThrow(/Access denied/)
     expect(() => requireStoreAccess(user(), 'Other store', permissionMap)).toThrow(/site/)
     expect(() => requireStoreAccess({ ...user(), site_access: { 'Other store': true } }, 'Other store', permissionMap)).not.toThrow()
+  })
+  it('requires the dedicated permission even with access to the parent module', () => {
+    const parentOnly = { ...user(), role: { permissionsArray: [{ permId: 42, value: true }] } }
+    expect(() => requireStoreAccess(parentOnly, 'Rankin', permissionMap)).toThrow(/orderRec.scanToOrder/)
+    expect(() => requireStoreAccess(user(), 'Rankin', new Map([['orderRec', 42]]))).toThrow(/orderRec.scanToOrder/)
+  })
+  it('honors an explicit scanner deny or grant over the role default', () => {
+    expect(() => requireStoreAccess({ ...user(), customPermissionsArray: [{ permId: 43, value: false }] }, 'Rankin', permissionMap)).toThrow(/orderRec.scanToOrder/)
+    const granted = { ...user(), role: { permissionsArray: [{ permId: 42, value: true }, { permId: 43, value: false }] }, customPermissionsArray: [{ permId: 43, value: true }] }
+    expect(() => requireStoreAccess(granted, 'Rankin', permissionMap)).not.toThrow()
   })
 })
 
@@ -123,6 +133,15 @@ describe('scan endpoints (HTTP, isolated database dependencies)', () => {
     currentUser = { ...user(), stationName: 'Other store' }
     expect((await post(payload())).status).toBe(403)
     expect(db).not.toHaveBeenCalled()
+  })
+  it('denies both scanner endpoints when only the parent module is granted', async () => {
+    currentUser = { ...user(), role: { permissionsArray: [{ permId: 42, value: true }] } }
+    const lookup = await fetch(`${baseUrl}/item?site=Rankin&upc=012345678905`, { headers: { 'X-Required-Permission': 'orderRec' } })
+    expect(lookup.status).toBe(403)
+    expect((await lookup.json()).message).toContain('orderRec.scanToOrder')
+    expect((await post(payload())).status).toBe(403)
+    expect(db).not.toHaveBeenCalled()
+    expect(createOrderRec).not.toHaveBeenCalled()
   })
   it('creates an order through the existing workflow with canonical data and authenticated email', async () => {
     const response = await post({ ...payload(), email: 'spoof@example.com', categories: [{ number: '999' }], onHandQty: 999 })
