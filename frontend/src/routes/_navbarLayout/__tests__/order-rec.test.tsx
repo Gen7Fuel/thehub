@@ -37,6 +37,8 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
       useSearch: mockUseSearch,
     }),
     useNavigate: () => mockNavigate,
+    useMatchRoute: () => () => false,
+    Outlet: () => null,
     Link: ({ to, children }: any) => <a href={to}>{children}</a>,
   }
 })
@@ -113,6 +115,7 @@ vi.mock('@/lib/utils', async (importOriginal) => {
 
 import { Route as IndexRoute } from '../order-rec/index'
 import { Route as ListRoute } from '../order-rec/list'
+import { Route as LayoutRoute } from '../order-rec'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -125,6 +128,7 @@ const renderWithSuspense = (ui: React.ReactElement) =>
 
 const OrderRecUpload = (IndexRoute as any).component as React.ComponentType
 const OrderRecList = (ListRoute as any).component as React.ComponentType
+const OrderRecLayout = (LayoutRoute as any).component as React.ComponentType
 
 const sampleRec = {
   _id: 'rec-1',
@@ -137,6 +141,21 @@ const sampleRec = {
   email: 'test@example.com',
   categories: [{ number: '100', items: [] }],
 }
+
+describe('Scan to Order tab permission', () => {
+  it('hides the scanner tab for parent-only access', async () => {
+    mockUseAuth.mockReturnValueOnce({ user: { location: 'Rankin', access: { orderRec: { value: true } } } })
+    renderWithSuspense(<OrderRecLayout />)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'List' })).toBeInTheDocument(), { timeout: 5000 })
+    expect(screen.queryByRole('link', { name: 'Scan to Order' })).not.toBeInTheDocument()
+  })
+
+  it('shows the scanner tab when scanToOrder is granted', async () => {
+    mockUseAuth.mockReturnValueOnce({ user: { location: 'Rankin', access: { orderRec: { value: true, scanToOrder: true } } } })
+    renderWithSuspense(<OrderRecLayout />)
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Scan to Order' })).toHaveAttribute('href', '/order-rec/create'), { timeout: 5000 })
+  })
+})
 
 // ─── Order Rec Upload (index.tsx) ─────────────────────────────────────────────
 
