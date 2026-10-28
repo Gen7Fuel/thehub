@@ -101,7 +101,7 @@ import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Barcode from "react-barcode";
 import { Check, AlertTriangle } from "lucide-react";
-import axios from "axios";
+import { productCategoriesService } from '@/api/product-categories/product-categories.service';
 
 interface TableWithInputsProps {
   items: any[];
@@ -130,13 +130,8 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
   useEffect(() => {
     const fetchVariance = async () => {
       try {
-        const res = await axios.get("/api/product-category/cycle-count-variance", {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount",
-          },
-        });
-        setVarianceMap(res.data.varianceMap || {});
+        const result = await productCategoriesService.getCycleCountVariance('cycle-count.legacy-form');
+        setVarianceMap(result.varianceMap || {});
       } catch (err) {
         console.error("Failed to fetch variance map", err);
       }

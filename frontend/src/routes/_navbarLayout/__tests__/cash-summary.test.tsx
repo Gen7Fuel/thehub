@@ -2,7 +2,14 @@ import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite } = vi.hoisted(() => ({
+const {
+  mockNavigate,
+  mockUseLoaderData,
+  mockUseSearch,
+  mockUseAuth,
+  mockUseSite,
+  mockCashSummaryService,
+} = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockUseLoaderData: vi.fn().mockReturnValue({}),
   mockUseSearch: vi.fn().mockReturnValue({ site: 'Rankin', date: '2026-03-10' }),
@@ -22,6 +29,21 @@ const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite
     },
   }),
   mockUseSite: vi.fn().mockReturnValue({ selectedSite: '', setSelectedSite: vi.fn() }),
+  mockCashSummaryService: {
+    getLocationProfile: vi.fn(),
+    getLottery: vi.fn(),
+    getFormShifts: vi.fn(),
+    uploadImage: vi.fn(),
+    saveFormShifts: vi.fn(),
+    listSubmitted: vi.fn(),
+    getReport: vi.fn(),
+    setSubmitted: vi.fn(),
+    getPayoutsCheck: vi.fn(),
+    getArCheck: vi.fn(),
+    saveNotes: vi.fn(),
+    saveAdjustment: vi.fn(),
+    getVoidedDetails: vi.fn(),
+  },
 }))
 
 vi.mock('@tanstack/react-router', async (importOriginal) => {
@@ -45,6 +67,10 @@ vi.mock('@/context/AuthContext', () => ({
 
 vi.mock('@/context/SiteContext', () => ({
   useSite: () => mockUseSite(),
+}))
+
+vi.mock('@/api/cash-summary/cash-summary.service', () => ({
+  cashSummaryService: mockCashSummaryService,
 }))
 
 vi.mock('@/components/custom/sitePicker', () => ({
@@ -150,13 +176,6 @@ const CashSummaryForm = (FormRoute as any).component as React.ComponentType
 const CashSummaryList = (ListRoute as any).component as React.ComponentType
 const CashSummaryReport = (ReportRoute as any).component as React.ComponentType
 
-const okResponse = (data: any) => ({
-  status: 200,
-  ok: true,
-  json: () => Promise.resolve(data),
-  text: () => Promise.resolve(typeof data === 'string' ? data : JSON.stringify(data)),
-})
-
 type TestShift = {
   _id: string
   site: string
@@ -227,35 +246,28 @@ const sampleReport = {
 }
 
 const mockFormFetch = (shifts: TestShift[] = [sampleShift], extraLocation = {}) => {
-  global.fetch = vi.fn((input: RequestInfo | URL) => {
-    const url = String(input)
-    if (url.startsWith('/api/locations')) {
-      return Promise.resolve(okResponse({ sellsLottery: false, chickenDelightSection: false, ...extraLocation }))
-    }
-    if (url.startsWith('/api/cash-summary/by-date')) {
-      return Promise.resolve(okResponse({ shifts, isSubmitted: false }))
-    }
-    if (url.startsWith('/api/cash-summary/batch')) {
-      return Promise.resolve(okResponse({ ok: true }))
-    }
-    return Promise.resolve(okResponse({}))
-  }) as any
+  mockCashSummaryService.getLocationProfile.mockResolvedValue({
+    sellsLottery: false,
+    chickenDelightSection: false,
+    ...extraLocation,
+  })
+  mockCashSummaryService.getLottery.mockResolvedValue({ lottery: null, totals: null })
+  mockCashSummaryService.getFormShifts.mockResolvedValue({ shifts, isSubmitted: false })
+  mockCashSummaryService.saveFormShifts.mockResolvedValue({ ok: true })
 }
 
 const mockReportFetch = () => {
-  global.fetch = vi.fn((input: RequestInfo | URL) => {
-    const url = String(input)
-    if (url.startsWith('/api/cash-summary/ar-check')) {
-      return Promise.resolve(okResponse({ match: true, arIncurredTotal: 0, transactionsTotal: 0 }))
-    }
-    if (url.startsWith('/api/cash-summary/payouts-check')) {
-      return Promise.resolve(okResponse({ match: true }))
-    }
-    if (url.startsWith('/api/cash-summary/lottery')) {
-      return Promise.resolve(okResponse({ lottery: null, totals: null }))
-    }
-    return Promise.resolve(okResponse({ province: 'Ontario' }))
-  }) as any
+  mockCashSummaryService.getPayoutsCheck.mockResolvedValue({ match: true })
+  mockCashSummaryService.getArCheck.mockResolvedValue({
+    match: true,
+    arIncurredTotal: 0,
+    transactionsTotal: 0,
+  })
+  mockCashSummaryService.getLottery.mockResolvedValue({ lottery: null, totals: null })
+  mockCashSummaryService.getVoidedDetails.mockResolvedValue([])
+  mockCashSummaryService.saveNotes.mockResolvedValue({ ok: true })
+  mockCashSummaryService.saveAdjustment.mockResolvedValue({ ok: true })
+  mockCashSummaryService.setSubmitted.mockResolvedValue({ ok: true })
 }
 
 describe('Cash Summary Index - index.tsx', () => {
@@ -338,9 +350,10 @@ describe('Cash Summary Form - form.tsx', () => {
     fireEvent.click(submit)
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/cash-summary/batch',
-        expect.objectContaining({ method: 'POST' }),
+      expect(mockCashSummaryService.saveFormShifts).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ shift_number: '10001' })]),
+        'Rankin',
+        '2026-03-10',
       )
       expect(mockNavigate).toHaveBeenCalledWith({
         to: '/cash-summary/report',
@@ -350,14 +363,11 @@ describe('Cash Summary Form - form.tsx', () => {
   })
 
   it('locks submit when the day report is submitted', async () => {
-    global.fetch = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input)
-      if (url.startsWith('/api/locations')) return Promise.resolve(okResponse({}))
-      if (url.startsWith('/api/cash-summary/by-date')) {
-        return Promise.resolve(okResponse({ shifts: [sampleShift], isSubmitted: true }))
-      }
-      return Promise.resolve(okResponse({}))
-    }) as any
+    mockCashSummaryService.getLocationProfile.mockResolvedValue({})
+    mockCashSummaryService.getFormShifts.mockResolvedValue({
+      shifts: [sampleShift],
+      isSubmitted: true,
+    })
 
     renderWithSuspense(<CashSummaryForm />)
     await waitFor(() => expect(screen.getByText('Report Submitted')).toBeInTheDocument())

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
-import axios from 'axios';
+import { productCategoriesService } from '@/api/product-categories/product-categories.service';
+import type { ProductCategory } from '@/api/product-categories/product-categories.types';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -9,12 +10,7 @@ export const Route = createFileRoute('/_navbarLayout/category/')({
   component: RouteComponent,
 });
 
-interface Category {
-  _id?: string;
-  Number: number;
-  Name: string;
-  CycleCountVariance: number;
-  OrderRecVariance: number;
+interface Category extends ProductCategory {
   _open?: boolean;
 }
 
@@ -28,11 +24,9 @@ function RouteComponent() {
   // Fetch all categories
   const fetchCategories = async () => {
     try {
-      const res = await axios.get('/api/product-category', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-      });
+      const result = await productCategoriesService.list();
       // Add _open property for toggling accordion
-      const catsWithOpen = res.data.map((c: Category) => ({ ...c, _open: false }));
+      const catsWithOpen = result.map((c: Category) => ({ ...c, _open: false }));
       setCategories(catsWithOpen);
     } catch (err) {
       console.error('Failed to fetch categories', err);
@@ -70,10 +64,8 @@ function RouteComponent() {
   // Add new category
   const addCategory = async (category: Category) => {
     try {
-      const res = await axios.post('/api/product-category', category, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-      });
-      setCategories(prev => [...prev, { ...res.data, _open: false }]);
+      const result = await productCategoriesService.create(category);
+      setCategories(prev => [...prev, { ...result, _open: false }]);
       setDialogOpen(false);
     } catch (err) {
       console.error('Failed to add category', err);
@@ -84,11 +76,9 @@ function RouteComponent() {
   const updateCategory = async (category: Category) => {
     if (!category._id) return;
     try {
-      const res = await axios.put(`/api/product-category/${category._id}`, category, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-      });
+      const result = await productCategoriesService.update(category._id, category);
       setCategories(prev =>
-        prev.map(c => (c._id === category._id ? { ...res.data, _open: false } : c))
+        prev.map(c => (c._id === category._id ? { ...result, _open: false } : c))
       );
       setDialogOpen(false);
     } catch (err) {

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button'
 import { X, Camera, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { useFormStore } from '@/store'
 import { domain } from '@/lib/constants'
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
+import { isApiError } from '@/api/core/errors'
 import { DialogContent, Dialog, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery-images')({
@@ -38,26 +40,15 @@ function RouteComponent() {
         if (!lotterySite || !date) return
         if (lotteryImages && lotteryImages.length > 0) return
         const ymd = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-        const token = localStorage.getItem('token')
-        const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(lotterySite)}&date=${encodeURIComponent(ymd)}`, {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            "X-Required-Permission": "accounting.cashSummary.lottery",
-          },
-        })
-        if (resp.status === 403) {
+        const j = await cashSummaryService.getLottery<any>(lotterySite, ymd, 'lottery')
+        const existing = j?.lottery?.images || []
+        if (existing && existing.length > 0) setLotteryImages(existing)
+      } catch (e) {
+        if (isApiError(e) && e.status === 403) {
           console.warn("Lottery permission denied")
-          navigate({ to: "/no-access" }) // optional but recommended
+          navigate({ to: "/no-access" })
           return
         }
-        if (!resp.ok) return
-        const j = await resp.json()
-        const existing = j?.lottery?.images || []
-        if (existing && existing.length > 0) {
-          // store raw filenames in form state (so submit sends filenames), display will use CDN URL
-          setLotteryImages(existing)
-        }
-      } catch (e) {
         console.error('Failed to load saved lottery images', e)
       }
     }
@@ -153,21 +144,9 @@ function RouteComponent() {
         try {
           const fileHint = `${prefix}-${lotterySite || 'site'}-${ymd}-${i}.jpg`
           const file = dataURLtoFile(img, fileHint)
-          const form = new FormData()
-          form.append('file', file)
-
-          const resp = await fetch(`${domain || ''}/cdn/upload`, {
-            method: 'POST',
-            body: form,
-          })
-
-          if (resp.ok) {
-            const j = await resp.json()
-            const fname = j?.filename || j?.fileInfo?.filename
-            if (fname) uploaded.push(fname)
-          } else {
-            console.error('CDN upload failed', resp.status)
-          }
+          const j = await cashSummaryService.uploadImage(file, lotterySite || 'selected site', ymd, prefix)
+          const fname = j?.filename || j?.fileInfo?.filename
+          if (fname) uploaded.push(fname)
         } catch (e) {
           console.error('Upload error', e)
         }
@@ -202,30 +181,13 @@ function RouteComponent() {
       const uploadedDatawaveImages = await uploadImages(ymd, datawaveImages, 'datawave') // Returns [] as expected
       const uploadedLotteryImages = await uploadImages(ymd, lotteryImages, 'lottery')
 
-      const token = localStorage.getItem('token')
-      const resp2 = await fetch('/api/cash-summary/lottery', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}`, "X-Required-Permission": "accounting.cashSummary.lottery" } : {}),
-        },
-        body: JSON.stringify({
+      await cashSummaryService.saveLottery({
           site: lotterySite,
           date: ymd,
           values: lotteryValues,
           images: uploadedLotteryImages,
           datawaveImages: uploadedDatawaveImages
-        }),
       })
-
-      if (resp2.status === 403) {
-        navigate({ to: "/no-access" })
-        return
-      }
-      if (!resp2.ok) {
-        const txt = await resp2.text().catch(() => '')
-        throw new Error(`Save failed: ${resp2.status} ${txt}`)
-      }
 
       resetLotteryForm()
       navigate({
@@ -236,6 +198,7 @@ function RouteComponent() {
         }
       })
     } catch (err) {
+      if (isApiError(err) && err.status === 403) navigate({ to: "/no-access" })
       console.error('Direct submission failed', err)
     } finally {
       setIsSubmitting(false)

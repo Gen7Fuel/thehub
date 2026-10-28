@@ -304,6 +304,8 @@
 // }
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
+import { isApiError } from '@/api/core/errors'
 import { useEffect, useMemo } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
@@ -364,24 +366,10 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/list')({
     const defaultFrom = from || get30DaysPriorDateString(defaultTo)
 
     try {
-      const res = await fetch(
-        `/api/cash-summary/by-range?site=${encodeURIComponent(site)}&from=${encodeURIComponent(defaultFrom)}&to=${encodeURIComponent(defaultTo)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-            'X-Required-Permission': 'accounting.cashSummary.list',
-          },
-        }
-      )
-
-      if (!res.ok) {
-        if (res.status === 403) return { summaries: [], accessDenied: true }
-        throw new Error('Failed to load cash summaries')
-      }
-
-      const data = await res.json()
+      const data = await cashSummaryService.listSubmitted<GroupedDailySummary[]>(site, defaultFrom, defaultTo)
       return { summaries: data, accessDenied: false }
-    } catch {
+    } catch (error) {
+      if (isApiError(error) && error.status === 403) return { summaries: [], accessDenied: true }
       return { summaries: [], accessDenied: false }
     }
   },

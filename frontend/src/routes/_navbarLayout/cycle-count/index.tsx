@@ -7,6 +7,7 @@ import CycleCountTableGroup from "@/components/custom/CycleCountTableGroup"; // 
 import { Check, CheckCircle2, Star, ArrowDownToLine } from "lucide-react";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from "@/components/custom/locationPicker";
+import { productCategoriesService } from '@/api/product-categories/product-categories.service';
 import axios from "axios";
 // import {
 //   Dialog,
@@ -262,13 +263,8 @@ function RouteComponent() {
   useEffect(() => {
     const fetchVariance = async () => {
       try {
-        const res = await axios.get("/api/product-category/cycle-count-variance", {
-          headers: {
-            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount",
-          },
-        });
-        setVarianceMap(res.data.varianceMap || {});
+        const result = await productCategoriesService.getCycleCountVariance();
+        setVarianceMap(result.varianceMap || {});
       } catch (err) {
         console.error("Failed to fetch variance map", err);
       }

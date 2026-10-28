@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Calculator, Wallet, TrendingUp, Landmark, MessageSquare, User, Users, Clock } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
 
 // --- Helpers ---
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -57,16 +58,10 @@ function OverShortReport() {
       try {
         const fromStr = ymd(currentRange.from!)
         const toStr = ymd(currentRange.to!)
-        const [osRes, safeRes] = await Promise.all([
-          fetch(`/api/cash-summary/over-short?site=${site}&from=${fromStr}&to=${toStr}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-          }),
-          fetch(`/api/safesheets/site/${site}/daily-balances?from=${fromStr}&to=${toStr}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-          })
+        const [osJson, safeJson] = await Promise.all([
+          cashSummaryService.getOverShort<any[]>(site, fromStr, toStr),
+          cashSummaryService.getSafesheetBalances<any>(site, fromStr, toStr),
         ])
-        const osJson = await osRes.json()
-        const safeJson = await safeRes.json()
         setData(Array.isArray(osJson) ? osJson : [])
         setSafesheetData(safeJson.data || [])
       } catch (err: any) {
