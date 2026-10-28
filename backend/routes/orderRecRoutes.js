@@ -14,7 +14,6 @@ const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime'
 const { pushNotification } = require('../services/notificationService');
 const { createOrderRecScanRouter } = require('./orderRecScanRoutes');
 const { getPg } = require('../config/pg');
-const Location = require('../models/Location');
 const { getPermissionMap } = require('../utils/permissionStore');
 
 router.use('/scan', createOrderRecScanRouter({ getPg, Location, Vendor, getPermissionMap, createOrderRec }));
