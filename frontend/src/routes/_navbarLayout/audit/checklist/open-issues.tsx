@@ -6,6 +6,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { STATUS_PRIORITY, statusFlow } from "../interface/open-issues";
+import { auditService } from '@/api/audit/audit.service';
+import { isApiError } from '@/api/core/errors';
 
 
 interface OpenIssue {
@@ -50,22 +52,8 @@ export function OpenIssuesPage() {
 
     setLoading(true);
 
-    fetch(`/api/audit/open-issues?mode=station&site=${encodeURIComponent(site)}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-        "X-Required-Permission": "stationAudit",
-      },
-    })
-      .then((res) => {
-        if (res.status === 403) {
-          navigate({ to: "/no-access" });
-          return null;
-        }
-        return res.json();
-      })
+    auditService.listStationIssues<{ items?: OpenIssue[] } | OpenIssue[]>(site)
       .then((data) => {
-        if (!data) return; // 403 redirect already handled
-
         if (Array.isArray(data)) {
           setOpenIssues(data);
         } else if (data?.items && Array.isArray(data.items)) {
@@ -74,9 +62,12 @@ export function OpenIssuesPage() {
           setOpenIssues([]);
         }
       })
-      .catch(console.error)
+      .catch((error) => {
+        if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' });
+        else console.error(error);
+      })
       .finally(() => setLoading(false));
-  }, [site]);
+  }, [site, navigate]);
 
 
   const categories = [...new Set(openIssues.map(issue => issue.category).filter(Boolean))];
@@ -109,24 +100,7 @@ export function OpenIssuesPage() {
     if (!selectedIssueId) return;
 
     try {
-      const res = await fetch(`/api/audit/issues/${selectedIssueId}/status`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit",
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      if (!res.ok) throw new Error("Failed to update status");
-
-      const data = await res.json();
+      const data = await auditService.updateStationIssueStatus<{ item: OpenIssue }>(selectedIssueId, newStatus);
 
       // Update locally
       setOpenIssues((prev) =>
@@ -145,6 +119,10 @@ export function OpenIssuesPage() {
       setStatusDialogOpen(false);
       setSelectedIssueId(null);
     } catch (err) {
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
       console.error("Error updating status:", err);
     }
   };

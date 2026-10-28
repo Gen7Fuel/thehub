@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 // import { useContext } from "react";
 // import { RouteContextVisitor } from "../visitor";
 // import { getSocket } from "@/lib/websocket";
-import { useAuth } from "@/context/AuthContext";
+import { auditService } from '@/api/audit/audit.service';
+import { auditSupportService } from '@/api/audit/audit-support.service';
+import { describeAuditPeriod } from '@/api/audit/audit-period';
+import { isApiError } from '@/api/core/errors';
 
 
 // const socket = getSocket();
@@ -52,8 +55,9 @@ interface AuditItem {
 // }
 
 export const Route = createFileRoute('/_navbarLayout/audit/visitor/$id')({
-  validateSearch: (search: { site?: string }) => ({
+  validateSearch: (search: { site?: string; checklistName?: string }) => ({
     site: search.site,
+    checklistName: search.checklistName,
   }),
   component: RouteComponent,
 })
@@ -120,8 +124,7 @@ function RouteComponent() {
 
   // Temporary patch for location picker getting state from ther parent
   // const { stationName } = useContext(RouteContextVisitor);
-  const { user } = useAuth();
-  const { site } = Route.useSearch() || user?.location;
+  const { site, checklistName } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
 
   // const site = localStorage.getItem("location") || ""; //Original file
@@ -159,13 +162,7 @@ function RouteComponent() {
 
   // Load dropdown select templates
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    fetch("/api/audit/select-templates", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
+    auditService.listSelectTemplates<SelectTemplate[]>('visitor')
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);
@@ -173,7 +170,6 @@ function RouteComponent() {
   // Fetch checklist
   const fetchChecklist = async () => {
     setLoading(true);
-    const token = localStorage.getItem("token");
     const periodKeys =
       frequency === "all"
         ? {
@@ -186,31 +182,28 @@ function RouteComponent() {
         };
 
     try {
-      const res = await fetch(
-        `/api/audit/items-full?templateId=${id}&site=${encodeURIComponent(
-          site
-        )}&date=${currentDate.toISOString()}&frequency=${frequency}&type=visitor&periodKeys=${encodeURIComponent(JSON.stringify(periodKeys))}`,
+      const data = await auditService.getVisitorItems<{ templateName?: string; items: AuditItem[] }>(
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "stationAudit.visitor"
-          },
-        }
+          templateId: id,
+          site,
+          date: currentDate.toISOString(),
+          frequency,
+          type: 'visitor',
+          periodKeys: JSON.stringify(periodKeys),
+        },
+        {
+          checklistName: checklistName || templateName,
+          periodLabel: describeAuditPeriod(frequency, currentDate),
+        },
       );
-
-      if (res.status === 403) {
-        // Redirect to no-access page
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      if (!res.ok) throw new Error("Failed to fetch checklist");
-
-      const data = await res.json();
 
       setTemplateName(data.templateName || "");
       setItems(sortItems(data.items)); // optional: can skip if backend already sorts
     } catch (err) {
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
       console.error("Failed to fetch checklist:", err);
       setItems([]);
     } finally {
@@ -226,27 +219,14 @@ function RouteComponent() {
   useEffect(() => {
     if (!site) return;
 
-    const controller = new AbortController();
-
-    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to fetch location");
-        return res.json();
-      })
+    auditSupportService.getSite<{ timezone?: string }>(site, 'visitor')
       .then((location) => {
         setSiteTimezone(location?.timezone || "");
       })
       .catch((err) => {
-        // ignore abort errors
-        if (err?.name !== "AbortError") {
-          console.error("Failed to fetch location timezone:", err);
-        }
+        console.error("Failed to fetch location timezone:", err);
         setSiteTimezone("");
       });
-
-    return () => controller.abort();
   }, [site]);
 
   // useEffect(() => {
@@ -307,7 +287,6 @@ function RouteComponent() {
       return;
     }
 
-    const token = localStorage.getItem("token");
     // const periodKey = getPeriodKey(frequency as any, currentDate);
     const periodKeys =
       frequency === "all"
@@ -327,36 +306,15 @@ function RouteComponent() {
     }
 
     try {
-      const res = await fetch("/api/audit/visitor", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "stationAudit.visitor",
-        },
-        body: JSON.stringify({
-          template: id,
-          site,
-          frequency,
-          periodKeys,
-          items,
-          date: new Date().toISOString(),
-        }),
+      const data = await auditService.saveVisitorAudit<{ updatedItems?: AuditItem[] }>({
+        template: id,
+        site,
+        frequency,
+        periodKeys,
+        items,
+        date: new Date().toISOString(),
       });
-
-      if (res.status === 403) {
-        // Redirect to no-access page
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      const data = await res.json(); // parse JSON once
-
-      if (!res.ok) {
-        alert(data.error || "Failed to save checklist.");
-      } else {
-        alert("Checklist saved!");
-      }
+      alert("Checklist saved!");
 
       // Use updated items from backend if available, otherwise fallback
       const updatedItems = data.updatedItems || items;
@@ -371,6 +329,10 @@ function RouteComponent() {
       setItems(sorted);
 
     } catch (err) {
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
       console.error("Failed to save checklist:", err);
       alert("Error saving checklist.");
     } finally {

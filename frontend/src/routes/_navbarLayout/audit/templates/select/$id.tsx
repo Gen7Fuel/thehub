@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import axios from "axios";
+import { auditService } from '@/api/audit/audit.service';
+import { auditSupportService } from '@/api/audit/audit-support.service';
+import { isApiError } from '@/api/core/errors';
 import {
   Table,
   TableBody,
@@ -15,6 +17,7 @@ import { EmailChipInput } from "@/components/custom/emailChipInput";
 export const Route = createFileRoute(
   '/_navbarLayout/audit/templates/select/$id',
 )({
+  validateSearch: (search: { name?: string }) => ({ name: search.name }),
   component: RouteComponent,
 });
 
@@ -47,6 +50,7 @@ const emptyOption = (): Option => ({
 
 function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/audit/templates/select/$id' });
+  const { name: optionSetName } = Route.useSearch();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [options, setOptions] = useState<Option[]>([emptyOption()]);
@@ -56,22 +60,16 @@ function RouteComponent() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      "X-Required-Permission": "stationAudit.template",
-    };
-
     Promise.all([
-      axios.get(`/api/audit/select-templates/${id}`, { headers }),
-      axios.get("/api/locations", { headers }),
+      auditService.getSelectTemplate<any>(id, optionSetName),
+      auditSupportService.listSites<SiteLocation[]>(),
     ])
-      .then(([templateRes, sitesRes]) => {
-        setName(templateRes.data.name || "");
-        setDescription(templateRes.data.description || "");
+      .then(([template, siteData]) => {
+        setName(template.name || "");
+        setDescription(template.description || "");
         setOptions(
-          templateRes.data.options && templateRes.data.options.length > 0
-            ? templateRes.data.options.map((o: any) => ({
+          template.options && template.options.length > 0
+            ? template.options.map((o: any) => ({
                 text: o.text || "",
                 email: o.email || "",
                 cc: o.cc || "",
@@ -84,10 +82,10 @@ function RouteComponent() {
               }))
             : [emptyOption()]
         );
-        setSites(sitesRes.data || []);
+        setSites(siteData || []);
       })
       .catch(err => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           navigate({ to: "/no-access" });
         } else {
           setError("Failed to load template");
@@ -183,32 +181,18 @@ function RouteComponent() {
             : {}),
         }));
 
-      const res = await axios.put(
-        `/api/audit/select-templates/${id}`,
-        {
-          name,
-          description,
-          options: cleanedOptions,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "stationAudit.template",
-          },
-        }
-      );
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+      await auditService.updateSelectTemplate(id, {
+        name,
+        description,
+        options: cleanedOptions,
+      }, name);
 
       navigate({ to: "/audit/templates/select/list" });
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
       } else {
-        setError(err?.response?.data?.message || "Failed to update template");
+        setError((isApiError(err) ? err.message : undefined) || "Failed to update template");
       }
     }
 

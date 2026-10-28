@@ -1,7 +1,8 @@
 import { createFileRoute, Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react"
 import { Button } from '@/components/ui/button'
-import axios from "axios"
+import { auditService } from '@/api/audit/audit.service'
+import { isApiError } from '@/api/core/errors'
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { createContext } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -68,15 +69,10 @@ function RouteComponent() {
     setLoading(true);
     setError("");
 
-    axios
-      .get("/api/audit", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.interface"
-        },
-      })
-      .then(res => {
-        const filtered = res.data.filter(
+    auditService
+      .listInterfaceTemplates<AuditTemplate[]>()
+      .then(data => {
+        const filtered = data.filter(
           (t: AuditTemplate) => t.sites && t.sites.includes(stationName)
         );
         setTemplates(filtered);
@@ -85,7 +81,7 @@ function RouteComponent() {
         // localStorage.setItem("location", stationName);
       })
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {
@@ -94,16 +90,11 @@ function RouteComponent() {
       })
       .finally(() => setLoading(false));
     // fetch open issues
-    axios
-      .get<OpenIssueResponse>(`/api/audit/open-issues?site=${stationName}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.interface"
-        },
-      })
-      .then(res => setOpenIssues(res.data.items || [])) // only keep the array
+    auditService
+      .listInterfaceIssues<OpenIssueResponse>({ site: stationName })
+      .then(data => setOpenIssues(data.items || [])) // only keep the array
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {
@@ -156,7 +147,8 @@ function RouteComponent() {
                   (currentIndex - 1 + templates.length) % templates.length;
                 navigate({
                   to: "/audit/interface/$id",
-                  params: { id: templates[prevIndex]._id }
+                  params: { id: templates[prevIndex]._id },
+                  search: { checklistName: templates[prevIndex].name },
                 });
               }}
             >
@@ -193,7 +185,8 @@ function RouteComponent() {
                 const nextIndex = (currentIndex + 1) % templates.length;
                 navigate({
                   to: "/audit/interface/$id",
-                  params: { id: templates[nextIndex]._id }
+                  params: { id: templates[nextIndex]._id },
+                  search: { checklistName: templates[nextIndex].name },
                 });
               }}
             >
