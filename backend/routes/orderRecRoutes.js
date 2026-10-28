@@ -12,7 +12,12 @@ const { getUPC_barcode, getCoreMarkPriceBookByUPCs } = require('../services/sqlS
 const { isOffPlanogram, loadPlanogramGtinSet } = require('../utils/planogram');
 const { calcSingleVendorLeadTime } = require('../utils/calcSingleVendorLeadTime');
 const { pushNotification } = require('../services/notificationService');
+const { createOrderRecScanRouter } = require('./orderRecScanRoutes');
 const { getPg } = require('../config/pg');
+const Location = require('../models/Location');
+const { getPermissionMap } = require('../utils/permissionStore');
+
+router.use('/scan', createOrderRecScanRouter({ getPg, Location, Vendor, getPermissionMap, createOrderRec }));
 
 // Get all
 router.get('/', async (req, res) => {
@@ -701,7 +706,9 @@ router.put('/:id', async (req, res) => {
 //     res.status(500).json({ message: err.message });
 //   }
 // });
-router.post('/', async (req, res) => {
+router.post('/', createOrderRec);
+
+async function createOrderRec(req, res) {
   try {
     let { categories, site, vendor, email, includeStationSupplies } = req.body;
 
@@ -853,6 +860,7 @@ router.post('/', async (req, res) => {
       currentStatus: "Created",
       statusHistory: [{ status: "Created", timestamp: new Date() }],
       comments: [],
+      source: req.body.source === 'scanner' ? 'scanner' : 'upload',
       planogramCheckedAt: planogramGtins ? new Date() : null
     });
 
@@ -873,7 +881,7 @@ router.post('/', async (req, res) => {
     console.error(err);
     res.status(500).json({ message: err.message });
   }
-});
+}
 
 
 // PATCH /api/order-rec/:id

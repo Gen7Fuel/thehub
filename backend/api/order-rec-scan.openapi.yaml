@@ -1,0 +1,118 @@
+openapi: 3.0.3
+info:
+  title: Store-created Order Rec
+  version: 1.0.0
+  description: >-
+    Additive scanner endpoints. Requires orderRec.scanToOrder, its parent
+    orderRec permission, and access to the selected store. Saving creates a Created order rec using the
+    existing review, planogram check, and orderCreated socket event; it does not
+    place an order. Quantities are cases. Repeat scans are handled by the client.
+security:
+  - bearerAuth: []
+paths:
+  /api/order-rec/scan/item:
+    get:
+      operationId: lookupOrderRecScanItem
+      summary: Look up a barcode in a store's current item book
+      description: >-
+        Matches upc_barcode, upc, or gtin, ignoring leading zeros. No camera is
+        used. Inventory is the latest synchronized item_bk snapshot, with its
+        inventory date, and may be unavailable (null); it is not a live count.
+      parameters:
+        - name: site
+          in: query
+          required: true
+          schema: { type: string, example: Rankin }
+        - name: upc
+          in: query
+          required: true
+          schema: { type: string, pattern: '^[0-9]{6,14}$', example: '012345678905' }
+      responses:
+        '200':
+          description: Matching item in this store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanItem'
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Store or barcode not found }
+        '409': { description: More than one item matches; repair the item book before continuing }
+        '500': { description: Lookup failed; retry without treating it as an unknown barcode }
+  /api/order-rec/scan:
+    post:
+      operationId: createScannedOrderRec
+      summary: Create an order rec from scanned item IDs and case quantities
+      description: >-
+        The vendor must belong to the store. Product data and current inventory
+        are reloaded on save, and the creator email comes from authentication.
+        Items removed from the store are rejected. Unknown packing is stored as
+        zero units per case; case quantities are preserved. This endpoint is not
+        idempotent: if a response is lost after saving, check List before retrying.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [site, vendor, items]
+              properties:
+                site: { type: string, example: Rankin }
+                vendor: { type: string, description: Mongo vendor ID for this store }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 500
+                  items:
+                    type: object
+                    required: [id, quantity]
+                    properties:
+                      id: { type: integer, minimum: 1, description: Unique item_bk ID within this request }
+                      quantity: { type: integer, minimum: 1, maximum: 99999, description: Cases to order }
+            example:
+              site: Rankin
+              vendor: 507f1f77bcf86cd799439011
+              items: [{ id: 7, quantity: 3 }]
+      responses:
+        '201':
+          description: Saved order rec in the existing Created workflow
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [_id, source, currentStatus, categories]
+                properties:
+                  _id: { type: string }
+                  source: { type: string, enum: [scanner] }
+                  currentStatus: { type: string, enum: [Created] }
+                  categories: { type: array, items: { type: object } }
+        '400': { $ref: '#/components/responses/InvalidInput' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { description: Store not found }
+        '409': { description: Item removed from this store or product codes are missing or duplicated }
+        '500': { description: Creation failed; draft should be retained }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  responses:
+    InvalidInput: { description: Missing or invalid input, duplicate IDs, invalid quantities, or vendor outside this store }
+    Unauthenticated: { description: Missing or invalid authentication }
+    Forbidden: { description: Missing orderRec.scanToOrder or parent orderRec permission, or access to this store }
+  schemas:
+    ScanItem:
+      type: object
+      required: [id, gtin, upc, itemName, categoryNumber, onHandQty, packsPerCarton, cartonsPerCase, active]
+      properties:
+        id: { type: integer }
+        gtin: { type: string }
+        upc: { type: string }
+        itemName: { type: string }
+        categoryNumber: { type: string }
+        onHandQty: { type: number, nullable: true, description: Latest synchronized on-hand units }
+        packsPerCarton: { type: number, nullable: true }
+        cartonsPerCase: { type: number, nullable: true }
+        lastInventoryDate: { type: string, nullable: true }
+        imageUrl: { type: string, nullable: true }
+        active: { type: boolean }

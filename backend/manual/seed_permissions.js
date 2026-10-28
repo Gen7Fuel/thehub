@@ -202,6 +202,11 @@ const allPermissions = [
         "name": "workflow",
         "children": [],
         "permId": 30004
+      },
+      {
+        "name": "scanToOrder",
+        "children": [],
+        "permId": 30005
       }
     ],
     "module_permId": 30000
