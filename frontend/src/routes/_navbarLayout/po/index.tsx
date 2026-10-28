@@ -54,8 +54,8 @@ const QUICK_SELECT_CACHE_PREFIX = 'po_cachedQuickSelect_'
 // Sites that keep the classic PO Number / Fleet Card toggle instead of the
 // fleet-card-only flow below. Wavers West/East use an externally issued
 // PO-number book with recycled numbers (see DUPLICATE_PO_ALLOWED_SITES in
-// backend/constants/poSites.js); Oliver/Osoyoos are excluded per ops request.
-const CLASSIC_PO_NUMBER_SITES = ['Wavers West', 'Wavers East', 'Oliver', 'Osoyoos']
+// backend/constants/poSites.js).
+const CLASSIC_PO_NUMBER_SITES = ['Wavers West', 'Wavers East']
 
 async function loader() {
   try {
