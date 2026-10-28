@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
 import '@/styles/typewriter.css'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 
 type Search = { site: string; date: string }
 
@@ -129,31 +130,15 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
     if (!site || !isYmd(date)) {
       return { site, date, data: null as EntriesResponse | null }
     }
-    const res = await fetch(
-      `/api/cash-rec/entries?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } }
-    )
-    if (!res.ok) {
-      const msg = await res.text().catch(() => '')
-      throw new Error(msg || `HTTP ${res.status}`)
-    }
-    const data = (await res.json()) as EntriesResponse
+    const data = await cashRecService.getReport<EntriesResponse>(site, date)
 
     // Also fetch receivables for the same site/date like receivables.tsx
     let receivablesRows: Array<{ amount?: number; quantity?: number }> | undefined
     let totalReceivablesAmount: number | undefined
     try {
-      const params: Record<string, string> = { startDate: date, endDate: date }
-      if (site) params.stationName = site
-      const qs = new URLSearchParams(params).toString()
-      const rcv = await fetch(`/api/purchase-orders?${qs}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-      })
-      if (rcv.ok) {
-        const rows: Array<{ amount?: number; quantity?: number }> = await rcv.json()
-        receivablesRows = rows
-        totalReceivablesAmount = rows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
-      }
+      const rows = await cashRecService.listReceivables<Array<{ amount?: number; quantity?: number }>>(site, date, date, 'cash-rec.report')
+      receivablesRows = rows
+      totalReceivablesAmount = rows.reduce((a, r) => a + (Number(r.amount) || 0), 0)
     } catch (_) {
       // Ignore receivables fetch errors; still return base data
     }
@@ -162,18 +147,12 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
     let payablesRows: Array<{ amount?: number; paymentMethod?: string; vendorName?: string; createdAt?: string; location?: { stationName?: string } }> | undefined
     let totalPayablesAmount: number | undefined
     try {
-      const qs = new URLSearchParams({ from: date, to: date }).toString()
-      const resp = await fetch(`/api/payables?${qs}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-      })
-      if (resp.ok) {
-        const all: Array<{ amount?: number; paymentMethod?: string; location?: { stationName?: string } }> = await resp.json()
-        const filtered = all
-          .filter(p => !site || p.location?.stationName === site)
-          .filter(p => p.paymentMethod === 'till')
-        payablesRows = filtered
-        totalPayablesAmount = filtered.reduce((a, p) => a + (Number(p.amount) || 0), 0)
-      }
+      const all = await cashRecService.listPayouts<Array<{ amount?: number; paymentMethod?: string; location?: { stationName?: string } }>>(site, date, date, 'cash-rec.report')
+      const filtered = all
+        .filter(p => !site || p.location?.stationName === site)
+        .filter(p => p.paymentMethod === 'till')
+      payablesRows = filtered
+      totalPayablesAmount = filtered.reduce((a, p) => a + (Number(p.amount) || 0), 0)
     } catch (_) {
       // Ignore payables fetch errors
     }
@@ -181,14 +160,8 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/')({
     // Fetch Kardpoll entries (ar_rows) for site+date
     let kardpollEntriesRows: Array<{ customer?: string; card?: string; amount?: number; quantity?: number; price_per_litre?: number }> | undefined
     try {
-      const resp = await fetch(`/api/cash-rec/kardpoll-entries?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-      })
-      if (resp.ok) {
-        const doc = await resp.json()
-        const rows = Array.isArray(doc?.ar_rows) ? doc.ar_rows : []
-        kardpollEntriesRows = rows
-      }
+      const doc = await cashRecService.getKardpollEntries<{ ar_rows?: Array<{ customer?: string; card?: string; amount?: number; quantity?: number; price_per_litre?: number }> }>(site, date)
+      kardpollEntriesRows = Array.isArray(doc?.ar_rows) ? doc.ar_rows : []
     } catch (_) {
       // Ignore kardpoll fetch errors
     }
@@ -615,16 +588,11 @@ function RouteComponent() {
               if (!Number.isFinite(parsed)) { setMerchantFeesEdit(false); return }
               savingFeesRef.current = true
               try {
-                const resp = await fetch('/api/cash-rec/bank-statement/merchant-fees', {
-                  method: 'PATCH',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-                  },
-                  body: JSON.stringify({ site, date, merchantFees: parsed }),
+                const body = await cashRecService.updateMerchantFees<{ intacct?: { status?: string; message?: string } }>({
+                  site,
+                  date,
+                  merchantFees: parsed,
                 })
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-                const body = await resp.json().catch(() => null)
                 setMerchantFeesSaved(parsed)
                 const intacct = body?.intacct
                 if (intacct?.status === 'created') setMerchantFeesNote({ kind: 'ok', text: 'Intacct: bill posted and payment made.' })

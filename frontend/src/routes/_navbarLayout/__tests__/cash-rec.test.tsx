@@ -4,10 +4,15 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockNavigate, mockUseLoaderData, mockUseSearch } = vi.hoisted(() => ({
+const { mockNavigate, mockUseLoaderData, mockUseSearch, mockCashRecService } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockUseLoaderData: vi.fn().mockReturnValue({ site: '', date: '2026-03-15', data: null }),
   mockUseSearch: vi.fn().mockReturnValue({ site: '', date: '2026-03-15' }),
+  mockCashRecService: {
+    listLocationsForBankMatching: vi.fn(),
+    saveBankStatement: vi.fn(),
+    updateMerchantFees: vi.fn(),
+  },
 }))
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
@@ -55,6 +60,8 @@ vi.mock('@/components/ui/button', () => ({
     </button>
   ),
 }))
+
+vi.mock('@/api/cash-rec/cash-rec.service', () => ({ cashRecService: mockCashRecService }))
 
 // ─── Component imports (after mocks) ──────────────────────────────────────────
 
@@ -148,6 +155,8 @@ describe('Bank Upload — bank.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockUseSearch.mockReturnValue({ site: '' })
+    mockCashRecService.listLocationsForBankMatching.mockResolvedValue([])
+    mockCashRecService.saveBankStatement.mockResolvedValue({ saved: true, upserted: true })
     localStorage.setItem('token', 'test-token')
   })
 
@@ -294,10 +303,6 @@ describe('Bank Upload — bank.tsx', () => {
 
   it('calls POST /api/cash-rec/bank-statement when Capture is clicked', async () => {
     mockUseSearch.mockReturnValue({ site: 'Rankin' })
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ saved: true, upserted: true }),
-    })
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
 
     renderWithSuspense(<BankUpload />)
@@ -311,8 +316,7 @@ describe('Bank Upload — bank.tsx', () => {
     fireEvent.click(captureBtn)
 
     await waitFor(() => {
-      const calls = (global.fetch as any).mock.calls
-      expect(calls.some((c: any[]) => c[0] === '/api/cash-rec/bank-statement')).toBe(true)
+      expect(mockCashRecService.saveBankStatement).toHaveBeenCalledTimes(1)
     })
 
     alertSpy.mockRestore()
@@ -321,10 +325,6 @@ describe('Bank Upload — bank.tsx', () => {
   it('sends the correct site and date in the Capture payload', async () => {
     mockUseSearch.mockReturnValue({ site: 'Rankin' })
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ saved: true, upserted: true }),
-    })
 
     renderWithSuspense(<BankUpload />)
     await waitFor(() => expect(document.getElementById('ttx-input')).toBeInTheDocument(), { timeout: 5000 })
@@ -337,10 +337,7 @@ describe('Bank Upload — bank.tsx', () => {
     fireEvent.click(captureBtn)
 
     await waitFor(() => {
-      const calls = (global.fetch as any).mock.calls
-      const bankCall = calls.find((c: any[]) => c[0] === '/api/cash-rec/bank-statement')
-      expect(bankCall).toBeTruthy()
-      const payload = JSON.parse(bankCall[1].body)
+      const payload = mockCashRecService.saveBankStatement.mock.calls[0][0]
       expect(payload.site).toBe('Rankin')
       expect(payload.date).toBe('2026-03-15')
       expect(payload.merchantFees).toBe(9.99)

@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import '@/styles/tableGrid.css'
 import type { DateRange } from 'react-day-picker'
 import '@/styles/typewriter.css'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 
 type Search = { site: string; from: string; to?: string; date?: string }
 
@@ -217,15 +218,10 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/entries')({
       dates.push(ymd(dt))
     }
 
-    const token = localStorage.getItem('token') || ''
     const rows: EntriesRow[] = await Promise.all(
       dates.map(async (day) => {
         try {
-          const resp = await fetch(
-            `/api/cash-rec/entries?site=${encodeURIComponent(deps.site)}&date=${encodeURIComponent(day)}`,
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-          const data: EntriesResponse | null = resp.ok ? await resp.json() : null
+          const data = await cashRecService.getEntries<EntriesResponse>(deps.site, day)
           return { date: day, data }
         } catch {
           return { date: day, data: null }
