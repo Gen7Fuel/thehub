@@ -15,10 +15,10 @@ import { DatePicker } from '@/components/custom/datePicker'
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
-import { domain } from '@/lib/constants'
 import { uploadBase64Image } from '@/lib/utils'
 import { format } from 'date-fns'
-import axios from 'axios'
+import { atmService } from '@/api/atm/atm.service'
+import { isApiError } from '@/api/core/errors'
 import { Camera, X, List } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/atm/')({
@@ -59,26 +59,16 @@ function RouteComponent() {
     try {
       const { filename } = await uploadBase64Image(image!, `atm_${Date.now()}.jpg`)
 
-      const token = localStorage.getItem('token')
-      await axios.post(
-        `${domain}/api/atm`,
-        {
-          date: format(date!, 'yyyy-MM-dd'),
-          amount: Number(amount),
-          source,
-          image: filename,
-          stationName,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'X-Required-Permission': 'accounting.atm',
-          },
-        }
-      )
+      await atmService.create({
+        date: format(date!, 'yyyy-MM-dd'),
+        amount: Number(amount),
+        source,
+        image: filename,
+        stationName,
+      })
       navigate({ to: '/atm/list' })
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }

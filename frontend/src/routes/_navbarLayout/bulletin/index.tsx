@@ -12,32 +12,15 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useAuth } from '@/context/AuthContext'
-
-interface BulletinPost {
-  _id: string
-  site: string
-  text: string
-  author: {
-    id: string
-    firstName?: string
-    lastName?: string
-  }
-  createdAt: string
-  updatedAt: string
-}
+import { bulletinService } from '@/api/bulletin/bulletin.service'
+import type { BulletinPost } from '@/api/bulletin/bulletin.types'
 
 export const Route = createFileRoute('/_navbarLayout/bulletin/')({
   component: RouteComponent,
   loader: async () => {
     try {
-      const res = await fetch('/api/bulletin', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      })
-      if (!res.ok) return { posts: [] as BulletinPost[] }
-      const json = await res.json()
-      return { posts: (json.data || []) as BulletinPost[] }
+      const response = await bulletinService.list()
+      return { posts: response.data || [] }
     } catch {
       return { posts: [] as BulletinPost[] }
     }
@@ -87,23 +70,12 @@ function RouteComponent() {
     setSubmitting(true)
     setComposeError(null)
     try {
-      const res = await fetch('/api/bulletin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ text }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.message || 'Failed to post.')
-      }
+      await bulletinService.create({ text }, user?.location)
       setComposeText('')
       setComposeOpen(false)
       await router.invalidate()
-    } catch (err: any) {
-      setComposeError(err?.message || 'Failed to post.')
+    } catch (err: unknown) {
+      setComposeError(err instanceof Error ? err.message : 'Failed to post.')
     } finally {
       setSubmitting(false)
     }
@@ -114,20 +86,14 @@ function RouteComponent() {
     setDeleting(true)
     setViewError(null)
     try {
-      const res = await fetch(`/api/bulletin/${viewingPost._id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.message || 'Failed to delete.')
-      }
+      await bulletinService.remove(
+        viewingPost._id,
+        `posted by ${authorName(viewingPost)} on ${fmtDate(viewingPost.createdAt)}`,
+      )
       setViewingPost(null)
       await router.invalidate()
-    } catch (err: any) {
-      setViewError(err?.message || 'Failed to delete.')
+    } catch (err: unknown) {
+      setViewError(err instanceof Error ? err.message : 'Failed to delete.')
     } finally {
       setDeleting(false)
     }

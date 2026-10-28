@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { auditService } from '@/api/audit/audit.service';
+import { isApiError } from '@/api/core/errors';
 import { Pencil, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute(
@@ -24,16 +25,11 @@ function RouteComponent() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    axios
-      .get("/api/audit/select-templates", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.template",
-        },
-      })
-      .then(res => setTemplates(res.data))
+    auditService
+      .listSelectTemplates<SelectTemplate[]>('templates')
+      .then(setTemplates)
       .catch(err => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           navigate({ to: "/no-access" });
         } else {
           setError("Failed to load select templates");
@@ -45,15 +41,11 @@ function RouteComponent() {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this template?")) return;
     try {
-      await axios.delete(`/api/audit/select-templates/${id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.template",
-        },
-      });
+      const template = templates.find((item) => item._id === id);
+      await auditService.removeSelectTemplate(id, template?.name);
       setTemplates(templates => templates.filter(t => t._id !== id));
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
       } else {
         alert("Failed to delete template.");
@@ -62,7 +54,12 @@ function RouteComponent() {
   };
 
   const handleEdit = (id: string) => {
-    navigate({ to: `/audit/templates/select/${id}` });
+    const template = templates.find((item) => item._id === id);
+    navigate({
+      to: '/audit/templates/select/$id',
+      params: { id },
+      search: { name: template?.name },
+    });
   };
 
   if (loading) return <div className="text-center mt-8">Loading...</div>;

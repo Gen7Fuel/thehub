@@ -4,7 +4,19 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockNavigate, mockUseSearch, mockUseAuth, mockAxiosGet, mockAxiosDelete, mockSocket } =
+const {
+  mockNavigate,
+  mockUseSearch,
+  mockUseAuth,
+  mockListChecklistTemplates,
+  mockListAdminTemplates,
+  mockListSelectTemplates,
+  mockListStationIssues,
+  mockRemoveTemplate,
+  mockRemoveSelectTemplate,
+  mockUpdateStationIssueStatus,
+  mockSocket,
+} =
   vi.hoisted(() => {
     const mockSocket = { on: vi.fn(), off: vi.fn(), emit: vi.fn() }
     return {
@@ -16,20 +28,29 @@ const { mockNavigate, mockUseSearch, mockUseAuth, mockAxiosGet, mockAxiosDelete,
           access: { stationAudit: { checklist: true, template: true } },
         },
       }),
-      mockAxiosGet: vi.fn(),
-      mockAxiosDelete: vi.fn(),
+      mockListChecklistTemplates: vi.fn(),
+      mockListAdminTemplates: vi.fn(),
+      mockListSelectTemplates: vi.fn(),
+      mockListStationIssues: vi.fn(),
+      mockRemoveTemplate: vi.fn(),
+      mockRemoveSelectTemplate: vi.fn(),
+      mockUpdateStationIssueStatus: vi.fn(),
       mockSocket,
     }
   })
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
 
-vi.mock('axios', () => ({
-  default: {
-    get: mockAxiosGet,
-    delete: mockAxiosDelete,
-    post: vi.fn(),
-    put: vi.fn(),
+vi.mock('@/api/audit/audit.service', () => ({
+  auditService: {
+    listChecklistTemplates: mockListChecklistTemplates,
+    listAdminTemplates: mockListAdminTemplates,
+    listSelectTemplates: mockListSelectTemplates,
+    listStationIssues: mockListStationIssues,
+    removeTemplate: mockRemoveTemplate,
+    removeSelectTemplate: mockRemoveSelectTemplate,
+    updateStationIssueStatus: mockUpdateStationIssueStatus,
+    getChecklistStats: vi.fn(),
   },
 }))
 
@@ -112,6 +133,7 @@ import { Route as ChecklistRoute } from '../checklist'
 import { Route as ChecklistListRoute } from '../templates/checklist/list'
 import { Route as SelectListRoute } from '../templates/select/list'
 import { OpenIssuesPage } from '../checklist/open-issues'
+import { ApiError } from '@/api/core/errors'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -153,6 +175,8 @@ const sampleIssues = [
   },
 ]
 
+const apiError = (status: number) => Object.assign(new ApiError(new Error('Request failed')), { status })
+
 // ─── Checklist Layout — checklist.tsx ─────────────────────────────────────────
 
 describe('Checklist Layout — checklist.tsx', () => {
@@ -163,11 +187,12 @@ describe('Checklist Layout — checklist.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: { location: 'Rankin', access: {} },
     })
-    mockAxiosGet.mockResolvedValue({ data: [] })
+    mockListChecklistTemplates.mockResolvedValue([])
+    mockListStationIssues.mockResolvedValue({ items: [] })
   })
 
   it('does not show the SitePicker while templates are being fetched', () => {
-    mockAxiosGet.mockReturnValue(new Promise(() => {}))
+    mockListChecklistTemplates.mockReturnValue(new Promise(() => {}))
     renderWithSuspense(<ChecklistLayout />)
     expect(screen.queryByTestId('site-picker')).not.toBeInTheDocument()
   })
@@ -186,25 +211,13 @@ describe('Checklist Layout — checklist.tsx', () => {
   })
 
   it('does not show Open Issues button when there are no open issues', async () => {
-    mockAxiosGet.mockResolvedValue({ data: [] }) // no issues
+    mockListStationIssues.mockResolvedValue({ items: [] }) // no issues
     renderWithSuspense(<ChecklistLayout />)
     await waitFor(() => expect(screen.queryByText(/open issues/i)).not.toBeInTheDocument(), { timeout: 5000 })
   })
 
-  // it('shows Open Issues button with count when issues exist', async () => {
-  //   mockAxiosGet.mockImplementation((url: string) => {
-  //     if (url.includes('open-issues')) return Promise.resolve({ data: { items: sampleIssues } })
-  //     return Promise.resolve({ data: [] })
-  //   })
-  //   renderWithSuspense(<ChecklistLayout />)
-  //   await waitFor(
-  //     () => expect(screen.getByText(/open issues \(2\)/i)).toBeInTheDocument(),
-  //     { timeout: 5000 }
-  //   )
-  // })
-
   it('shows error message when template fetch fails', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 500 } })
+    mockListChecklistTemplates.mockRejectedValue(apiError(500))
     renderWithSuspense(<ChecklistLayout />)
     await waitFor(
       () => expect(screen.getByText(/failed to load audit templates/i)).toBeInTheDocument(),
@@ -213,7 +226,7 @@ describe('Checklist Layout — checklist.tsx', () => {
   })
 
   it('navigates to /no-access when template fetch returns 403', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 403 } })
+    mockListChecklistTemplates.mockRejectedValue(apiError(403))
     renderWithSuspense(<ChecklistLayout />)
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
@@ -243,11 +256,11 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockAxiosGet.mockResolvedValue({ data: sampleTemplates })
+    mockListAdminTemplates.mockResolvedValue(sampleTemplates)
   })
 
   it('does not show the table while templates are loading', () => {
-    mockAxiosGet.mockReturnValue(new Promise(() => {}))
+    mockListAdminTemplates.mockReturnValue(new Promise(() => {}))
     renderWithSuspense(<ChecklistList />)
     expect(screen.queryByText(/audit checklist templates/i)).not.toBeInTheDocument()
   })
@@ -268,7 +281,7 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
   })
 
   it('shows "No audit templates found" when list is empty', async () => {
-    mockAxiosGet.mockResolvedValue({ data: [] })
+    mockListAdminTemplates.mockResolvedValue([])
     renderWithSuspense(<ChecklistList />)
     await waitFor(
       () => expect(screen.getByText(/no audit templates found/i)).toBeInTheDocument(),
@@ -277,7 +290,7 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
   })
 
   it('shows error message when fetch fails', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 500 } })
+    mockListAdminTemplates.mockRejectedValue(apiError(500))
     renderWithSuspense(<ChecklistList />)
     await waitFor(
       () => expect(screen.getByText(/failed to load audit templates/i)).toBeInTheDocument(),
@@ -286,7 +299,7 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
   })
 
   it('navigates to /no-access when fetch returns 403', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 403 } })
+    mockListAdminTemplates.mockRejectedValue(apiError(403))
     renderWithSuspense(<ChecklistList />)
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
@@ -301,13 +314,17 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
     )
     fireEvent.click(editButtons[0])
     expect(mockNavigate).toHaveBeenCalledWith(
-      expect.objectContaining({ to: '/audit/templates/checklist/tmpl-1' })
+      expect.objectContaining({
+        to: '/audit/templates/checklist/$id',
+        params: { id: 'tmpl-1' },
+        search: { name: 'Daily Checklist' },
+      })
     )
   })
 
   it('calls delete API and removes template from list when delete is confirmed', async () => {
     vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
-    mockAxiosDelete.mockResolvedValue({ status: 200 })
+    mockRemoveTemplate.mockResolvedValue({ success: true })
     renderWithSuspense(<ChecklistList />)
 
     const deleteButtons = await waitFor(
@@ -316,7 +333,7 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
     )
     fireEvent.click(deleteButtons[0])
 
-    await waitFor(() => expect(mockAxiosDelete).toHaveBeenCalled())
+    await waitFor(() => expect(mockRemoveTemplate).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByText('Daily Checklist')).not.toBeInTheDocument())
   })
 
@@ -329,12 +346,12 @@ describe('Checklist Templates List — templates/checklist/list.tsx', () => {
       { timeout: 5000 }
     )
     fireEvent.click(deleteButtons[0])
-    expect(mockAxiosDelete).not.toHaveBeenCalled()
+    expect(mockRemoveTemplate).not.toHaveBeenCalled()
   })
 
   it('navigates to /no-access when delete returns 403', async () => {
     vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
-    mockAxiosDelete.mockRejectedValue({ response: { status: 403 } })
+    mockRemoveTemplate.mockRejectedValue(apiError(403))
     renderWithSuspense(<ChecklistList />)
 
     const deleteButtons = await waitFor(
@@ -354,11 +371,11 @@ describe('Select Templates List — templates/select/list.tsx', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockAxiosGet.mockResolvedValue({ data: sampleSelectTemplates })
+    mockListSelectTemplates.mockResolvedValue(sampleSelectTemplates)
   })
 
   it('does not show the list while templates are loading', () => {
-    mockAxiosGet.mockReturnValue(new Promise(() => {}))
+    mockListSelectTemplates.mockReturnValue(new Promise(() => {}))
     renderWithSuspense(<SelectList />)
     expect(screen.queryByText(/select templates/i)).not.toBeInTheDocument()
   })
@@ -393,7 +410,7 @@ describe('Select Templates List — templates/select/list.tsx', () => {
   })
 
   it('shows "No select templates found" when list is empty', async () => {
-    mockAxiosGet.mockResolvedValue({ data: [] })
+    mockListSelectTemplates.mockResolvedValue([])
     renderWithSuspense(<SelectList />)
     await waitFor(
       () => expect(screen.getByText(/no select templates found/i)).toBeInTheDocument(),
@@ -402,7 +419,7 @@ describe('Select Templates List — templates/select/list.tsx', () => {
   })
 
   it('shows error message when fetch fails', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 500 } })
+    mockListSelectTemplates.mockRejectedValue(apiError(500))
     renderWithSuspense(<SelectList />)
     await waitFor(
       () => expect(screen.getByText(/failed to load select templates/i)).toBeInTheDocument(),
@@ -411,7 +428,7 @@ describe('Select Templates List — templates/select/list.tsx', () => {
   })
 
   it('navigates to /no-access when fetch returns 403', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 403 } })
+    mockListSelectTemplates.mockRejectedValue(apiError(403))
     renderWithSuspense(<SelectList />)
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
@@ -426,13 +443,17 @@ describe('Select Templates List — templates/select/list.tsx', () => {
     )
     fireEvent.click(editButtons[0])
     expect(mockNavigate).toHaveBeenCalledWith(
-      expect.objectContaining({ to: '/audit/templates/select/sel-1' })
+      expect.objectContaining({
+        to: '/audit/templates/select/$id',
+        params: { id: 'sel-1' },
+        search: { name: 'Category' },
+      })
     )
   })
 
   it('calls delete API and removes template when delete is confirmed', async () => {
     vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
-    mockAxiosDelete.mockResolvedValue({ status: 200 })
+    mockRemoveSelectTemplate.mockResolvedValue({ success: true })
     renderWithSuspense(<SelectList />)
 
     const deleteButtons = await waitFor(
@@ -441,7 +462,7 @@ describe('Select Templates List — templates/select/list.tsx', () => {
     )
     fireEvent.click(deleteButtons[0])
 
-    await waitFor(() => expect(mockAxiosDelete).toHaveBeenCalled())
+    await waitFor(() => expect(mockRemoveSelectTemplate).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByText('Category')).not.toBeInTheDocument())
   })
 })
@@ -454,20 +475,17 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
     localStorage.setItem('token', 'test-token')
     mockUseSearch.mockReturnValue({ site: 'Rankin' })
     mockUseAuth.mockReturnValue({ user: { location: 'Rankin', access: {} } })
+    mockListStationIssues.mockResolvedValue({ items: [] })
   })
 
   it('shows Loading... while fetching issues', () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}))
+    mockListStationIssues.mockReturnValue(new Promise(() => {}))
     renderWithSuspense(<OpenIssuesPage />)
     expect(screen.getByText(/loading/i)).toBeInTheDocument()
   })
 
   it('shows "No open issues found" when the list is empty', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: () => Promise.resolve({ items: [] }),
-    })
+    mockListStationIssues.mockResolvedValue({ items: [] })
     renderWithSuspense(<OpenIssuesPage />)
     await waitFor(
       () => expect(screen.getByText(/no open issues found/i)).toBeInTheDocument(),
@@ -476,11 +494,7 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
   })
 
   it('renders an OpenIssueCard for each issue', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: () => Promise.resolve({ items: sampleIssues }),
-    })
+    mockListStationIssues.mockResolvedValue({ items: sampleIssues })
     renderWithSuspense(<OpenIssuesPage />)
     await waitFor(
       () => expect(screen.getAllByTestId('open-issue-card')).toHaveLength(2),
@@ -491,11 +505,7 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
   })
 
   it('handles flat array response (not wrapped in items)', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: () => Promise.resolve(sampleIssues), // flat array
-    })
+    mockListStationIssues.mockResolvedValue(sampleIssues) // flat array
     renderWithSuspense(<OpenIssuesPage />)
     await waitFor(
       () => expect(screen.getAllByTestId('open-issue-card')).toHaveLength(2),
@@ -504,11 +514,7 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
   })
 
   it('navigates to /no-access when fetch returns 403', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      status: 403,
-      ok: false,
-      json: () => Promise.resolve({}),
-    })
+    mockListStationIssues.mockRejectedValue(apiError(403))
     renderWithSuspense(<OpenIssuesPage />)
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' })
@@ -516,11 +522,7 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
   })
 
   it('renders category legend chips for each unique category', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      status: 200,
-      ok: true,
-      json: () => Promise.resolve({ items: sampleIssues }),
-    })
+    mockListStationIssues.mockResolvedValue({ items: sampleIssues })
     renderWithSuspense(<OpenIssuesPage />)
     await waitFor(
       () => {
@@ -534,8 +536,7 @@ describe('Checklist Open Issues — checklist/open-issues.tsx', () => {
   it('does not fetch when no site is in search params', () => {
     mockUseSearch.mockReturnValue({ site: undefined })
     mockUseAuth.mockReturnValue({ user: { location: undefined, access: {} } })
-    global.fetch = vi.fn()
     renderWithSuspense(<OpenIssuesPage />)
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(mockListStationIssues).not.toHaveBeenCalled()
   })
 })

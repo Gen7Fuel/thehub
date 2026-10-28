@@ -2,6 +2,7 @@ const express = require('express')
 const Course = require('../../models/academy/Course')
 const AcademyEmployee = require('../../models/academy/AcademyEmployee')
 const CourseCompletion = require('../../models/academy/CourseCompletion')
+const { logChange } = require('../../middleware/changeLogger')
 
 const router = express.Router()
 
@@ -49,6 +50,11 @@ router.post('/courses', async (req, res) => {
     const { title, description, thumbnail, sections } = req.body
     if (!title) return res.status(400).json({ message: 'title is required' })
     const course = await Course.create({ title, description, thumbnail, sections })
+    await logChange(req, {
+      action: 'create', resourceType: 'academy-course', resourceId: course._id,
+      success: true, statusCode: 201, after: course.toObject(),
+      resourceLabel: course.title, source: 'academy.admin',
+    })
     res.status(201).json(course)
   } catch (err) {
     res.status(500).json({ message: 'Failed to create course', error: err.message })
@@ -69,12 +75,18 @@ router.put('/courses/:id', async (req, res) => {
   try {
     const { title, description, thumbnail, sections } = req.body
     if (!title) return res.status(400).json({ message: 'title is required' })
+    const previous = await Course.findById(req.params.id).lean()
+    if (!previous) return res.status(404).json({ message: 'Course not found' })
     const course = await Course.findByIdAndUpdate(
       req.params.id,
       { title, description, thumbnail, sections },
       { new: true, runValidators: true },
     )
-    if (!course) return res.status(404).json({ message: 'Course not found' })
+    await logChange(req, {
+      action: 'update', resourceType: 'academy-course', resourceId: course._id,
+      success: true, statusCode: 200, before: previous, after: course.toObject(),
+      resourceLabel: course.title, source: 'academy.admin',
+    })
     res.json(course)
   } catch (err) {
     res.status(500).json({ message: 'Failed to update course', error: err.message })
@@ -83,8 +95,14 @@ router.put('/courses/:id', async (req, res) => {
 
 router.post('/courses/:id/publish', async (req, res) => {
   try {
+    const previous = await Course.findById(req.params.id).lean()
+    if (!previous) return res.status(404).json({ message: 'Course not found' })
     const course = await Course.findByIdAndUpdate(req.params.id, { status: 'published' }, { new: true })
-    if (!course) return res.status(404).json({ message: 'Course not found' })
+    await logChange(req, {
+      action: 'update', resourceType: 'academy-course', resourceId: course._id,
+      success: true, statusCode: 200, before: previous, after: course.toObject(),
+      resourceLabel: course.title, source: 'academy.admin',
+    })
     res.json(course)
   } catch (err) {
     res.status(500).json({ message: 'Failed to publish course', error: err.message })
@@ -93,8 +111,14 @@ router.post('/courses/:id/publish', async (req, res) => {
 
 router.post('/courses/:id/unpublish', async (req, res) => {
   try {
+    const previous = await Course.findById(req.params.id).lean()
+    if (!previous) return res.status(404).json({ message: 'Course not found' })
     const course = await Course.findByIdAndUpdate(req.params.id, { status: 'draft' }, { new: true })
-    if (!course) return res.status(404).json({ message: 'Course not found' })
+    await logChange(req, {
+      action: 'update', resourceType: 'academy-course', resourceId: course._id,
+      success: true, statusCode: 200, before: previous, after: course.toObject(),
+      resourceLabel: course.title, source: 'academy.admin',
+    })
     res.json(course)
   } catch (err) {
     res.status(500).json({ message: 'Failed to unpublish course', error: err.message })
@@ -105,6 +129,11 @@ router.delete('/courses/:id', async (req, res) => {
   try {
     const course = await Course.findByIdAndDelete(req.params.id)
     if (!course) return res.status(404).json({ message: 'Course not found' })
+    await logChange(req, {
+      action: 'delete', resourceType: 'academy-course', resourceId: course._id,
+      success: true, statusCode: 200, before: course.toObject(),
+      resourceLabel: course.title, source: 'academy.admin',
+    })
     res.json({ message: 'Course deleted' })
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete course', error: err.message })
@@ -139,6 +168,11 @@ router.post('/employees', async (req, res) => {
     }
     if (!employee) return res.status(500).json({ message: 'Failed to generate unique code, please try again.' })
 
+    await logChange(req, {
+      action: 'create', resourceType: 'academy-employee', resourceId: employee._id,
+      success: true, statusCode: 201, after: employee.toObject(),
+      resourceLabel: employee.name, source: 'academy.admin',
+    })
     res.status(201).json(employee)
   } catch (err) {
     res.status(500).json({ message: 'Failed to create employee', error: err.message })
@@ -149,6 +183,11 @@ router.delete('/employees/:id', async (req, res) => {
   try {
     const employee = await AcademyEmployee.findByIdAndDelete(req.params.id)
     if (!employee) return res.status(404).json({ message: 'Employee not found' })
+    await logChange(req, {
+      action: 'delete', resourceType: 'academy-employee', resourceId: employee._id,
+      success: true, statusCode: 200, before: employee.toObject(),
+      resourceLabel: employee.name, source: 'academy.admin',
+    })
     res.json({ message: 'Employee deleted' })
   } catch (err) {
     res.status(500).json({ message: 'Failed to delete employee', error: err.message })

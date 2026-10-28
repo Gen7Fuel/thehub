@@ -345,7 +345,9 @@ import { createFileRoute, Link, Outlet, useMatchRoute, useNavigate } from '@tans
 import { useEffect, useState, useMemo } from "react"
 import { Button } from '@/components/ui/button'
 import { BarChart3 } from "lucide-react" // For the report icon
-import axios from "axios"
+import { auditService } from '@/api/audit/audit.service'
+import { auditSupportService } from '@/api/audit/audit-support.service'
+import { isApiError } from '@/api/core/errors'
 import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
 import { SitePicker } from '@/components/custom/sitePicker';
@@ -420,24 +422,11 @@ function RouteComponent() {
     const fetchReportData = async () => {
       try {
         // 1. Fetch Timezone
-        const locRes = await fetch(`/api/locations/name/${encodeURIComponent(site)}`);
-        const locData = await locRes.json();
+        const locData = await auditSupportService.getSite<{ timezone?: string }>(site);
         setSiteTimezone(locData.timezone || "UTC");
 
         // 2. Fetch Stats
-        const auditRes = await fetch(
-          `/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-              "X-Required-Permission": "stationAudit",
-            },
-          }
-        );
-        if (auditRes.ok) {
-          const data = await auditRes.json();
-          setAuditStats(data);
-        }
+        setAuditStats(await auditService.getChecklistStats(site, pKeys));
       } catch (err) {
         console.error("Error loading report data:", err);
       }
@@ -456,20 +445,20 @@ function RouteComponent() {
   }, [site, user?.location, navigate]);
 
   const handleSiteChange = (newSite: string) => {
-    const activeTemplateId = templates.find(t =>
+    const activeTemplate = templates.find(t =>
       matchRoute({
         to: "/audit/checklist/$id",
         params: { id: t._id },
         fuzzy: true,
       })
-    )?._id;
+    );
 
     navigate(
-      activeTemplateId
+      activeTemplate
         ? {
           to: "/audit/checklist/$id",
-          params: { id: activeTemplateId },
-          search: { site: newSite },
+          params: { id: activeTemplate._id },
+          search: { site: newSite, checklistName: activeTemplate.name },
         }
         : {
           to: "/audit/checklist",
@@ -524,15 +513,10 @@ function RouteComponent() {
     setLoading(true);
     setError("");
 
-    axios
-      .get("/api/audit", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit"
-        },
-      })
-      .then(res => {
-        const filtered = res.data.filter(
+    auditService
+      .listChecklistTemplates<AuditTemplate[]>()
+      .then(data => {
+        const filtered = data.filter(
           (t: AuditTemplate) => t.sites && t.sites.includes(site)
         );
         setTemplates(filtered);
@@ -541,7 +525,7 @@ function RouteComponent() {
         // localStorage.setItem("location", site);
       })
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {
@@ -550,16 +534,11 @@ function RouteComponent() {
       })
       .finally(() => setLoading(false));
     // fetch open issues
-    axios
-      .get<OpenIssueResponse>(`/api/audit/open-issues?site=${site}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit"
-        },
-      })
-      .then(res => setOpenIssues(res.data.items || [])) // only keep the array
+    auditService
+      .listStationIssues<OpenIssueResponse>(site)
+      .then(data => setOpenIssues(data.items || [])) // only keep the array
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {
@@ -631,7 +610,7 @@ function RouteComponent() {
               navigate({
                 to: "/audit/checklist/$id",
                 params: { id: templates[prevIndex]._id },
-                search: (prev: any) => ({ site: prev.site }),
+                search: (prev: any) => ({ site: prev.site, checklistName: templates[prevIndex].name }),
               });
             }}
           >
@@ -669,7 +648,7 @@ function RouteComponent() {
               navigate({
                 to: "/audit/checklist/$id",
                 params: { id: templates[nextIndex]._id },
-                search: (prev: any) => ({ site: prev.site }),
+                search: (prev: any) => ({ site: prev.site, checklistName: templates[nextIndex].name }),
               });
             }}
           >

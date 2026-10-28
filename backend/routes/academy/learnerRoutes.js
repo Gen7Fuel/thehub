@@ -4,6 +4,7 @@ const CourseCompletion = require('../../models/academy/CourseCompletion')
 const VideoProgress = require('../../models/academy/VideoProgress')
 const CourseProgress = require('../../models/academy/CourseProgress')
 const { lookupAcademyEmployee } = require('../../services/sqlService')
+const { logChange } = require('../../middleware/changeLogger')
 
 const router = express.Router()
 
@@ -60,8 +61,10 @@ router.post('/courses/:courseId/complete', async (req, res) => {
     const course = await Course.findOne({ _id: req.params.courseId, status: 'published' })
     if (!course) return res.status(404).json({ message: 'Course not found' })
 
+    const completionFilter = { employeeCode, courseId: course._id }
+    const previous = await CourseCompletion.findOne(completionFilter).lean()
     const completion = await CourseCompletion.findOneAndUpdate(
-      { employeeCode, courseId: course._id },
+      completionFilter,
       {
         $setOnInsert: {
           employeeCode,
@@ -73,6 +76,14 @@ router.post('/courses/:courseId/complete', async (req, res) => {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true },
     )
+
+    if (!previous) {
+      await logChange(req, {
+        action: 'create', resourceType: 'academy-completion', resourceId: completion._id,
+        success: true, statusCode: 200, after: completion.toObject(),
+        resourceLabel: `${course.title} for ${employee.name}`, source: 'academy',
+      })
+    }
 
     res.json(completion)
   } catch (err) {
@@ -100,11 +111,19 @@ router.put('/video-progress', async (req, res) => {
       return res.status(400).json({ message: 'employeeCode, courseId, itemId, progressSeconds are required' })
     }
 
+    const progressFilter = { employeeCode, courseId, itemId }
+    const previous = await VideoProgress.findOne(progressFilter).lean()
     const record = await VideoProgress.findOneAndUpdate(
-      { employeeCode, courseId, itemId },
+      progressFilter,
       { $set: { progressSeconds } },
       { upsert: true, new: true },
     )
+    await logChange(req, {
+      action: previous ? 'update' : 'create',
+      resourceType: 'academy-video-progress', resourceId: record._id,
+      success: true, statusCode: 200, before: previous, after: record.toObject(),
+      resourceLabel: `for employee ${employeeCode}`, source: 'academy',
+    })
     res.json({ progressSeconds: record.progressSeconds })
   } catch (err) {
     res.status(500).json({ message: 'Failed to save video progress', error: err.message })
@@ -145,11 +164,19 @@ router.put('/course-progress', async (req, res) => {
       return res.status(400).json({ message: 'Nothing to update' })
     }
 
+    const progressFilter = { employeeCode, courseId }
+    const previous = await CourseProgress.findOne(progressFilter).lean()
     const record = await CourseProgress.findOneAndUpdate(
-      { employeeCode, courseId },
+      progressFilter,
       update,
       { upsert: true, new: true },
     )
+    await logChange(req, {
+      action: previous ? 'update' : 'create',
+      resourceType: 'academy-course-progress', resourceId: record._id,
+      success: true, statusCode: 200, before: previous, after: record.toObject(),
+      resourceLabel: `for employee ${employeeCode}`, source: 'academy',
+    })
     res.json({ currentPageIndex: record.currentPageIndex, completedPages: record.completedPages })
   } catch (err) {
     res.status(500).json({ message: 'Failed to save course progress', error: err.message })

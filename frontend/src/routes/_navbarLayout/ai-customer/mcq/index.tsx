@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { academyService } from '@/api/academy/academy.service'
+import { isApiError } from '@/api/core/errors'
 
 // MCQ practice module — lets trainers jump straight to a course's questions
 // (skipping videos/other content and the employee-number gate) to preview
@@ -24,11 +25,6 @@ export const Route = createFileRoute('/_navbarLayout/ai-customer/mcq/')({
   component: RouteComponent,
 })
 
-function makeAuthHeaders() {
-  const token = localStorage.getItem('token')
-  return { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
-}
-
 function RouteComponent() {
   const navigate = useNavigate()
   const [courses, setCourses] = useState<CourseSummary[]>([])
@@ -36,14 +32,11 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    axios
-      .get('/api/academy/learner/courses', { headers: makeAuthHeaders() })
-      .then((res) => {
-        const list = (res.data.courses ?? res.data) as CourseSummary[]
-        setCourses(list)
-      })
+    academyService
+      .listCourses('ai-customer.mcq')
+      .then((list) => setCourses(list))
       .catch((err) => {
-        if (err.response?.status === 403) navigate({ to: '/no-access' })
+        if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' })
         else setError('Failed to load courses.')
       })
       .finally(() => setLoading(false))

@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { academyService } from '@/api/academy/academy.service'
+import { isApiError } from '@/api/core/errors'
 
 interface CourseSummary {
   _id: string
@@ -22,14 +23,11 @@ function RouteComponent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    axios
-      .get('/api/academy/learner/courses', {
-        headers: { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' },
-      })
-      .then((res) => setCourses(res.data.courses ?? res.data))
+    academyService
+      .listCourses()
+      .then(setCourses)
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           navigate({ to: '/no-access' })
         } else {
           setError('Failed to load courses.')

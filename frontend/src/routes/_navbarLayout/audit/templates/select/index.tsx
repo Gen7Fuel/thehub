@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from "react";
-import axios from "axios";
+import { auditService } from '@/api/audit/audit.service';
+import { isApiError } from '@/api/core/errors';
 import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute('/_navbarLayout/audit/templates/select/')({
@@ -29,32 +30,18 @@ function RouteComponent() {
     setError("");
 
     try {
-      const res = await axios.post(
-        "/api/audit/select-templates",
-        {
-          name,
-          description,
-          options: options.filter(s => s.text.trim() !== ""),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "stationAudit.template",
-          },
-        }
-      );
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+      await auditService.createSelectTemplate({
+        name,
+        description,
+        options: options.filter(s => s.text.trim() !== ""),
+      }, name);
 
       navigate({ to: "/audit/templates/select/list" });
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
       } else {
-        setError(err?.response?.data?.message || "Failed to create template");
+        setError((isApiError(err) ? err.message : undefined) || "Failed to create template");
       }
     }
   };

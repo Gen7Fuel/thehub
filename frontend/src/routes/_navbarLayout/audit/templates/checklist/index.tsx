@@ -435,7 +435,9 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { auditService } from '@/api/audit/audit.service';
+import { auditSupportService } from '@/api/audit/audit-support.service';
+import { isApiError } from '@/api/core/errors';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { MultiSelect } from '@/components/custom/multiSelect';
@@ -490,16 +492,11 @@ function RouteComponent() {
 
   // --- Fetch locations
   useEffect(() => {
-    axios
-      .get("/api/locations", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.template",
-        },
-      })
-      .then((res) => setSites(res.data))
+    auditSupportService
+      .listSites<{ _id: string; stationName: string }[]>()
+      .then(setSites)
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           navigate({ to: "/no-access" });
         } else {
           setSites([]);
@@ -517,16 +514,11 @@ function RouteComponent() {
 
   // --- Fetch select templates
   useEffect(() => {
-    axios
-      .get("/api/audit/select-templates", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.template",
-        },
-      })
-      .then((res) => setSelectTemplates(res.data))
+    auditService
+      .listSelectTemplates<SelectTemplate[]>('templates')
+      .then(setSelectTemplates)
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           navigate({ to: "/no-access" });
         } else {
           setSelectTemplates([]);
@@ -538,21 +530,7 @@ function RouteComponent() {
   useEffect(() => {
     const fetchVendors = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/vendors", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "stationAudit.template",
-          },
-        });
-
-        if (res.status === 403) {
-          navigate({ to: "/no-access" });
-          return;
-        }
-
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = (await res.json()) as { name: string; category: string }[];
+        const data = await auditSupportService.listVendors<{ name: string; category: string }[]>();
 
         const stationVendors = data.filter(
           (v) => v.category?.trim() === "Station Supplies"
@@ -563,6 +541,10 @@ function RouteComponent() {
         );
         setUniqueVendors(vendors);
       } catch (err) {
+        if (isApiError(err) && err.status === 403) {
+          navigate({ to: '/no-access' });
+          return;
+        }
         console.error("Failed to fetch vendors:", err);
       }
     };
@@ -604,17 +586,7 @@ function RouteComponent() {
       // createdBy will be set in backend
     };
     try {
-      const res = await axios.post(
-        "/api/audit/",
-        payload,
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "stationAudit.template" },
-        }
-      );
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+      await auditService.createTemplate(payload, name);
 
       // Optionally reset or redirect
       setName("");
@@ -622,7 +594,8 @@ function RouteComponent() {
       setSelectedSites([]);
       setItems([{ category: "", item: "", statusTemplate: "", followUpTemplate: "", assignedTo: "" }]);
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Failed to save checklist template");
+      if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' });
+      else setError((isApiError(err) ? err.message : undefined) || "Failed to save checklist template");
     } finally {
       setSaving(false);
     }

@@ -2,12 +2,13 @@ import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { ApiError } from '@/api/core/errors'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockNavigate, mockAxiosGet } = vi.hoisted(() => ({
+const { mockNavigate, mockListCourses } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
-  mockAxiosGet: vi.fn(),
+  mockListCourses: vi.fn(),
 }))
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
@@ -21,11 +22,8 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-vi.mock('axios', () => ({
-  default: {
-    get: mockAxiosGet,
-    post: vi.fn(),
-  },
+vi.mock('@/api/academy/academy.service', () => ({
+  academyService: { listCourses: mockListCourses },
 }))
 
 // ─── Component import (after mocks) ───────────────────────────────────────────
@@ -58,7 +56,7 @@ describe('Academy index — loading state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockAxiosGet.mockReturnValue(new Promise(() => {})) // never resolves
+    mockListCourses.mockReturnValue(new Promise(() => {})) // never resolves
   })
 
   it('shows "Loading..." while fetching', async () => {
@@ -74,7 +72,7 @@ describe('Academy index — empty state', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockAxiosGet.mockResolvedValue({ data: { courses: [] } })
+    mockListCourses.mockResolvedValue([])
   })
 
   it('shows "No courses available." when there are no courses', async () => {
@@ -98,14 +96,10 @@ describe('Academy index — course list', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'test-token')
-    mockAxiosGet.mockResolvedValue({
-      data: {
-        courses: [
+    mockListCourses.mockResolvedValue([
           makeCourse({ _id: 'c-1', title: 'Customer Service Basics', sectionCount: 3 }),
           makeCourse({ _id: 'c-2', title: 'Fuel Safety', description: 'Fuel handling procedures.', sectionCount: 2 }),
-        ],
-      },
-    })
+        ])
   })
 
   it('renders all course titles', async () => {
@@ -135,9 +129,7 @@ describe('Academy index — course list', () => {
   })
 
   it('shows "1 section" (singular) for a course with 1 section', async () => {
-    mockAxiosGet.mockResolvedValue({
-      data: { courses: [makeCourse({ _id: 'c-1', title: 'Solo Course', sectionCount: 1 })] },
-    })
+    mockListCourses.mockResolvedValue([makeCourse({ _id: 'c-1', title: 'Solo Course', sectionCount: 1 })])
     renderWithSuspense(<AcademyComponent />)
     await waitFor(
       () => expect(screen.getByText('1 section')).toBeInTheDocument(),
@@ -162,22 +154,16 @@ describe('Academy index — API calls', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorage.setItem('token', 'my-token')
-    mockAxiosGet.mockResolvedValue({ data: [] })
+    mockListCourses.mockResolvedValue([])
   })
 
-  it('calls /api/academy/learner/courses with auth header', async () => {
+  it('loads courses through the Academy service', async () => {
     renderWithSuspense(<AcademyComponent />)
-    await waitFor(() => expect(mockAxiosGet).toHaveBeenCalled(), { timeout: 5000 })
-    const [url, config] = mockAxiosGet.mock.calls[0]
-    expect(url).toBe('/api/academy/learner/courses')
-    expect(config.headers.Authorization).toBe('Bearer my-token')
-    expect(config.headers['X-Required-Permission']).toBe('academy')
+    await waitFor(() => expect(mockListCourses).toHaveBeenCalledWith(), { timeout: 5000 })
   })
 
   it('handles flat data array (no .courses wrapper)', async () => {
-    mockAxiosGet.mockResolvedValue({
-      data: [makeCourse({ _id: 'c-1', title: 'Flat Course' })],
-    })
+    mockListCourses.mockResolvedValue([makeCourse({ _id: 'c-1', title: 'Flat Course' })])
     renderWithSuspense(<AcademyComponent />)
     await waitFor(
       () => expect(screen.getByText('Flat Course')).toBeInTheDocument(),
@@ -193,7 +179,7 @@ describe('Academy index — error states', () => {
   })
 
   it('shows error message on API failure', async () => {
-    mockAxiosGet.mockRejectedValue(new Error('Network error'))
+    mockListCourses.mockRejectedValue(new Error('Network error'))
     renderWithSuspense(<AcademyComponent />)
     await waitFor(
       () => expect(screen.getByText('Failed to load courses.')).toBeInTheDocument(),
@@ -202,7 +188,7 @@ describe('Academy index — error states', () => {
   })
 
   it('navigates to /no-access on 403', async () => {
-    mockAxiosGet.mockRejectedValue({ response: { status: 403 } })
+    mockListCourses.mockRejectedValue(Object.assign(new ApiError(new Error('Forbidden')), { status: 403 }))
     renderWithSuspense(<AcademyComponent />)
     await waitFor(
       () => expect(mockNavigate).toHaveBeenCalledWith(
