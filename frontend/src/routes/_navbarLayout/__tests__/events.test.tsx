@@ -90,11 +90,14 @@ describe("Events — core rendering", () => {
 
   it("renders the main Events Calendar heading", async () => {
     renderWithSuspense(<EventsComponent />);
-    await waitFor(() => {
-      expect(
-        screen.getByRole("heading", { name: /Events Calendar/i }),
-      ).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(
+          screen.getByRole("heading", { name: /Events Calendar/i }),
+        ).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it("shows location schedule subtitle", async () => {

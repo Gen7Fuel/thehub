@@ -27,7 +27,7 @@ export const productCategoriesService = {
     )
   },
 
-  getCycleCountVariance(source = 'cycle-count.form') {
+  getCycleCountVariance(source = 'cycle-count.count') {
     return productCategoriesApi.getCycleCountVariance(
       actionOptions('cycleCount', source, 'read', 'product-category-variance', 'Product category variance rules loaded for Cycle Count'),
     )

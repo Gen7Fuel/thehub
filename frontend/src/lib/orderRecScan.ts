@@ -1,7 +1,7 @@
 // Helpers for the order rec barcode scanner: matching a scanned code to an item
 // and building the message sent for an item that isn't on the order rec.
 
-import axios from 'axios'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 
 export interface ScanItemRef {
   catIdx: number
@@ -73,14 +73,8 @@ export async function lookupItemName(code: string, site: string | undefined): Pr
   const candidates = [...new Set([digits, stripLeadingZeros(digits)])].filter(Boolean)
   for (const upc of candidates) {
     try {
-      const res = await axios.get('/api/cycle-count/lookup', {
-        params: { upc_barcode: upc, site },
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'cycleCount.lookup',
-        },
-      })
-      const name = res.data?.name
+      const result = await cycleCountService.lookupItem<{ name?: string }>(upc, site)
+      const name = result?.name
       if (typeof name === 'string' && name.trim()) return name.trim()
     } catch {
       // Not found, forbidden or offline: try the next form, then give up.

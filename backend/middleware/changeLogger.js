@@ -17,6 +17,8 @@ async function logChange(req, {
   action,
   resourceType,
   resourceId,
+  resourceIds,
+  resourceStore,
   success,
   statusCode,
   message,
@@ -49,6 +51,8 @@ async function logChange(req, {
       action,
       resourceType,
       resourceId,
+      resourceIds,
+      resourceStore,
       success: !!success,
       statusCode,
       message: message || buildAuditMessage({

@@ -16,6 +16,7 @@ const { syncPostgresCountsToPetrosoft } = require('../utils/uploadCountToCStore'
 const Role = require('../models/Role');
 const { pushNotification } = require('../services/notificationService');
 const Event = require('../models/Event');
+const { logChange } = require('../middleware/changeLogger');
 
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -35,7 +36,27 @@ function isCountComplete(row) {
   return isCountSideComplete(row, "foh") && isCountSideComplete(row, "boh");
 }
 
-router.post('/upload-excel', upload.single('file'), async (req, res) => {
+function isCycleCountInstanceSequenceConflict(error) {
+  return error?.code === '23505' && error?.constraint === 'cycle_count_instance_pkey';
+}
+
+async function repairCycleCountInstanceSequence(db) {
+  await db.transaction(async (trx) => {
+    // Serialize sequence repair with inserts so concurrent requests cannot select
+    // the same replacement ID while a restored/imported table is being repaired.
+    await trx.raw('LOCK TABLE public.cycle_count_instance IN EXCLUSIVE MODE');
+    await trx.raw(`
+      SELECT setval(
+        pg_get_serial_sequence('public.cycle_count_instance', 'id'),
+        COALESCE((SELECT MAX(id) FROM public.cycle_count_instance), 0) + 1,
+        false
+      )
+    `);
+  });
+}
+
+// RETIRED: MongoDB CycleCount Excel import; the active item book is PostgreSQL-backed.
+if (false) router.post('/upload-excel', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
 
@@ -76,7 +97,8 @@ router.post('/upload-excel', upload.single('file'), async (req, res) => {
 });
 
 // GET /api/cycle-count/daily-items?site=SiteName&chunkSize=20
-router.get('/daily-items', async (req, res) => {
+// RETIRED: MongoDB daily item selection used only by the removed count-old page.
+if (false) router.get('/daily-items', async (req, res) => {
   try {
     const { site, chunkSize = 20, userTimezone } = req.query;
     if (!site) return res.status(400).json({ message: "site is required" });
@@ -1020,7 +1042,7 @@ router.put('/schedules/details/:id/items', async (req, res) => {
     const currentTotal = parseInt(currentItemsCount.count || "0", 10);
 
     // Check if configuration structural conditions apply
-    const instance = await db("public.cycle_count_instance").where({ id }).select("is_scheduled").first();
+    const instance = await db("public.cycle_count_instance").where({ id }).select("id", "is_scheduled").first();
 
     if (!instance) {
       return res.status(404).json({ message: "Cycle count instance not found." });
@@ -1033,6 +1055,7 @@ router.put('/schedules/details/:id/items', async (req, res) => {
     }
 
     // 3. Perform safe batch insert transactions
+    let insertedRows = [];
     await db.transaction(async (trx) => {
       const rowsToInsert = productIds.map(pid => ({
         instance_id: id,
@@ -1043,7 +1066,7 @@ router.put('/schedules/details/:id/items', async (req, res) => {
         priority: true
       }));
 
-      await trx("public.cycle_count_items").insert(rowsToInsert);
+      insertedRows = await trx("public.cycle_count_items").insert(rowsToInsert).returning(["id", "product_id"]);
 
       // 4. Update the audit trail metadata on the parent instance 
       await trx("public.cycle_count_instance")
@@ -1054,6 +1077,15 @@ router.put('/schedules/details/:id/items', async (req, res) => {
         });
     });
 
+    await logChange(req, {
+      action: 'update', resourceType: 'cycle-count-instance', resourceId: instance.id,
+      resourceIds: insertedRows.map(row => row.id), resourceStore: 'postgresql',
+      success: true, statusCode: 200, source: 'cycle-count.manage.schedule',
+      message: `${insertedRows.length} items added to Cycle Count schedule ${id}`,
+      changes: insertedRows.map(row => ({ operation: 'add', path: `items.${row.id}`, after: { id: row.id, productId: row.product_id } })),
+      changeSummary: { added: insertedRows.length, removed: 0, replaced: 0, total: insertedRows.length },
+      bulk: { affectedCount: insertedRows.length, truncated: false },
+    });
     return res.json({ success: true, message: `Successfully appended ${productIds.length} items.` });
   } catch (err) {
     console.error("Critical error appending item sets:", err);
@@ -1102,7 +1134,20 @@ router.post('/finalize-and-sync', async (req, res) => {
     console.log(`📡 Instantiating database-to-browser push pipeline hook for ${siteName} (${locationIdStr}) on target date: ${finalizedDate}`);
 
     // 2. Direct-invoke our orchestrator processing helper sequence using the resolved date string
+    const db = getPg();
+    const instance = await db('public.cycle_count_instance')
+      .where({ site_mongo_id: locationIdStr, date: finalizedDate })
+      .select('id', 'date', 'site_mongo_id', 'is_scheduled')
+      .first();
     const result = await syncPostgresCountsToPetrosoft(locationIdStr, finalizedDate);
+
+    await logChange(req, {
+      action: 'update', resourceType: 'cycle-count-instance', resourceId: instance?.id,
+      resourceStore: 'postgresql', success: result?.success !== false, statusCode: 200,
+      source: req.headers['x-action-source'] || 'cycle-count.count',
+      message: `Cycle Count for ${siteName} on ${finalizedDate} finalized and sent for inventory synchronization`,
+      before: instance, after: instance ? { ...instance, syncStatus: result?.success === false ? 'failed' : 'completed' } : { site: siteName, date: finalizedDate, syncStatus: result?.success === false ? 'failed' : 'completed' },
+    });
 
     return res.status(200).json(result);
 
@@ -1224,8 +1269,7 @@ router.post('/schedules/create', async (req, res) => {
     }
     const siteMongoIdString = location._id.toString();
 
-    // Begin single transaction isolation sandbox
-    const result = await db.transaction(async (trx) => {
+    const createSchedule = () => db.transaction(async (trx) => {
 
       // Secondary absolute safety gate for date duplicates inside transaction block
       const duplicateGate = await trx('public.cycle_count_instance')
@@ -1290,6 +1334,29 @@ router.post('/schedules/create', async (req, res) => {
         totalAdded: childPayload.length,
         groupName,
       };
+    });
+
+    let result;
+    try {
+      result = await createSchedule();
+    } catch (error) {
+      if (!isCycleCountInstanceSequenceConflict(error)) throw error;
+
+      console.warn(
+        '[Cycle Count] cycle_count_instance ID sequence was behind the table. Repairing it and retrying schedule creation once.',
+      );
+      await repairCycleCountInstanceSequence(db);
+      result = await createSchedule();
+    }
+
+    await logChange(req, {
+      action: 'create', resourceType: 'cycle-count-instance', resourceId: result.instanceId,
+      resourceStore: 'postgresql', success: true, statusCode: 200,
+      source: 'cycle-count.manage.schedule',
+      message: `Cycle Count schedule ${result.instanceId} created for ${site} on ${date} using ${result.groupName} with ${result.totalAdded} items`,
+      before: null,
+      after: { id: result.instanceId, site, date, day, groupId, groupName: result.groupName, itemCount: result.totalAdded, isScheduled: true },
+      bulk: { affectedCount: result.totalAdded, truncated: true },
     });
 
     // Send HTTP response immediately
@@ -1416,6 +1483,12 @@ router.post('/groups', async (req, res) => {
       await trx('public.cycle_count_group_values').insert(valuesPayload);
       await trx.commit();
 
+      await logChange(req, {
+        action: 'create', resourceType: 'cycle-count-group', resourceId: group.id,
+        resourceStore: 'postgresql', success: true, statusCode: 201,
+        source: 'cycle-count.manage.groups', resourceLabel: group.name,
+        before: null, after: { ...group, values: valuesPayload.map(item => item.value) },
+      });
       res.status(201).json({ message: "Group setup created successfully", groupId: group.id });
     } catch (txErr) {
       await trx.rollback();
@@ -1523,6 +1596,14 @@ router.post('/save-item-v2', async (req, res) => {
     }
     // ==========================================
 
+    await logChange(req, {
+      action: 'update', resourceType: 'cycle-count-item', resourceId: existing.id,
+      resourceStore: 'postgresql', success: true, statusCode: 200,
+      source: 'cycle-count.count',
+      message: `Cycle Count ${field.toUpperCase()} updated for item ${entryId}`,
+      before: { id: entryId, ...existing },
+      after: { id: entryId, ...existing, ...updateData },
+    });
     res.json({ success: true });
   } catch (err) {
     console.error("Error saving Postgres count:", err);
@@ -1560,6 +1641,7 @@ router.put('/groups/:id', async (req, res) => {
       });
     }
 
+    const previousValues = await db('public.cycle_count_group_values').where({ group_id: id }).pluck('value');
     const trx = await db.transaction();
     try {
       // Update header details
@@ -1579,6 +1661,13 @@ router.put('/groups/:id', async (req, res) => {
       await trx('public.cycle_count_group_values').insert(newValuesPayload);
       await trx.commit();
 
+      await logChange(req, {
+        action: 'update', resourceType: 'cycle-count-group', resourceId: activeCheck.id,
+        resourceStore: 'postgresql', success: true, statusCode: 200,
+        source: 'cycle-count.manage.groups', resourceLabel: name.trim(),
+        before: { ...activeCheck, values: previousValues },
+        after: { ...activeCheck, name: name.trim(), values: newValuesPayload.map(item => item.value) },
+      });
       res.json({ message: "Cycle count group updated successfully" });
     } catch (txErr) {
       await trx.rollback();
@@ -1598,6 +1687,7 @@ router.delete('/groups/:id', async (req, res) => {
   const todayStr = new Date().toISOString().split('T')[0];
 
   try {
+    const existingGroup = await db('public.cycle_count_groups').where({ id }).first();
     // 1. Check for active/upcoming instances using this group
     // Explicitly scope table namespace public.cycle_count_instance
     const activeInstance = await db('public.cycle_count_instance')
@@ -1623,6 +1713,12 @@ router.delete('/groups/:id', async (req, res) => {
       return res.status(404).json({ message: "Group template not found." });
     }
 
+    await logChange(req, {
+      action: 'delete', resourceType: 'cycle-count-group', resourceId: existingGroup?.id || Number(id),
+      resourceStore: 'postgresql', success: true, statusCode: 200,
+      source: 'cycle-count.manage.groups', resourceLabel: existingGroup?.name || `ID ${id}`,
+      before: existingGroup, after: existingGroup ? { ...existingGroup, is_active: false } : null,
+    });
     res.json({ message: "Group template marked as inactive successfully." });
 
   } catch (err) {
@@ -1665,6 +1761,10 @@ router.delete('/schedules/details/:id/items', async (req, res) => {
     }
 
     const stationTimezone = location.timezone || 'America/New_York';
+    const targetItems = await db("public.cycle_count_items")
+      .where({ instance_id: id })
+      .whereIn("product_id", productIds)
+      .select("id", "product_id");
 
     // 3. SECURE TIMEZONE CHECK: Verify that the current date in the station's timezone isn't the count date
     const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -1698,6 +1798,15 @@ router.delete('/schedules/details/:id/items', async (req, res) => {
         });
     });
 
+    await logChange(req, {
+      action: 'delete', resourceType: 'cycle-count-item', resourceId: instance.id,
+      resourceIds: targetItems.map(item => item.id), resourceStore: 'postgresql',
+      success: true, statusCode: 200, source: 'cycle-count.manage.schedule',
+      message: `${targetItems.length} items removed from Cycle Count schedule ${id}`,
+      changes: targetItems.map(item => ({ operation: 'remove', path: `items.${item.id}`, before: { id: item.id, productId: item.product_id } })),
+      changeSummary: { added: 0, removed: targetItems.length, replaced: 0, total: targetItems.length },
+      bulk: { affectedCount: targetItems.length, truncated: false },
+    });
     return res.status(200).json({
       success: true,
       message: "Selected items deleted successfully.",
@@ -1779,10 +1888,24 @@ router.put('/item-bk/mass-edit', async (req, res) => {
       return res.status(400).json({ success: false, message: "No valid tracking parameters parsed for database changes." });
     }
 
+    const beforeRows = await db('item_bk').whereIn('id', ids).select('id', ...Object.keys(sanitizedPayload));
+
     // 4. Database Write Execution
     const rowsAffected = await db('item_bk')
       .whereIn('id', ids)
       .update(sanitizedPayload);
+
+    const afterRows = await db('item_bk').whereIn('id', ids).select('id', ...Object.keys(sanitizedPayload));
+
+    await logChange(req, {
+      action: 'update', resourceType: 'inventory-item',
+      resourceIds: afterRows.map(row => row.id), resourceStore: 'postgresql',
+      success: true, statusCode: 200, source: 'cycle-count.manage.items',
+      message: `${rowsAffected} Cycle Count item-book records updated (${Object.keys(sanitizedPayload).join(', ')})`,
+      before: beforeRows, after: afterRows,
+      bulk: { affectedCount: rowsAffected, truncated: afterRows.length > 100 },
+      diffOptions: { maxChanges: 100, maxValueLength: 1000 },
+    });
 
     /* 
     Alternative: If using native raw pg / postgres pool:
@@ -1839,7 +1962,8 @@ router.put('/item-bk/mass-edit', async (req, res) => {
 //   }
 // });
 
-router.post('/save-item', async (req, res) => {
+// RETIRED: MongoDB item counting used only by the removed count-old page.
+if (false) router.post('/save-item', async (req, res) => {
   try {
     const { _id, field, value } = req.body;
     if (!_id || !field || value === undefined) {
@@ -1867,7 +1991,8 @@ router.post('/save-item', async (req, res) => {
   }
 });
 
-router.post('/save-counts', async (req, res) => {
+// RETIRED: MongoDB bulk count submission; active counts use save-item-v2 in PostgreSQL.
+if (false) router.post('/save-counts', async (req, res) => {
   try {
     const { items } = req.body;
     if (!Array.isArray(items) || items.length === 0) {
@@ -1902,7 +2027,8 @@ router.post('/save-counts', async (req, res) => {
   }
 });
 
-router.get('/counted-today', async (req, res) => {
+// RETIRED: MongoDB counted-today report with no remaining frontend or service consumers.
+if (false) router.get('/counted-today', async (req, res) => {
   try {
     const { site } = req.query;
     if (!site) return res.status(400).json({ message: "site is required" });
@@ -1973,7 +2099,8 @@ router.get('/counted-today', async (req, res) => {
 //   }
 // });
 
-router.get('/daily-counts', async (req, res) => {
+// RETIRED: MongoDB report endpoint used by report-old; dashboard uses v2/daily-counts.
+if (false) router.get('/daily-counts', async (req, res) => {
   try {
     const { site, startDate, endDate, timezone = 'UTC' } = req.query;
     if (!site || !startDate || !endDate) {
@@ -2419,22 +2546,27 @@ router.put('/items/:id/manager-count', async (req, res) => {
       manager_boh_case: manager_boh_case !== undefined && manager_boh_case !== '' ? Number(manager_boh_case) : null,
     };
 
-    // Check live table first
-    let updatedCount = await db('cycle_count_items')
-      .where({ id: id })
-      .update(payload);
-
-    // If item was archived, update archive table instead
-    if (updatedCount === 0) {
-      updatedCount = await db('cycle_count_items_archive')
-        .where({ id: id })
-        .update(payload);
+    let targetTable = 'cycle_count_items';
+    let before = await db(targetTable).where({ id }).first();
+    if (!before) {
+      targetTable = 'cycle_count_items_archive';
+      before = await db(targetTable).where({ id }).first();
     }
 
-    if (updatedCount === 0) {
+    if (!before) {
       return res.status(404).json({ success: false, error: 'Cycle count item not found' });
     }
 
+    await db(targetTable).where({ id }).update(payload);
+    const after = await db(targetTable).where({ id }).first();
+
+    await logChange(req, {
+      action: 'update', resourceType: 'cycle-count-item', resourceId: after.id,
+      resourceStore: 'postgresql', success: true, statusCode: 200,
+      source: 'cycle-count.report',
+      message: `Manager recount updated for Cycle Count item ${id}`,
+      before, after,
+    });
     res.json({ success: true, data: payload });
   } catch (error) {
     console.error('Error updating manager count:', error);
@@ -2523,6 +2655,14 @@ router.post('/instance-notes', async (req, res) => {
         created_at: new Date()
       })
       .returning("*");
+
+    await logChange(req, {
+      action: 'create', resourceType: 'cycle-count-note', resourceId: newNote.id,
+      resourceStore: 'postgresql', success: true, statusCode: 201,
+      source: 'cycle-count.report',
+      message: `Note added to Cycle Count instance ${instanceId}`,
+      before: null, after: newNote,
+    });
 
     // 2. Return HTTP response immediately to keep UX snappy
     res.status(201).json({ success: true, data: newNote });
@@ -2650,7 +2790,8 @@ router.post('/instance-notes', async (req, res) => {
 
 // POST /api/cycle-count/:id/comments 
 // add new comments from the reports side
-router.post('/:id/comments', async (req, res) => {
+// RETIRED: MongoDB item comments used by report-old; active reports use instance-notes.
+if (false) router.post('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
     const { initials, author, text } = req.body;
@@ -2770,6 +2911,13 @@ router.delete('/instance/:id', async (req, res) => {
       }
     }
 
+    await logChange(req, {
+      action: 'delete', resourceType: 'cycle-count-instance', resourceId: instance.id,
+      resourceStore: 'postgresql', success: true, statusCode: 200,
+      source: 'cycle-count.manage.schedule',
+      message: `Cycle Count schedule ${instanceId} deleted${siteName ? ` for ${siteName}` : ''}${instance.date ? ` on ${instance.date}` : ''}`,
+      before: instance, after: null,
+    });
     res.json({ success: true, message: "Instance, linked line mappings, and associated calendar event completely dropped cleanly." });
 
   } catch (err) {
@@ -2780,7 +2928,8 @@ router.delete('/instance/:id', async (req, res) => {
 
 // GET /api/cycle-count/:id/comments 
 // get all the comments for a particular cyclecount 
-router.get('/:id/comments', async (req, res) => {
+// RETIRED: MongoDB item comments used by report-old; active reports use instance-notes.
+if (false) router.get('/:id/comments', async (req, res) => {
   try {
     const { id } = req.params;
     const item = await CycleCount.findById(id).lean();
@@ -2810,24 +2959,35 @@ router.get('/lookup', async (req, res) => {
       return res.status(400).json({ error: "UPC barcode and site required" });
     }
 
-    // 1️⃣ Find CycleCount item
-    const item = await CycleCount.findOne({ upc_barcode, site });
+    const location = await Location.findOne({ site }).lean();
+    if (!location) {
+      return res.status(404).json({ error: "Site not found" });
+    }
+
+    const db = getPg();
+    const item = await db('public.item_bk')
+      .where({ site: location._id.toString() })
+      .andWhere(function () {
+        this.where('upc_barcode', String(upc_barcode))
+          .orWhere('upc', String(upc_barcode))
+          .orWhere('gtin', String(upc_barcode));
+      })
+      .first();
 
     if (!item) {
       return res.status(404).json({ error: "Not found" });
     }
 
-    // 2️⃣ Resolve categoryName using categoryNumber
     let categoryName = null;
-
-    if (item.categoryNumber != null) {
-      const cat = await ProductCategory.findOne({ Number: item.categoryNumber });
+    if (item.category_id != null) {
+      const cat = await ProductCategory.findOne({ Number: item.category_id });
       if (cat) categoryName = cat.Name;
     }
 
-    // 3️⃣ Return extended response
     res.json({
-      ...item.toObject(),
+      ...item,
+      _id: String(item.id),
+      name: item.description,
       category: categoryName,
     });
 

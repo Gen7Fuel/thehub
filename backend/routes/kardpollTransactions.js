@@ -5,7 +5,8 @@ const Product = require("../models/Product");
 const Fleet = require("../models/Fleet");
 const Location = require("../models/Location");
 
-router.post("/upload", async (req, res) => {
+// RETIRED: Legacy Kardpoll XML upload UI was removed; Cash Rec owns the current Kardpoll import flow.
+if (false) router.post("/upload", async (req, res) => {
   const transactions = req.body;
 
   try {
@@ -74,7 +75,8 @@ router.post("/upload", async (req, res) => {
 });
 
 // Get all transactions with optional date and location filters
-router.get("/", async (req, res) => {
+// RETIRED: Legacy Kardpoll transaction list UI was removed.
+if (false) router.get("/", async (req, res) => {
   const { startDate, endDate, stationName } = req.query;
   const filter = { source: "Kardpoll" };
 
@@ -138,6 +140,7 @@ router.get("/", async (req, res) => {
 // NOT A KARDPOLL ONLY ROUTE
 // WE NEED THIS FOR SALES SUMMARY REPORT
 // Get all transactions with optional date and location filters
+// ACTIVE SHARED ROUTE: retained because Sales Summary depends on the combined transaction feed.
 router.get("/all", async (req, res) => {
   const { startDate, endDate, stationName } = req.query;
   const filter = { stationName, deletedAt: null };

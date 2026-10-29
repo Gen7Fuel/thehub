@@ -130,7 +130,7 @@ const TableWithInputs: React.FC<TableWithInputsProps> = ({
   useEffect(() => {
     const fetchVariance = async () => {
       try {
-        const result = await productCategoriesService.getCycleCountVariance('cycle-count.legacy-form');
+        const result = await productCategoriesService.getCycleCountVariance('cycle-count.count');
         setVarianceMap(result.varianceMap || {});
       } catch (err) {
         console.error("Failed to fetch variance map", err);

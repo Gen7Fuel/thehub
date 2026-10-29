@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Search, Layers, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/manage/group')({
   component: GroupListLayout,
@@ -27,10 +27,7 @@ function GroupListLayout() {
   const { data: groups = [], isLoading } = useQuery<CycleCountGroup[]>({
     queryKey: ['cycle-count-groups'],
     queryFn: async () => {
-      const res = await axios.get('/api/cycle-count/groups', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
+      return cycleCountService.listGroups<CycleCountGroup[]>()
     }
   })
 

@@ -444,23 +444,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { LocationPicker } from "@/components/custom/locationPicker";
+import { eventsService } from "@/api/events/events.service";
+import type { EventRecord } from "@/api/events/events.types";
 
-interface EventDoc {
-  _id: string;
-  site: string;
-  title: string;
-  description?: string;
-  date: string; // YYYY-MM-DD
-  type?: "system" | "manual";
-  createdBy: {
-    id: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-  };
-  createdAt: string;
-  updatedAt: string;
-}
+type EventDoc = EventRecord;
 
 interface EventsSearch {
   month?: string; // YYYY-MM
@@ -532,18 +519,8 @@ export const Route = createFileRoute("/_navbarLayout/events/")({
   loader: async ({ deps }) => {
     const { search } = deps;
     try {
-      const queryParams = new URLSearchParams();
-      if (search.site) queryParams.set("site", search.site);
-      if (search.month) queryParams.set("month", search.month);
-
-      const res = await fetch(`/api/events?${queryParams.toString()}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      });
-      if (!res.ok) return { events: [] as EventDoc[] };
-      const json = await res.json();
-      return { events: (json.data || []) as EventDoc[] };
+      const response = await eventsService.list(search.site, search.month);
+      return { events: response.data || [] };
     } catch {
       return { events: [] as EventDoc[] };
     }
@@ -708,23 +685,12 @@ function RouteComponent() {
     setSubmitting(true);
     setComposeError(null);
     try {
-      const res = await fetch("/api/events", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          date: composeDate,
-          site: site,
-        }),
+      await eventsService.create({
+        title: title.trim(),
+        description: description.trim(),
+        date: composeDate,
+        site,
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.message || "Failed to create event.");
-      }
       setComposeDate(null);
       await router.invalidate();
     } catch (err: any) {
@@ -739,22 +705,7 @@ function RouteComponent() {
     setDeleting(true);
     setViewError(null);
     try {
-      const res = await fetch(`/api/events/${viewing._id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        throw new Error(
-          data?.message ||
-            "Events can only be deleted by the owner of the event or an Admin.",
-        );
-      }
-
+      await eventsService.remove(viewing);
       setViewing(null);
       await router.invalidate();
     } catch (err: any) {

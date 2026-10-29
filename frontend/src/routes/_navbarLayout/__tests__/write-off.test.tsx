@@ -59,6 +59,12 @@ vi.mock('axios', () => ({
   },
 }))
 
+vi.mock('@/api/cycle-count/cycle-count.service', () => ({
+  cycleCountService: {
+    searchItemsForWriteOff: vi.fn().mockResolvedValue([]),
+  },
+}))
+
 // ─── Component imports (after mocks) ────────────────────────────────────────
 
 import { Route as CreateRoute, REASONS, REASON_COLORS } from '../write-off/create'
