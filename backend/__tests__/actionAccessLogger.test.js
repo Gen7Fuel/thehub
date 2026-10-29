@@ -62,6 +62,21 @@ describe('actionAccessLogger', () => {
     }))
   })
 
+  it('uses the client address resolved by Express instead of parsing a spoofable header', async () => {
+    const res = response(200)
+    actionAccessLogger({ enqueueAccessLog })(request({
+      'X-Forwarded-For': '192.0.2.99',
+    }, {
+      ip: '198.51.100.18',
+    }), res, vi.fn())
+    res.emit('finish')
+    await Promise.resolve()
+
+    expect(enqueueAccessLog).toHaveBeenCalledWith(expect.objectContaining({
+      ip: '198.51.100.18',
+    }))
+  })
+
   it('uses method and path defaults for unannotated requests', async () => {
     const res = response(200)
     actionAccessLogger({ enqueueAccessLog })(request(), res, vi.fn())

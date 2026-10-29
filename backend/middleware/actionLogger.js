@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const { getClientIp } = require('../utils/clientIp');
 const { enqueueActionLog } = require('../queues/actionLogQueue');
 const { computeAuditDiff, buildAuditMessage } = require('../utils/auditDiff');
 
@@ -44,7 +45,7 @@ async function logAction(req, {
           changesTruncated: suppliedChangesTruncated,
         }
       : computeAuditDiff(before, after, diffOptions);
-    const ip = (req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()) || req.ip;
+    const ip = getClientIp(req);
     const userAgent = req.headers['user-agent'];
 
     await enqueueActionLog({

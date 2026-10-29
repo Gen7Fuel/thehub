@@ -82,7 +82,11 @@ export default defineConfig({
     },
     proxy: isDocker 
   ? {
-      '/api': 'http://backend:5000',
+      '/api': {
+        target: 'http://backend:5000',
+        changeOrigin: true,
+        xfwd: true,
+      },
       '/login-auth': 'http://auth-backend:5005',
       '/socket.io': {
         target: 'http://backend:5000',
@@ -92,7 +96,11 @@ export default defineConfig({
       '/cdn': 'http://cdn:5001',
     }
   : {
-      '/api': 'http://localhost:5000',
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        xfwd: true,
+      },
       '/login-auth': 'http://localhost:5005',
       '/socket.io': {
         target: 'http://localhost:5000',

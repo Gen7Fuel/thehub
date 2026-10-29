@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const { enqueueChangeLog } = require('../queues/changeLogQueue');
 const { computeAuditDiff, buildAuditMessage } = require('../utils/auditDiff');
+const { getClientIp } = require('../utils/clientIp');
 
 function getActor(req) {
   const user = req.user || {};
@@ -66,7 +67,7 @@ async function logChange(req, {
       source,
       method,
       path,
-      ip: req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip,
+      ip: getClientIp(req),
       userAgent: req.headers['user-agent'],
       requestId: req.requestId,
       correlationId,
