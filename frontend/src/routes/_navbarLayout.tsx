@@ -18,6 +18,7 @@ import { OfflineBanner } from "@/components/custom/OfflineBanner";
 import FuelPriceTicker from "@/components/custom/FuelPriceTicker";
 import { getSocket } from "@/lib/websocket";
 import axios from "axios";
+import { fuelPricingService } from "@/api/fuel-pricing/fuel-pricing.service";
 import { Toaster } from "sonner";
 import {
   createFileRoute,
@@ -112,18 +113,12 @@ function RouteComponent() {
   // --- RE-HYDRATION AND INITIALIZATION SYSTEM ---
   const verifyPendingPriceStatus = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) return;
+      if (!localStorage.getItem("token")) return;
 
-      const res = await axios.get(
-        "/api/fuel-pricing/check-pending-verification",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const data = await fuelPricingService.checkPendingVerification<any>();
 
-      if (res.data?.requiresVerification && res.data?.payload) {
-        setPricePayload(res.data.payload);
+      if (data?.requiresVerification && data?.payload) {
+        setPricePayload(data.payload);
         setIsPriceOverlayActive(true);
       }
     } catch (err) {
@@ -211,18 +206,14 @@ function RouteComponent() {
 
       const [bullochRes, infonetRes] = await Promise.all(uploadPromises);
 
-      const token = localStorage.getItem("token");
-      await axios.put(
-        "/api/fuel-pricing/verify-price-receipt",
+      await fuelPricingService.verifyPriceReceipt(
         {
           locationId: pricePayload.locationId,
           filename: bullochRes.filename,
           // Pass null or clean empty string if site configuration bypasses infonet checks entirely
           infonetFilename: requiresInfoNetUpload ? infonetRes?.filename : null,
         },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+        pricePayload.stationName,
       );
     },
     onSuccess: () => {

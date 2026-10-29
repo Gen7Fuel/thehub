@@ -1984,7 +1984,11 @@ function FuelPricingPanel() {
   const { selectedSite } = useSite();
   const { recommendedPrices } = useFuelPricingContext();
 
-  const pricingState = useFuelPricing({ user, selectedSite });
+  const pricingState = useFuelPricing({
+    user,
+    selectedSite,
+    source: 'fuel-pricing.desktop',
+  });
 
   const {
     prices,
