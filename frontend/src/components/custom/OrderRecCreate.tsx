@@ -6,6 +6,7 @@ import { SitePicker } from '@/components/custom/sitePicker'
 import { VendorPicker } from '@/components/custom/vendorPicker'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
+import { useHandheldScanner } from '@/lib/useHandheldScanner'
 
 interface ScannedItem {
   id: number
@@ -70,6 +71,7 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [lastScannedId, setLastScannedId] = useState<number | null>(null)
   const input = useRef<HTMLInputElement>(null)
   const queue = useRef(Promise.resolve())
   const submitting = useRef(false)
@@ -88,10 +90,12 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
     try { sessionStorage.setItem(storageKey, JSON.stringify(draft)) } catch { /* Scanning still works without storage. */ }
   }, [draft, storageKey])
 
-  function scan() {
-    const code = upc.trim()
+  useHandheldScanner({ enabled: !!site && !saving, upcInput: input, onScan: code => scan(code) })
+
+  function scan(barcode = upc) {
+    const code = barcode.trim()
     if (!code || !site || submitting.current) return
-    setUpc('')
+    setUpc(code)
     setError('')
     setNotice('')
     if (!/^\d{6,14}$/.test(code) || !code.replace(/^0+/, '')) {
@@ -115,11 +119,13 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
           const existing = current.items.find(row => row.id === item.id)
           return {
             ...current,
-            items: existing
-              ? current.items.map(row => row.id === item.id ? { ...item, quantity: Math.min(row.quantity + 1, 99999) } : row)
-              : [...current.items, { ...item, quantity: 1 }],
+            items: [
+              { ...item, quantity: existing ? Math.min(existing.quantity + 1, 99999) : 1 },
+              ...current.items.filter(row => row.id !== item.id),
+            ],
           }
         })
+        setLastScannedId(item.id)
         setNotice(`${item.itemName} scanned.`)
       } catch (err) {
         if (mounted.current) setError(`${code}: ${err instanceof Error ? err.message : 'Lookup failed. Please scan again.'}`)
@@ -179,13 +185,13 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
       </div>
 
       <section className="sticky top-16 z-[5] rounded-xl border bg-background p-3 shadow-sm" aria-label="Barcode scanner">
-        <form onSubmit={event => { event.preventDefault(); scan() }}>
+        <form onSubmit={event => { event.preventDefault(); scan(); input.current?.focus({ preventScroll: true }); input.current?.select() }}>
           <label htmlFor="order-upc" className="mb-2 flex items-center gap-2 text-sm font-semibold"><Barcode className="h-5 w-5" />UPC barcode</label>
           <div className="flex gap-2">
             <input ref={input} id="order-upc" value={upc} onChange={event => setUpc(event.target.value)}
-              onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+              onFocus={event => { setFocused(true); event.target.select() }} onBlur={() => setFocused(false)}
               onKeyDown={event => {
-                if (event.key === 'Tab' && upc.trim()) { event.preventDefault(); scan() }
+                if ((event.key === 'Tab' || event.key === 'Enter') && upc.trim()) { event.preventDefault(); scan() }
               }}
               inputMode="none" autoComplete="off" autoCorrect="off" spellCheck={false}
               disabled={!site || saving} placeholder="Scan or enter UPC" aria-describedby="order-scan-status"
@@ -194,7 +200,7 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
           </div>
         </form>
         <p id="order-scan-status" role="status" className={`mt-2 text-sm ${focused ? 'font-medium text-primary' : 'text-muted-foreground'}`}>
-          {focused ? 'Scan a barcode using the handheld scanner.' : 'Tap the UPC field to start scanning.'}
+          {focused ? 'Scan a barcode using the handheld scanner.' : 'Handheld scanner ready. You can keep editing quantities.'}
         </p>
         {pending > 0 && <p className="mt-1 text-xs text-muted-foreground" role="status">Looking up {pending} scan{pending === 1 ? '' : 's'}…</p>}
         {notice && <p className="mt-1 text-xs text-muted-foreground" role="status">{notice}</p>}
@@ -210,12 +216,13 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
         <div className="rounded-xl border border-dashed px-4 py-10 text-center">
           <Package className="mx-auto mb-3 h-9 w-9 text-muted-foreground" />
           <h2 className="font-semibold">Your order starts here</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Choose a store, tap the UPC field, and scan your first item.</p>
+          <p className="mt-2 text-sm text-muted-foreground">Choose a store and scan your first item.</p>
         </div>
       ) : (
         <ul className="space-y-3" aria-label="Items to order">
           {items.map(item => (
-            <li key={item.id} className="rounded-xl border bg-card p-4 shadow-sm">
+            <li key={item.id} className={`rounded-xl border p-4 shadow-sm transition-colors ${item.id === lastScannedId ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'bg-card'}`}>
+              {item.id === lastScannedId && <p className="mb-2 flex items-center gap-1 text-xs font-semibold text-primary"><Check className="h-3 w-3" />Last scanned</p>}
               <div className="flex items-start gap-3">
                 {item.imageUrl && <img src={item.imageUrl} alt="" loading="lazy" className="h-16 w-14 shrink-0 object-contain" />}
                 <div className="min-w-0 flex-1">
@@ -240,8 +247,15 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
                 <div className="flex items-center rounded-lg border">
                   <Button variant="ghost" className="h-12 w-12 rounded-r-none" aria-label={`Decrease ${item.itemName}`} disabled={saving || item.quantity === 0}
                     onClick={() => changeQuantity(item.id, item.quantity - 1)}><Minus /></Button>
-                  <input id={`quantity-${item.id}`} type="number" min={0} max={99999} step={1} inputMode="numeric"
+                  <input id={`quantity-${item.id}`} type="text" role="spinbutton" data-scan-quantity
+                    aria-valuemin={0} aria-valuemax={99999} aria-valuenow={item.quantity} inputMode="numeric" pattern="[0-9]*"
                     value={item.quantity} disabled={saving} onChange={event => { if (event.target.value !== '') changeQuantity(item.id, Number(event.target.value)) }}
+                    onKeyDown={event => {
+                      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                        event.preventDefault()
+                        changeQuantity(item.id, Math.max(0, Math.min(99999, item.quantity + (event.key === 'ArrowUp' ? 1 : -1))))
+                      }
+                    }}
                     className="h-12 w-16 border-x bg-transparent text-center text-lg font-bold" />
                   <Button variant="ghost" className="h-12 w-12 rounded-l-none" aria-label={`Increase ${item.itemName}`} disabled={saving || item.quantity >= 99999}
                     onClick={() => changeQuantity(item.id, item.quantity + 1)}><Plus /></Button>

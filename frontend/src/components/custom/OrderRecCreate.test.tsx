@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { OrderRecCreate } from './OrderRecCreate'
 
 const { navigate, auth } = vi.hoisted(() => ({
@@ -23,8 +24,10 @@ const scan = (code = '012345678905', key = 'Enter') => {
   const textbox = screen.getByLabelText('UPC barcode')
   fireEvent.change(textbox, { target: { value: code } })
   fireEvent.keyDown(textbox, { key })
-  // jsdom doesn't synthesize the browser's implicit form submission.
-  if (key === 'Enter') fireEvent.submit(textbox.closest('form')!)
+}
+const scannerKeys = (target: HTMLElement, code = '012345678905', terminator?: string) => {
+  for (const key of code) fireEvent.keyDown(target, { key })
+  if (terminator) fireEvent.keyDown(target, { key: terminator })
 }
 const loaded = () => waitFor(() => expect(screen.getByText('Coffee')).toBeInTheDocument(), { timeout: 5000 })
 
@@ -37,6 +40,7 @@ describe('Scan to Order', () => {
     localStorage.setItem('token', 'test-token')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(item)))
   })
+  afterEach(() => cleanup())
 
   it('blocks direct access without the scanner permission before mounting the editor', () => {
     auth.user.access.orderRec.scanToOrder = false
@@ -62,6 +66,7 @@ describe('Scan to Order', () => {
     expect(screen.getByText('Scan a barcode using the handheld scanner.')).toBeInTheDocument()
     fireEvent.blur(input)
     expect(screen.queryByText('Scan a barcode using the handheld scanner.')).not.toBeInTheDocument()
+    expect(screen.getByText('Handheld scanner ready. You can keep editing quantities.')).toBeInTheDocument()
     expect(input).toHaveAttribute('inputmode', 'none')
   })
 
@@ -72,16 +77,39 @@ describe('Scan to Order', () => {
     expect(screen.getByText('12.5')).toBeInTheDocument()
     expect(screen.getByText('24 units per case')).toBeInTheDocument()
     expect(screen.getByText(`Inventory as of ${new Date(item.lastInventoryDate).toLocaleDateString(undefined, { timeZone: 'UTC' })}`)).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton')).toHaveValue(1)
+    expect(screen.getByRole('spinbutton')).toHaveValue('1')
     scan()
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(2))
+    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue('2'))
     expect(screen.getAllByText('Coffee')).toHaveLength(1)
     fireEvent.click(screen.getByLabelText('Increase Coffee'))
-    expect(screen.getByRole('spinbutton')).toHaveValue(3)
+    expect(screen.getByRole('spinbutton')).toHaveValue('3')
     fireEvent.click(screen.getByLabelText('Decrease Coffee'))
-    expect(screen.getByRole('spinbutton')).toHaveValue(2)
+    expect(screen.getByRole('spinbutton')).toHaveValue('2')
     fireEvent.click(screen.getByLabelText('Remove Coffee'))
     expect(screen.queryByText('Coffee')).not.toBeInTheDocument()
+  })
+
+  it('puts the latest scan first and highlights it, including repeat scans', async () => {
+    render(<OrderRecCreate />)
+    scan()
+    await loaded()
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...item, id: 8, itemName: 'Tea', upc: '012345678906' }))
+    scan('012345678906')
+    await waitFor(() => expect(screen.getByText('Tea')).toBeInTheDocument())
+    const list = screen.getByRole('list', { name: 'Items to order' })
+    let rows = within(list).getAllByRole('listitem')
+    expect(within(rows[0]).getByRole('heading')).toHaveTextContent('Tea')
+    expect(within(rows[0]).getByText('Last scanned')).toBeInTheDocument()
+    expect(within(rows[1]).queryByText('Last scanned')).not.toBeInTheDocument()
+
+    scan()
+    await waitFor(() => expect(within(within(list).getAllByRole('listitem')[0]).getByRole('heading')).toHaveTextContent('Coffee'))
+    rows = within(list).getAllByRole('listitem')
+    expect(rows).toHaveLength(2)
+    expect(within(rows[0]).getByRole('spinbutton')).toHaveValue('2')
+    expect(within(rows[0]).getByText('Last scanned')).toBeInTheDocument()
+    expect(within(rows[1]).getByRole('heading')).toHaveTextContent('Tea')
+    expect(within(rows[1]).queryByText('Last scanned')).not.toBeInTheDocument()
   })
 
   it('accepts a scanner Tab terminator and keeps focus in the textbox', async () => {
@@ -91,7 +119,7 @@ describe('Scan to Order', () => {
     scan('012345678905', 'Tab')
     await loaded()
     expect(input).toHaveFocus()
-    expect(input).toHaveValue('')
+    expect(input).toHaveValue('012345678905')
   })
 
   it('queues quick scans while a lookup is still in progress', async () => {
@@ -102,7 +130,7 @@ describe('Scan to Order', () => {
     scan()
     await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
     resolve(response(item))
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(2))
+    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue('2'))
     expect(fetch).toHaveBeenCalledTimes(2)
   })
 
@@ -155,5 +183,85 @@ describe('Scan to Order', () => {
     render(<OrderRecCreate />)
     expect(screen.getByText('Coffee')).toBeInTheDocument()
     expect(screen.getByLabelText('Vendor')).toHaveValue('vendor-1')
+  })
+
+  it.each(['Enter', 'Tab'])('automatically adds a scan ending in %s without focusing UPC', async terminator => {
+    render(<OrderRecCreate />)
+    scannerKeys(document.body, '012345678905', terminator)
+    await loaded()
+    expect(screen.getByLabelText('UPC barcode')).toHaveValue('012345678905')
+    expect(screen.getByLabelText('UPC barcode')).not.toHaveFocus()
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('automatically adds a scan without an Enter or Tab suffix', async () => {
+    render(<OrderRecCreate />)
+    scannerKeys(document.body)
+    await loaded()
+    expect(screen.getByLabelText('UPC barcode')).toHaveValue('012345678905')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('scans while editing a quantity without inserting barcode digits into it', async () => {
+    render(<OrderRecCreate />)
+    scan()
+    await loaded()
+    fireEvent.click(screen.getByLabelText('Increase Coffee'))
+    const quantity = screen.getByRole('spinbutton') as HTMLInputElement
+    quantity.focus()
+    quantity.select()
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...item, id: 8, itemName: 'Tea', upc: '012345678906' }))
+    scannerKeys(quantity, '012345678906', 'Enter')
+    await waitFor(() => expect(screen.getByText('Tea')).toBeInTheDocument())
+    expect(quantity).toHaveValue('2')
+    expect(quantity).toHaveFocus()
+    expect(screen.getByLabelText('UPC barcode')).toHaveValue('012345678906')
+  })
+
+  it('allows ordinary keyboard quantity editing, caret insertion, and arrow keys', async () => {
+    render(<OrderRecCreate />)
+    scan()
+    await loaded()
+    const quantity = screen.getByRole('spinbutton') as HTMLInputElement
+    const user = userEvent.setup({ delay: 100 })
+    quantity.focus()
+    quantity.select()
+    await user.keyboard('42')
+    await waitFor(() => expect(quantity).toHaveValue('42'))
+    quantity.setSelectionRange(1, 1)
+    await user.keyboard('3')
+    await waitFor(() => expect(quantity).toHaveValue('432'))
+    await user.keyboard('{ArrowUp}')
+    expect(quantity).toHaveValue('433')
+    await user.keyboard('{ArrowDown}')
+    expect(quantity).toHaveValue('432')
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('accepts a barcode pasted by a scanner while a quantity has focus', async () => {
+    render(<OrderRecCreate />)
+    scan()
+    await loaded()
+    const quantity = screen.getByRole('spinbutton')
+    quantity.focus()
+    fireEvent.paste(quantity, { clipboardData: { getData: () => '012345678905' } })
+    await waitFor(() => expect(quantity).toHaveValue('2'))
+    expect(quantity).toHaveFocus()
+  })
+
+  it('keeps consecutive rapid scans in order and does not add twice for a trailing Enter', async () => {
+    render(<OrderRecCreate />)
+    scannerKeys(document.body, '012345678905', 'Enter')
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    scannerKeys(document.body, '012345678905', 'Tab')
+    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue('2'))
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('removes scanner listeners on leaving the page', async () => {
+    const view = render(<OrderRecCreate />)
+    view.unmount()
+    scannerKeys(document.body, '012345678905', 'Enter')
+    expect(fetch).not.toHaveBeenCalled()
   })
 })
