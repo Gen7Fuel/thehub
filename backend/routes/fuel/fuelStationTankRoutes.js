@@ -1209,7 +1209,8 @@ router.patch("/manual-update/:tankId", async (req, res) => {
     await logChange(req, {
       action: 'update', resourceType: 'fuel-station-tank', resourceId: updatedTank._id,
       resourceLabel: `Tank #${updatedTank.tankNo}`, before, after: updatedTank.toObject(),
-      success: true, statusCode: 200, source: 'fuel-management.volume',
+      success: true, statusCode: 200,
+      source: req.headers['x-action-source'] || 'fuel-management.volume',
     });
 
     res.json(updatedTank);
