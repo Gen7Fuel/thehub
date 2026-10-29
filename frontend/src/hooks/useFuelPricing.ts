@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import axios from "axios";
 import { toast } from "sonner"; // or your preferred toast library
+import { isApiError } from "@/api/core/errors";
+import { fuelPricingService } from "@/api/fuel-pricing/fuel-pricing.service";
+import type { FuelPricingSource } from "@/api/fuel-pricing/fuel-pricing.types";
+import { locationsApi } from "@/api/locations/locations.api";
+import { actionOptions } from "@/api/resources/action-options";
 
 export const SORTED_DISPLAY_GRADES = [
   { id: "REG", label: "Regular", lookup: "Regular" },
@@ -74,9 +78,15 @@ export const formatRawStationString = (dateTimeStr: string | undefined) => {
 export interface UseFuelPricingOptions {
   user: any;
   selectedSite: string;
+  source: Extract<FuelPricingSource, 'fuel-pricing.desktop' | 'fuel-pricing.mobile'>;
 }
 
-export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
+type FuelPricingOperation =
+  | { type: 'publish'; payload: any }
+  | { type: 'update-schedule'; payload: any }
+  | { type: 'cancel-schedule' };
+
+export function useFuelPricing({ user, selectedSite, source }: UseFuelPricingOptions) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -97,15 +107,8 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDateTime, setScheduledDateTime] = useState("");
 
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelPricing.setFuelPrice",
-    },
-  };
-
-  const handleAxiosErrorCheck = (err: any) => {
-    if (axios.isAxiosError(err) && err.response?.status === 403) {
+  const handleApiErrorCheck = (err: unknown) => {
+    if (isApiError(err) && err.status === 403) {
       navigate({ to: "/no-access" });
       return true;
     }
@@ -117,18 +120,23 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     data: dbLocation,
     isLoading: loadingMongo,
     isError: mongoError,
-  } = useQuery({
+  } = useQuery<any>({
     queryKey: ["location-by-name", selectedSite],
     queryFn: async () => {
       if (!selectedSite) return null;
       try {
-        const res = await axios.get(
-          `/api/locations/name/${encodeURIComponent(selectedSite)}`,
-          authHeader,
+        return await locationsApi.getByName(
+          selectedSite,
+          actionOptions(
+            'fuelPricing.setFuelPrice',
+            source,
+            'read',
+            'location',
+            `Fuel pricing location details loaded for ${selectedSite}`,
+          ),
         );
-        return res.data;
       } catch (err) {
-        if (handleAxiosErrorCheck(err)) return null;
+        if (handleApiErrorCheck(err)) return null;
         throw err;
       }
     },
@@ -143,18 +151,18 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     data: activePostgresPrices,
     isLoading: loadingPostgres,
     refetch: reloadPostgres,
-  } = useQuery({
+  } = useQuery<Record<string, any> | null>({
     queryKey: ["postgres-current-prices", locationMongoId],
     queryFn: async () => {
       if (!locationMongoId) return null;
       try {
-        const res = await axios.get(
-          `/api/fuel-pricing/current/${locationMongoId}`,
-          authHeader,
+        return await fuelPricingService.getCurrent(
+          locationMongoId,
+          selectedSite,
+          source,
         );
-        return res.data;
       } catch (err) {
-        if (handleAxiosErrorCheck(err)) return null;
+        if (handleApiErrorCheck(err)) return null;
         throw err;
       }
     },
@@ -181,11 +189,7 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     queryKey: ["fuel-pricing-history-logs", locationMongoId],
     queryFn: async () => {
       if (!locationMongoId) return null;
-      const res = await axios.get(
-        `/api/fuel-pricing/logs/${locationMongoId}`,
-        authHeader,
-      );
-      return res.data?.logs || [];
+      return fuelPricingService.getLogs(locationMongoId, selectedSite, source);
     },
     enabled: !!locationMongoId && isLogsOpen,
   });
@@ -242,28 +246,23 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
 
   // Unified Mutation Architecture with Smart Notification Feedback
   const submitPricesMutation = useMutation({
-    mutationFn: async ({
-      payload,
-      method,
-      route,
-    }: {
-      payload: any;
-      method: "post" | "put" | "delete";
-      route: string;
-    }) => {
-      if (method === "delete") {
-        return (await axios.delete(route, authHeader)).data;
+    mutationFn: async (operation: FuelPricingOperation) => {
+      if (operation.type === 'cancel-schedule') {
+        return fuelPricingService.cancelSchedule(locationMongoId!, selectedSite, source);
       }
-      return (await axios[method](route, payload, authHeader)).data;
+      if (operation.type === 'update-schedule') {
+        return fuelPricingService.updateSchedule(operation.payload, selectedSite, source);
+      }
+      return fuelPricingService.publish(operation.payload, source);
     },
     onSuccess: (data: any, variables: any) => {
-      if (variables.method === "delete") {
+      if (variables.type === "cancel-schedule") {
         toast.success("Pending Pricing Schedule Deleted Successfully", {
           description: data?.message || "All scheduled fuel price changes have been cleared.",
           duration: 10000,
         });
         setIsRemoveScheduleOpen(false);
-      } else if (variables.method === "put") {
+      } else if (variables.type === "update-schedule") {
         toast.success("Pricing Schedule Updated Successfully", {
           description: data?.message || "The price schedule has been adjusted.",
           duration: 10000,
@@ -315,10 +314,10 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
       reloadPostgres();
     },
     onError: (err: any) => {
-      if (handleAxiosErrorCheck(err)) return;
+      if (handleApiErrorCheck(err)) return;
 
       const errorMessage =
-        err?.response?.data?.message ||
+        (isApiError(err) && err.message) ||
         "Transmission pipeline failed. Please re-verify values and try again.";
 
       toast.error("Transmission Pipeline Failure", {
@@ -421,8 +420,7 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     });
 
     submitPricesMutation.mutate({
-      method: "post",
-      route: "/api/fuel-pricing/upsert-retail",
+      type: "publish",
       payload: {
         locationId: locationMongoId,
         stationName: selectedSite,
@@ -450,8 +448,7 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
     });
 
     submitPricesMutation.mutate({
-      method: "put",
-      route: "/api/fuel-pricing/edit-schedule-prices",
+      type: "update-schedule",
       payload: {
         locationId: locationMongoId,
         prices: parsedPricePayload,
@@ -462,9 +459,7 @@ export function useFuelPricing({ user, selectedSite }: UseFuelPricingOptions) {
 
   const handleExecuteDeleteSchedule = () => {
     submitPricesMutation.mutate({
-      method: "delete",
-      route: `/api/fuel-pricing/cancel-schedule/${locationMongoId}`,
-      payload: null,
+      type: "cancel-schedule",
     });
   };
 

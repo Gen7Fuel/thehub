@@ -2,6 +2,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
+import { fuelStatisticsService } from '@/api/fuel-management/fuel-statistics.service'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -62,13 +64,6 @@ export const Route = createFileRoute(
 )({
   component: FuelStatisticsComponent,
 });
-
-const authHeader = {
-  headers: {
-    Authorization: `Bearer ${localStorage.getItem("token")}`,
-    "X-Required-Permission": "fuelManagement.statistics",
-  },
-};
 
 // Removed Mid Grade
 const ALL_GRADES = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
@@ -268,13 +263,13 @@ function FuelStatisticsComponent() {
   const { data: locations = [] } = useQuery({
     queryKey: ["all-locations"],
     queryFn: async () => {
-      const res = await axios
-        .get("/api/fuel-station-tanks/all-locations", authHeader)
+      const data = await fuelStationTanksService
+        .listLocations<any[]>('fuel-management.statistics', 'Fuel statistics stations viewed', 'fuelManagement.statistics')
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) return { data: { data: [] } };
+          if (handleAxiosErrorCheck(err)) return [];
           throw err;
         });
-      return res.data;
+      return data;
     },
     retry: 2,
   });
@@ -295,13 +290,13 @@ function FuelStatisticsComponent() {
   const { data: rawTanksResponse = [], isLoading: isTanksLoading } = useQuery({
     queryKey: ["fuel-tank-live-volumes"],
     queryFn: async () => {
-      const res = await axios
-        .get("/api/fuel-station-tanks/sync-all-volumes", authHeader)
+      const data = await fuelStationTanksService
+        .syncAllVolumes<any[]>('fuel-management.statistics', 'Current fuel tank volumes viewed for statistics', 'fuelManagement.statistics')
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) return { data: [] };
+          if (handleAxiosErrorCheck(err)) return [];
           throw err;
         });
-      return res.data || [];
+      return data || [];
     },
   });
 
@@ -335,19 +330,15 @@ function FuelStatisticsComponent() {
       if (activeTankCoveragePairs.length === 0) {
         return { byGrade: {}, forecastDays: [] };
       }
-      const res = await axios
-        .post(
-          "/api/fuel-statistics/inventory-coverage",
-          { stationGradePairs: activeTankCoveragePairs, horizonDays: 14 },
-          authHeader,
-        )
+      const data = await fuelStatisticsService
+        .inventoryCoverage<any>(activeTankCoveragePairs, 14)
         .catch((err) => {
           if (handleAxiosErrorCheck(err)) {
-            return { data: { data: { byGrade: {}, forecastDays: [] } } };
+            return { data: { byGrade: {}, forecastDays: [] } };
           }
           throw err;
         });
-      return res.data?.data || { byGrade: {}, forecastDays: [] };
+      return data?.data || { byGrade: {}, forecastDays: [] };
     },
     enabled: activeTankCoveragePairs.length > 0,
   });
@@ -359,17 +350,13 @@ function FuelStatisticsComponent() {
         if (selectedStationIds.length === 0 || !fromMonth || !toMonth) {
           return [];
         }
-        const res = await axios
-          .post(
-            "/api/fuel-statistics/pipeline-summary",
-            { stationIds: selectedStationIds, fromMonth, toMonth },
-            authHeader,
-          )
+        const data = await fuelStatisticsService
+          .pipelineSummary<any>(selectedStationIds, fromMonth, toMonth)
           .catch((err) => {
-            if (handleAxiosErrorCheck(err)) return { data: { data: [] } };
+            if (handleAxiosErrorCheck(err)) return { data: [] };
             throw err;
           });
-        return res.data?.data || [];
+        return data?.data || [];
       },
       enabled:
         selectedStationIds.length > 0 && Boolean(fromMonth) && Boolean(toMonth),
@@ -382,17 +369,13 @@ function FuelStatisticsComponent() {
       if (selectedStationIds.length === 0 || !fromMonth || !toMonth) {
         return [];
       }
-      const res = await axios
-        .post(
-          "/api/fuel-statistics/sales-summary",
-          { stationIds: selectedStationIds, fromMonth, toMonth },
-          authHeader,
-        )
+      const data = await fuelStatisticsService
+        .salesSummary<any>(selectedStationIds, fromMonth, toMonth)
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) return { data: { data: [] } };
+          if (handleAxiosErrorCheck(err)) return { data: [] };
           throw err;
         });
-      return res.data?.data || [];
+      return data?.data || [];
     },
     enabled:
       selectedStationIds.length > 0 && Boolean(fromMonth) && Boolean(toMonth),

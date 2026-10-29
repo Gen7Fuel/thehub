@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Save, Truck } from 'lucide-react'
-import axios from 'axios'
+import { fuelCarriersService } from '@/api/fuel-management/fuel-carriers.service'
 import { useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/carriers/new')({
@@ -28,9 +28,7 @@ function NewCarrierComponent() {
     setIsSubmitting(true)
 
     try {
-      const res = await axios.post('/api/fuel-carriers', formData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      const carrier = await fuelCarriersService.create<any>(formData, formData.carrierName)
 
       // Invalidate the list query so the middle column refreshes
       queryClient.invalidateQueries({ queryKey: ['fuel-carriers'] })
@@ -38,7 +36,7 @@ function NewCarrierComponent() {
       // Navigate to the newly created carrier
       navigate({
         to: '/fuel-management/manage/carriers/$id',
-        params: { id: res.data._id }
+        params: { id: carrier._id }
       })
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to create carrier")

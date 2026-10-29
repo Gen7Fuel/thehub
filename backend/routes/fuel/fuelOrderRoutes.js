@@ -9,6 +9,7 @@ const FuelRack = require('../../models/fuel/FuelRack');
 const { emailQueue } = require('../../queues/emailQueue');
 const { fuelOrderDraftQueue } = require('../../queues/fuelOrderDraftQueue');
 const moment = require('moment-timezone');
+const { logChange } = require('../../middleware/changeLogger');
 // const { processUpcomingOrderNotifications } = require('../../cron_jobs/fuelOrderEODCron');
 
 function buildRetainComment(retainItems) {
@@ -557,6 +558,16 @@ router.post('/', async (req, res) => {
       },
     );
 
+    await logChange(req, {
+      action: 'create', resourceType: 'fuel-order',
+      resourceIds: savedOrders.map((order) => order._id),
+      resourceLabel: poNumbers.join(', '), before: null,
+      after: savedOrders.map((order) => order.toObject()),
+      success: true, statusCode: 201, source: 'fuel-management.create-order',
+      bulk: { count: savedOrders.length },
+      message: `${savedOrders.length} fuel order${savedOrders.length === 1 ? '' : 's'} created: ${poNumbers.join(', ')}`,
+    });
+
     res.status(201).json({
       message: "Order(s) created and email draft queued.",
       orders: savedOrders,
@@ -686,6 +697,7 @@ router.post('/retain', async (req, res) => {
       }]
     });
 
+    const sourceBefore = sourceOrder.toObject();
     const savedOrder = await retainOrder.save();
     if (actualDeliveredItems) {
       sourceOrder.items = actualDeliveredItems;
@@ -698,6 +710,20 @@ router.post('/retain', async (req, res) => {
       timestamp: new Date()
     });
     await sourceOrder.save();
+
+    await logChange(req, {
+      action: 'create', resourceType: 'fuel-order', resourceId: savedOrder._id,
+      resourceLabel: savedOrder.poNumber, before: null, after: savedOrder.toObject(),
+      success: true, statusCode: 201, source: 'fuel-management.workspace',
+      message: `Fuel retain order ${savedOrder.poNumber} created from ${sourceOrder.poNumber}`,
+    });
+    await logChange(req, {
+      action: 'update', resourceType: 'fuel-order', resourceId: sourceOrder._id,
+      resourceLabel: sourceOrder.poNumber, before: sourceBefore, after: sourceOrder.toObject(),
+      success: true, statusCode: 200, source: 'fuel-management.workspace',
+      message: `Source fuel order ${sourceOrder.poNumber} updated after retain to ${savedOrder.poNumber}`,
+      correlationId: savedOrder._id.toString(),
+    });
 
     res.status(201).json({
       message: 'Retain order created.',
@@ -735,6 +761,7 @@ router.put('/:id', async (req, res) => {
 
     const order = await FuelOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
+    const before = order.toObject();
 
     // Enforce business constraint rule: Cancelled requires a payload comment text block
     if (currentStatus === 'Cancelled' && (!comment || !comment.text.trim())) {
@@ -786,6 +813,11 @@ router.put('/:id', async (req, res) => {
     }
 
     await order.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'fuel-order', resourceId: order._id,
+      resourceLabel: order.poNumber, before, after: order.toObject(),
+      success: true, statusCode: 200, source: 'fuel-management.workspace',
+    });
     res.json(order);
   } catch (err) {
     res.status(500).json({ message: err.message });

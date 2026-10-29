@@ -15,6 +15,7 @@ export interface ActionContext {
 
 export interface RequestOptions {
   actionContext?: ActionContext
+  accessGroupId?: string
   permission?: string
   signal?: AbortSignal
   auth?: boolean

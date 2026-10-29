@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Search, Warehouse, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/racks')({
   component: RackListLayout,
@@ -16,12 +16,7 @@ function RackListLayout() {
 
   const { data: racks = [], isLoading } = useQuery({
     queryKey: ['fuel-racks'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-racks', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
-    }
+    queryFn: () => fuelRacksService.list<any[]>(),
   })
 
   const filteredRacks = useMemo(() => {

@@ -1,6 +1,7 @@
 const { Queue, Worker } = require('bullmq');
 const connection = require('../utils/redisClient');
 const AccessLog = require('../models/AccessLog');
+const { createHash } = require('crypto');
 
 const accessLogQueue = new Queue('accessLogQueue', {
   connection,
@@ -14,11 +15,14 @@ const accessLogQueue = new Queue('accessLogQueue', {
 
 const accessLogWorker = new Worker(
   'accessLogQueue',
-  async (job) => AccessLog.findOneAndUpdate(
-    { eventId: job.data.eventId },
-    { $setOnInsert: job.data },
-    { upsert: true, new: true },
-  ),
+  async (job) => {
+    const { accessGroupId, ...record } = job.data;
+    return AccessLog.findOneAndUpdate(
+      { eventId: record.eventId },
+      { $setOnInsert: record },
+      { upsert: true, new: true },
+    );
+  },
   { connection, concurrency: 5 },
 );
 
@@ -27,7 +31,19 @@ accessLogWorker.on('failed', (job, error) => {
 });
 
 async function enqueueAccessLog(payload) {
-  await accessLogQueue.add('persist-access-log', payload, { jobId: payload.eventId });
+  const deduplication = payload.accessGroupId
+    ? {
+        id: createHash('sha256')
+          .update(`${payload.userId || payload.username || 'anonymous'}|${payload.source}|${payload.resourceType}|${payload.accessGroupId}`)
+          .digest('hex'),
+        ttl: 30000,
+      }
+    : undefined;
+
+  await accessLogQueue.add('persist-access-log', payload, {
+    jobId: payload.eventId,
+    ...(deduplication ? { deduplication } : {}),
+  });
 }
 
 module.exports = { accessLogQueue, accessLogWorker, enqueueAccessLog };

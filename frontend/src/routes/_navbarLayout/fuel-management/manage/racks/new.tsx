@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Save, Warehouse } from 'lucide-react'
-import axios from 'axios'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/racks/new')({
@@ -34,11 +34,9 @@ function NewRackComponent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await axios.post('/api/fuel-racks', formData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      const rack = await fuelRacksService.create<any>(formData, formData.rackName)
       queryClient.invalidateQueries({ queryKey: ['fuel-racks'] })
-      navigate({ to: '/fuel-management/manage/racks/$id', params: { id: res.data._id } })
+      navigate({ to: '/fuel-management/manage/racks/$id', params: { id: rack._id } })
     } catch (err) {
       alert("Failed to create rack")
     }

@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
+import { fuelPricingService } from '@/api/fuel-pricing/fuel-pricing.service';
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from "@/lib/utils";
@@ -58,7 +59,6 @@ import { getOrderRecStatusColor } from "@/lib/utils";
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
 import { getPeriodKey } from "../_navbarLayout/audit/checklist/$id";
-import axios from "axios";
 import { auditService } from '@/api/audit/audit.service';
 import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 import { ArrowDownRight, ArrowUpRight, Minus, Table2 } from "lucide-react";
@@ -1413,10 +1413,7 @@ function RouteComponent() {
   const fetchTickerData = useCallback(async () => {
     try {
       setLoadingTicker(true);
-      const token = localStorage.getItem("token");
-      const { data } = await axios.get("/api/fuel-pricing/prices-ticker", {
-        headers: { Authorization: `Bearer ${token || ""}` },
-      });
+      const data = await fuelPricingService.getTicker<any[]>('fuel-pricing.dashboard');
       setAllTickerData(data || []);
     } catch (err) {
       console.error("Failed fetching pricing ticker:", err);

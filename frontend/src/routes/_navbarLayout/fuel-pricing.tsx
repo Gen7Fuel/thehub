@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { fuelPricingService } from "@/api/fuel-pricing/fuel-pricing.service";
 import { useSite } from "@/context/SiteContext";
 import FuelPricingContext from "@/context/FuelPricingContext";
 import { Card, CardContent } from "@/components/ui/card";
@@ -112,13 +112,6 @@ function FuelPricingDashboard() {
 
   const { setSelectedSite } = useSite();
 
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelPricing",
-    },
-  };
-
   const { data, isLoading, isError } = useQuery({
     queryKey: ["fuel-pricing-matrix"],
     queryFn: async () => {
@@ -128,11 +121,7 @@ function FuelPricingDashboard() {
       const dd = String(localSystemDate.getDate()).padStart(2, "0");
       const systemDateSK = `${yyyy}${mm}${dd}`;
 
-      const res = await axios.get(
-        `/api/fuel-pricing?date=${systemDateSK}`,
-        authHeader,
-      );
-      return res.data;
+      return fuelPricingService.getMatrix<any>(systemDateSK);
     },
   });
 
