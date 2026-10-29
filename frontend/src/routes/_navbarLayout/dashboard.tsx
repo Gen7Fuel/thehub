@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from "@/lib/utils";
@@ -2920,11 +2921,7 @@ const fetchDailyCounts = async (
   startDate: string,
   endDate: string,
 ) => {
-  // Simplified parameters block omitting legacy timezone parameters logic completely
-  const params = new URLSearchParams({ site, startDate, endDate });
-  return fetch(`/api/cycle-count/v2/daily-counts?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then((res) => res.json());
+  return cycleCountService.getDashboardDailyCounts<any>(site, startDate, endDate);
 };
 
 const fetchSalesData = async (rows: any) => {

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Eye, Loader2, Save, AlertTriangle, Layers, MapPin } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 import { useSite } from '@/context/SiteContext'
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/manage/schedule/new')({
@@ -45,11 +45,7 @@ function CreateScheduleView() {
     queryKey: ['date-clash-check', selectedSite, selectedDate],
     queryFn: async () => {
       if (!selectedSite || !selectedDate) return { alreadyExists: false }
-      const res = await axios.get('/api/cycle-count/schedules/check-date', {
-        params: { site: selectedSite, date: selectedDate },
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data as { alreadyExists: boolean }
+      return cycleCountService.checkScheduleDate<{ alreadyExists: boolean }>(selectedSite, selectedDate)
     },
     enabled: !!selectedSite && !!selectedDate
   })
@@ -58,10 +54,7 @@ function CreateScheduleView() {
   const { data: rulesData, isLoading: loadingRules } = useQuery<{ groups: GroupWithRules[] }>({
     queryKey: ['active-rule-definitions'],
     queryFn: async () => {
-      const res = await axios.get('/api/cycle-count/groups/active-rules', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
+      return cycleCountService.listActiveRules<{ groups: GroupWithRules[] }>()
     }
   })
 
@@ -77,15 +70,7 @@ function CreateScheduleView() {
     queryKey: ['item-bk-preview', selectedSite, activeSelectedGroupModel?.filter_column, activeSelectedGroupModel?.allowedValues],
     queryFn: async () => {
       if (!selectedSite || !activeSelectedGroupModel) return { items: [], totalCount: 0 }
-      const res = await axios.get('/api/cycle-count/groups/preview-items', {
-        params: {
-          site: selectedSite,
-          column: activeSelectedGroupModel.filter_column,
-          values: activeSelectedGroupModel.allowedValues.join(',')
-        },
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data as { items: any[]; totalCount: number }
+      return cycleCountService.previewGroupItems<{ items: any[]; totalCount: number }>(selectedSite, activeSelectedGroupModel.filter_column, activeSelectedGroupModel.allowedValues)
     },
     enabled: false
   })
@@ -118,10 +103,7 @@ function CreateScheduleView() {
         filterColumn: activeSelectedGroupModel.filter_column,
         filterValues: activeSelectedGroupModel.allowedValues
       }
-      const res = await axios.post('/api/cycle-count/schedules/create', payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
+      return cycleCountService.createSchedule<any>(payload)
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['cycle-count-instances'] })
@@ -132,7 +114,7 @@ function CreateScheduleView() {
       }
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message || "Pipeline execution failure saving structural records.")
+      alert(err?.message || "Pipeline execution failure saving structural records.")
     }
   })
 

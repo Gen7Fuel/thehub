@@ -2,7 +2,7 @@ import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 
-const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite, mockUseQuery } = vi.hoisted(() => {
+const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite, mockUseQuery, mockCycleCountService } = vi.hoisted(() => {
   const mockUseAuth = vi.fn().mockReturnValue({
     user: { id: 'user-1', location: 'Rankin' },
   })
@@ -20,9 +20,26 @@ const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite
       isFetching: false,
       refetch: vi.fn(),
     }),
+    mockCycleCountService: {
+      getDailyItems: vi.fn(),
+      saveItem: vi.fn(),
+      finalize: vi.fn(),
+      getDailyReport: vi.fn(),
+      getInstanceNotes: vi.fn(),
+      addInstanceNote: vi.fn(),
+      updateManagerCount: vi.fn(),
+      getItemBook: vi.fn(),
+      massEditItemBook: vi.fn(),
+      getFilterableColumns: vi.fn(),
+      getUniqueValues: vi.fn(),
+      previewGroupItems: vi.fn(),
+      createGroup: vi.fn(),
+      listActiveRules: vi.fn(),
+      checkScheduleDate: vi.fn(),
+      createSchedule: vi.fn(),
+    },
   }
 })
-
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
@@ -73,6 +90,14 @@ vi.mock('@/api/product-categories/product-categories.service', () => ({
   productCategoriesService: {
     getCycleCountVariance: vi.fn().mockResolvedValue({ varianceMap: {} }),
   },
+}))
+
+vi.mock('@/api/cycle-count/cycle-count.service', () => ({
+  cycleCountService: mockCycleCountService,
+}))
+
+vi.mock('@/api/core/errors', () => ({
+  isApiError: (error: any) => typeof error?.status === 'number',
 }))
 
 vi.mock('@/components/custom/locationPicker', () => ({
@@ -201,6 +226,9 @@ beforeEach(() => {
     refetch: vi.fn(),
   })
   global.fetch = makeOkFetch({ items: [] })
+  mockCycleCountService.getDailyItems.mockResolvedValue({ items: [], isScheduled: false })
+  mockCycleCountService.getDailyReport.mockResolvedValue({ data: [], instanceId: null })
+  mockCycleCountService.getItemBook.mockResolvedValue({ items: [] })
 })
 
 describe('Cycle Count Index - active count page', () => {
@@ -220,7 +248,7 @@ describe('Cycle Count Index - active count page', () => {
   })
 
   it('shows the tablet loading state while daily items are loading', async () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}))
+    mockCycleCountService.getDailyItems.mockReturnValue(new Promise(() => {}))
 
     renderWithSuspense(<CycleCountIndex />)
 
@@ -228,7 +256,7 @@ describe('Cycle Count Index - active count page', () => {
   })
 
   it('navigates to /no-access when daily items returns 403', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ status: 403, ok: false, json: () => Promise.resolve({}) })
+    mockCycleCountService.getDailyItems.mockRejectedValue({ status: 403 })
 
     renderWithSuspense(<CycleCountIndex />)
 
@@ -319,8 +347,3 @@ describe('Cycle Count Inventory - inventory.tsx', () => {
     )
   })
 })
-
-// Retired pages intentionally left without active coverage while production testing continues:
-// - ../cycle-count/count-old
-// - ../cycle-count/report-old
-// - ../cycle-count/lookup

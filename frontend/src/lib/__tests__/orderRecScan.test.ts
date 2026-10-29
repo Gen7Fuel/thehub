@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { mockGet } = vi.hoisted(() => ({ mockGet: vi.fn() }))
-vi.mock('axios', () => ({ default: { get: mockGet } }))
+const { mockLookupItem } = vi.hoisted(() => ({ mockLookupItem: vi.fn() }))
+
+vi.mock('@/api/cycle-count/cycle-count.service', () => ({
+  cycleCountService: {
+    lookupItem: mockLookupItem,
+  },
+}))
 
 import {
   buildMissingItemMessage,
@@ -69,19 +74,20 @@ describe('buildMissingItemMessage', () => {
 
 describe('lookupItemName', () => {
   beforeEach(() => {
-    mockGet.mockReset()
+    mockLookupItem.mockReset()
   })
 
   it('returns the name from the first form that is found', async () => {
-    mockGet.mockRejectedValueOnce(new Error('404')).mockResolvedValueOnce({ data: { name: ' Coke 591ml ' } })
+    mockLookupItem.mockRejectedValueOnce(new Error('404')).mockResolvedValueOnce({ name: ' Coke 591ml ' })
     await expect(lookupItemName('0049000028911', 'Charlies')).resolves.toBe('Coke 591ml')
-    expect(mockGet.mock.calls[0][1].params).toEqual({ upc_barcode: '0049000028911', site: 'Charlies' })
-    expect(mockGet.mock.calls[1][1].params).toEqual({ upc_barcode: '49000028911', site: 'Charlies' })
+    expect(mockLookupItem).toHaveBeenNthCalledWith(1, '0049000028911', 'Charlies')
+    expect(mockLookupItem).toHaveBeenNthCalledWith(2, '49000028911', 'Charlies')
   })
 
   it('returns null when nothing is found or there is no site', async () => {
-    mockGet.mockImplementation(async () => { throw new Error('403') })
+    mockLookupItem.mockImplementation(async () => { throw new Error('403') })
     await expect(lookupItemName('0049000028911', 'Charlies')).resolves.toBeNull()
     await expect(lookupItemName('0049000028911', undefined)).resolves.toBeNull()
+    expect(mockLookupItem).toHaveBeenCalledTimes(2)
   })
 })

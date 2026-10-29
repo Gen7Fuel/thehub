@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const { getClientIp } = require('../utils/clientIp');
 
 const ACTIONS = new Set(['create', 'read', 'update', 'delete', 'approve', 'reject']);
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9._-]+$/;
@@ -109,8 +110,6 @@ module.exports = function actionAccessLogger(options = {}) {
 
         if (isSuccessfulSystemPoll(method, path, statusCode)) return;
 
-        const ip = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim() || req.ip;
-
         const payload = {
           eventId: randomUUID(),
           eventType: 'access',
@@ -123,7 +122,7 @@ module.exports = function actionAccessLogger(options = {}) {
           source,
           method,
           path,
-          ip,
+          ip: getClientIp(req),
           userAgent: req.headers['user-agent'],
           requestId: req.requestId,
         };

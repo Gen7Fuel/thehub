@@ -39,4 +39,19 @@ describe('split logging models', () => {
     const error = new ChangeLog({ ...common, action: 'read' }).validateSync()
     expect(error?.errors.action).toBeDefined()
   })
+
+  it('preserves PostgreSQL primary keys for single and bulk changes', () => {
+    const log = new ChangeLog({
+      ...common,
+      resourceType: 'cycle-count-item',
+      resourceId: 451,
+      resourceIds: [451, 452, '453'],
+      resourceStore: 'postgresql',
+    })
+
+    expect(log.validateSync()).toBeUndefined()
+    expect(log.resourceId).toBe(451)
+    expect(log.resourceIds).toEqual([451, 452, '453'])
+    expect(log.resourceStore).toBe('postgresql')
+  })
 })

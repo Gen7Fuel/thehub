@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 
 interface InventoryItem {
   Item_Name: string
@@ -22,22 +23,13 @@ interface CategoriesResponse {
   categories: Category[]
 }
 
-const getAuthHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-})
-
 export const inventoryQueries = {
   // Partial data (first 300 rows)
   partial: (site: string) =>
     queryOptions({
       queryKey: ['inventory', site, { limit: 300 }],
       queryFn: async (): Promise<InventoryResponse> => {
-        const response = await fetch(
-          `/api/cycle-count/current-inventory?site=${site}&limit=300`,
-          { headers: getAuthHeaders() }
-        )
-        if (!response.ok) throw new Error('Failed to fetch partial inventory')
-        return response.json()
+        return cycleCountService.getCurrentInventory<InventoryResponse>(site, 300)
       },
       enabled: !!site,
       staleTime: 5 * 60 * 1000, // 5 minutes
@@ -48,12 +40,7 @@ export const inventoryQueries = {
     queryOptions({
       queryKey: ['inventory', site, { limit: 'all' }],
       queryFn: async (): Promise<InventoryResponse> => {
-        const response = await fetch(
-          `/api/cycle-count/current-inventory?site=${site}`,
-          { headers: getAuthHeaders() }
-        )
-        if (!response.ok) throw new Error('Failed to fetch full inventory')
-        return response.json()
+        return cycleCountService.getCurrentInventory<InventoryResponse>(site)
       },
       enabled: false, // ✅ Disabled by default - triggered manually
       staleTime: 5 * 60 * 1000,
@@ -64,12 +51,7 @@ export const inventoryQueries = {
     queryOptions({
       queryKey: ['inventory-categories', site],
       queryFn: async (): Promise<CategoriesResponse> => {
-        const response = await fetch(
-          `/api/cycle-count/inventory-categories?site=${site}`,
-          { headers: getAuthHeaders() }
-        )
-        if (!response.ok) throw new Error('Failed to fetch categories')
-        return response.json()
+        return cycleCountService.getInventoryCategories<CategoriesResponse>(site)
       },
       enabled: !!site,
       staleTime: 10 * 60 * 1000, // 10 minutes

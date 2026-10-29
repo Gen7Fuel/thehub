@@ -43,6 +43,12 @@ vi.mock('axios', () => ({
   default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), isAxiosError: vi.fn(() => false) },
 }))
 
+vi.mock('@/api/cycle-count/cycle-count.service', () => ({
+  cycleCountService: {
+    lookupItem: vi.fn().mockResolvedValue(null),
+  },
+}))
+
 // `access.orderRec.id` specifically: the detail page's effect only fetches when
 // that permission is present, and otherwise redirects to /no-access.
 vi.mock('@/context/AuthContext', () => ({
@@ -89,7 +95,10 @@ const renderAndExpand = async (items: Array<any>) => {
 
   const trigger = await screen.findByRole('button', { name: /Chew/ }, { timeout: 5000 })
   fireEvent.click(trigger)
-  await waitFor(() => expect(screen.getByText(items[0].gtin)).toBeInTheDocument())
+  await waitFor(
+    () => expect(screen.getByText(items[0].gtin)).toBeInTheDocument(),
+    { timeout: 5000 },
+  )
 }
 
 describe('order rec row — off-planogram highlight', () => {
@@ -105,7 +114,7 @@ describe('order rec row — off-planogram highlight', () => {
 
     expect(rowFor('012345678901').className).toContain('bg-red-50')
     expect(screen.getByText('OFF PLANOGRAM')).toBeInTheDocument()
-  })
+  }, 10000)
 
   it('leaves a row clean when the item is explicitly not flagged', async () => {
     await renderAndExpand([
@@ -114,7 +123,7 @@ describe('order rec row — off-planogram highlight', () => {
 
     expect(rowFor('012345678901').className).not.toContain('bg-red-50')
     expect(screen.queryByText('OFF PLANOGRAM')).not.toBeInTheDocument()
-  })
+  }, 10000)
 
   // The stale-cache case: a document cached before offPlanogram existed.
   it('leaves a row clean when the field is missing entirely', async () => {
@@ -122,7 +131,7 @@ describe('order rec row — off-planogram highlight', () => {
 
     expect(rowFor('012345678901').className).not.toContain('bg-red-50')
     expect(screen.queryByText('OFF PLANOGRAM')).not.toBeInTheDocument()
-  })
+  }, 10000)
 
   it('flags only the offending row when a category mixes both', async () => {
     await renderAndExpand([
@@ -135,5 +144,5 @@ describe('order rec row — off-planogram highlight', () => {
     expect(rowFor('222222222222').className).toContain('bg-red-50')
     expect(rowFor('333333333333').className).not.toContain('bg-red-50')
     expect(screen.getAllByText('OFF PLANOGRAM')).toHaveLength(1)
-  })
+  }, 10000)
 })

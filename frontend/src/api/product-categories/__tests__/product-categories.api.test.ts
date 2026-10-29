@@ -59,12 +59,12 @@ describe('productCategoriesService request metadata', () => {
 
   it('reuses the resource API with Cycle Count-specific intent', async () => {
     mocks.get.mockResolvedValue({ data: { varianceMap: { 100: 2 } } })
-    await productCategoriesService.getCycleCountVariance('cycle-count.legacy-form')
+    await productCategoriesService.getCycleCountVariance()
 
     expect(mocks.get).toHaveBeenCalledWith('/product-category/cycle-count-variance', expect.objectContaining({
       headers: expect.objectContaining({
         'X-Required-Permission': 'cycleCount',
-        'X-Action-Source': 'cycle-count.legacy-form',
+        'X-Action-Source': 'cycle-count.count',
         'X-Action-Resource': 'product-category-variance',
         'X-Action-Message': 'Product category variance rules loaded for Cycle Count',
       }),

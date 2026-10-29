@@ -116,6 +116,11 @@ if ((process.env.RUN_PG_MIGRATIONS || "false").toLowerCase() === "true") {
 const app = express();
 const server = http.createServer(app);
 
+// Caddy (production) and Vite (development) reach Express over a private
+// container/loopback hop. Trust only those proxy ranges so req.ip resolves the
+// first untrusted client address without accepting arbitrary forwarded values.
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
+
 app.use(cors());
 app.use(express.json({ limit: '200mb' }));
 app.use(requestId());

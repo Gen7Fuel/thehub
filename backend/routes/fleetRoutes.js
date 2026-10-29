@@ -3,7 +3,8 @@ const router = express.Router();
 const Fleet = require("../models/Fleet");
 
 // GET / — list all fleet cards sorted by customerName ascending
-router.get("/", async (req, res) => {
+// RETIRED: Fleet administration UI was removed; PO uses only the two lookup routes retained below.
+if (false) router.get("/", async (req, res) => {
   try {
     const cards = await Fleet.find().sort({ customerName: 1 });
     res.json(cards);
@@ -42,7 +43,8 @@ router.get("/verify/:cardNumber", async (req, res) => {
 });
 
 // POST / — create a new fleet card (returns full card object)
-router.post("/", async (req, res) => {
+// RETIRED: Fleet administration UI was removed.
+if (false) router.post("/", async (req, res) => {
   const { fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site } = req.body;
 
   const trimmedCardNumber = (fleetCardNumber || '').trim();
@@ -63,7 +65,8 @@ router.post("/", async (req, res) => {
 });
 
 // PUT /:id — update a fleet card by Mongo _id
-router.put("/:id", async (req, res) => {
+// RETIRED: Fleet administration UI was removed.
+if (false) router.put("/:id", async (req, res) => {
   const { fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site } = req.body;
   const update = { customerName, driverName, vehicleMakeModel, numberPlate, status, notes, site };
 
@@ -87,7 +90,8 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE /:id — delete a fleet card by Mongo _id
-router.delete("/:id", async (req, res) => {
+// RETIRED: Fleet administration UI was removed.
+if (false) router.delete("/:id", async (req, res) => {
   try {
     const card = await Fleet.findByIdAndDelete(req.params.id);
     if (!card) {
@@ -100,7 +104,8 @@ router.delete("/:id", async (req, res) => {
 });
 
 // Route to create a new Fleet entry
-router.post("/create", async (req, res) => {
+// RETIRED: Legacy Fleet card assignment form was removed.
+if (false) router.post("/create", async (req, res) => {
   const { fleetCardNumber, driverName, customerName, vehicleMakeModel, numberPlate } = req.body;
 
   try {
@@ -149,7 +154,8 @@ router.get("/getByCardNumber/:fleetCardNumber", async (req, res) => {
   }
 });
 
-router.put("/updateByCardNumber/:fleetCardNumber", async (req, res) => {
+// RETIRED: Legacy Fleet card assignment form was removed.
+if (false) router.put("/updateByCardNumber/:fleetCardNumber", async (req, res) => {
   // Update a fleet entry by fleetCardNumber
   const { fleetCardNumber } = req.params;
   const { driverName, customerName, vehicleMakeModel, numberPlate } = req.body;

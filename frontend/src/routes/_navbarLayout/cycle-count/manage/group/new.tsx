@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,10 +44,8 @@ function NewGroupComponent() {
   const { data: rawColumns, isLoading: loadingCols } = useQuery({
     queryKey: ['filterable-columns'],
     queryFn: async () => {
-      const res = await axios.get('/api/cycle-count/groups/filterable-columns', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data.columns as string[]
+      const result = await cycleCountService.getFilterableColumns<{ columns: string[] }>()
+      return result.columns
     }
   })
 
@@ -63,10 +61,7 @@ function NewGroupComponent() {
     queryKey: ['unique-values', selectedColumn],
     queryFn: async () => {
       if (!selectedColumn) return { values: [], isCategory: false }
-      const res = await axios.get(`/api/cycle-count/groups/unique-values?column=${selectedColumn}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data as UniqueValuesResponse
+      return cycleCountService.getUniqueValues<UniqueValuesResponse>(selectedColumn)
     },
     enabled: !!selectedColumn
   })
@@ -88,15 +83,7 @@ function NewGroupComponent() {
     queryFn: async () => {
       if (!previewSite || !selectedColumn) return { items: [], totalCount: 0 }
 
-      const res = await axios.get('/api/cycle-count/groups/preview-items', {
-        params: {
-          site: previewSite,
-          column: selectedColumn,
-          values: selectedValues.join(',')
-        },
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data as { items: any[]; totalCount: number }
+      return cycleCountService.previewGroupItems<{ items: any[]; totalCount: number }>(previewSite, selectedColumn, selectedValues)
     },
     enabled: false
   })
@@ -107,12 +94,10 @@ function NewGroupComponent() {
   const createGroupMutation = useMutation({
     mutationFn: async () => {
       setSubmitError(null) // Reset error state on new attempt
-      return axios.post('/api/cycle-count/groups', {
+      return cycleCountService.createGroup({
         name: groupName,
         filter_column: selectedColumn,
         values: selectedValues
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
       })
     },
     onSuccess: () => {
@@ -121,7 +106,7 @@ function NewGroupComponent() {
     },
     onError: (error: any) => {
       // Extract server message if it exists, fallback to standard error text
-      const serverMessage = error.response?.data?.message || "Failed to create group template. Please try again."
+      const serverMessage = error.message || "Failed to create group template. Please try again."
       setSubmitError(serverMessage)
     }
   })

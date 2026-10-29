@@ -1,7 +1,7 @@
 // routes/_navbarLayout/cycle-count/report-new.tsx
 import { useState, useEffect, memo, useMemo } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import axios from "axios";
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
 import {
   ArrowUp,
   ArrowDown,
@@ -924,22 +924,17 @@ function RouteComponent() {
 
     setLoading(true);
     try {
-      const token = localStorage.getItem("token");
       const selectedDateStr = date.toISOString().slice(0, 10);
-
-      const res = await axios.get("/api/cycle-count/daily-report", {
-        headers: { Authorization: `Bearer ${token}` },
-        params: { site, date: selectedDateStr },
-      });
+      const report = await cycleCountService.getDailyReport<any>(site, selectedDateStr);
 
       // Supporting unified response payload containing the root instance container mapping
-      setItems(res.data.data || []);
-      setInstanceId(res.data.instanceId || null);
-      setLastCountedAt(res.data.lastCountedAt || null); // Save local converted timestamp
-      setIsScheduled(res.data.isScheduled || false);
+      setItems(report.data || []);
+      setInstanceId(report.instanceId || null);
+      setLastCountedAt(report.lastCountedAt || null); // Save local converted timestamp
+      setIsScheduled(report.isScheduled || false);
 
-      if (res.data.instanceId) {
-        fetchThreadNotes(res.data.instanceId);
+      if (report.instanceId) {
+        fetchThreadNotes(report.instanceId);
       } else {
         setNotes([]);
       }
@@ -951,11 +946,8 @@ function RouteComponent() {
 
   const fetchThreadNotes = async (id: number) => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`/api/cycle-count/instance-notes/${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setNotes(res.data.data || []);
+      const result = await cycleCountService.getInstanceNotes<any>(id);
+      setNotes(result.data || []);
     } catch (err) {
       console.error("Error fetching instance notes list:", err);
     }
@@ -966,17 +958,7 @@ function RouteComponent() {
 
     setPostingNote(true);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "/api/cycle-count/instance-notes",
-        {
-          instanceId,
-          note: newNoteText,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      await cycleCountService.addInstanceNote(instanceId, newNoteText);
 
       setNewNoteText("");
       await fetchThreadNotes(instanceId);
@@ -1015,31 +997,19 @@ function RouteComponent() {
 
     setSyncing(true);
     try {
-      const response = await axios.post(
-        "/api/cycle-count/finalize-and-sync",
-        {
-          siteName: site,
-          targetDate: selectedDateStr, // 💡 Pass the dynamically picked date parameter configuration
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount",
-          },
-        },
-      );
+      const response = await cycleCountService.finalize<any>(site, selectedDateStr, 'cycle-count.report');
 
-      if (response.data.success) {
+      if (response.success) {
         alert(`Ticket Generated Succefully for ${site}!`);
       } else {
         alert(
-          `⚠️ Sync dispatch rejected: ${response.data.reason || "Unknown processing pipeline state."}`,
+          `⚠️ Sync dispatch rejected: ${response.reason || "Unknown processing pipeline state."}`,
         );
       }
     } catch (err: any) {
       console.error("Pipeline Sync Fault:", err);
       alert(
-        err.response?.data?.message ||
+        err.message ||
           "❌ CRITICAL Exception handling backend distribution tasks.",
       );
     } finally {
@@ -1057,10 +1027,7 @@ function RouteComponent() {
     data: Record<string, number | null>,
   ) => {
     try {
-      const token = localStorage.getItem("token");
-      await axios.put(`/api/cycle-count/items/${itemId}/manager-count`, data, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await cycleCountService.updateManagerCount(itemId, data);
       await fetchReport(); // Refresh data table
     } catch (err) {
       console.error("Failed to update manager count:", err);

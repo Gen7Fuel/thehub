@@ -4,7 +4,8 @@ const FleetCustomer = require('../models/FleetCustomer');
 const bcrypt = require('bcryptjs');
 
 // GET all fleet customers
-router.get('/', async (req, res) => {
+// RETIRED: Fleet customer administration UI was removed.
+if (false) router.get('/', async (req, res) => {
   try {
     const customers = await FleetCustomer.find({}).sort({ name: 1 });
     res.json(customers);
@@ -14,7 +15,8 @@ router.get('/', async (req, res) => {
 });
 
 // GET single fleet customer by ID
-router.get('/:id', async (req, res) => {
+// RETIRED: Fleet customer administration UI was removed.
+if (false) router.get('/:id', async (req, res) => {
   try {
     const customer = await FleetCustomer.findById(req.params.id);
     
@@ -29,7 +31,8 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST - Create new fleet customer
-router.post('/', async (req, res) => {
+// RETIRED: Fleet customer administration UI was removed.
+if (false) router.post('/', async (req, res) => {
   try {
     const { name, email } = req.body;
     
@@ -62,7 +65,8 @@ router.post('/', async (req, res) => {
 });
 
 // PUT - Update fleet customer
-router.put('/:id', async (req, res) => {
+// RETIRED: Fleet customer administration UI was removed.
+if (false) router.put('/:id', async (req, res) => {
   try {
     const { name, email } = req.body;
     
@@ -101,7 +105,8 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE - Delete fleet customer
-router.delete('/:id', async (req, res) => {
+// RETIRED: Fleet customer administration UI was removed.
+if (false) router.delete('/:id', async (req, res) => {
   try {
     const customer = await FleetCustomer.findByIdAndDelete(req.params.id);
     
@@ -119,7 +124,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 // GET - Search fleet customers
-router.get('/search/:query', async (req, res) => {
+// RETIRED: Fleet customer administration UI was removed.
+if (false) router.get('/search/:query', async (req, res) => {
   try {
     const query = req.params.query;
     
@@ -137,7 +143,8 @@ router.get('/search/:query', async (req, res) => {
 });
 
 // PATCH - Set portal login credentials
-router.patch('/:id/credentials', async (req, res) => {
+// RETIRED: Fleet customer portal provisioning was removed with the module.
+if (false) router.patch('/:id/credentials', async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -172,7 +179,8 @@ router.patch('/:id/credentials', async (req, res) => {
 });
 
 // PATCH - Revoke portal credentials
-router.patch('/:id/revoke-credentials', async (req, res) => {
+// RETIRED: Fleet customer portal provisioning was removed with the module.
+if (false) router.patch('/:id/revoke-credentials', async (req, res) => {
   try {
     const customer = await FleetCustomer.findByIdAndUpdate(
       req.params.id,
