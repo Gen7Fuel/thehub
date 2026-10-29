@@ -237,6 +237,12 @@ describe('Order Rec List — list.tsx', () => {
     )
   })
 
+  it('labels store-created orders that are awaiting a vendor', async () => {
+    mockUseLoaderData.mockReturnValue({ data: [{ ...sampleRec, source: 'scanner', vendor: '' }], accessDenied: false })
+    renderWithSuspense(<OrderRecList />)
+    await waitFor(() => expect(screen.getByText('Vendor pending')).toBeInTheDocument(), { timeout: 5000 })
+  })
+
   it('shows "No order reconciliation files found" when data is empty', async () => {
     mockUseLoaderData.mockReturnValue({ data: [], accessDenied: false })
     renderWithSuspense(<OrderRecList />)

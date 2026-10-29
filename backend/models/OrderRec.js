@@ -75,7 +75,7 @@ const OrderReconciliationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },     // Creation timestamp
   integerId: { type: Number, unique: true },        // Unique integer ID (autoincremented)
   site: { type: String, required: true },           // Site/location identifier
-  vendor: { type: String, required: true },         // Vendor identifier (can be ObjectId or name)
+  vendor: { type: String, default: '', required: function () { return this.source !== 'scanner'; } }, // Scanner orders await head-office assignment
   completed: { type: Boolean, default: false },     // Whether the order rec is completed
   extraItemsNote: { type: String, default: '' },    // Notes for extra items
   email: { type: String, default: 'mohammad@gen7fuel.com' }, // Creator's email
@@ -122,27 +122,24 @@ OrderReconciliationSchema.pre('save', async function (next) {
         // fallback to ObjectId string if lookup fails
       }
     }
-    const dateStr = formatDateWithSuffix(this.createdAt);
-    this.filename = `OrderRec - ${vendorName} - ${dateStr} - ${this.integerId}`;
+    this.filename = orderRecFilename(vendorName, this.createdAt, this.integerId);
   }
   next();
 });
 
-/**
- * Helper function to format a date with a day suffix (e.g., "1st January 2024").
- * @param {Date} date
- * @returns {string}
- */
-function formatDateWithSuffix(date) {
+function orderRecFilename(vendorName, createdAt, integerId) {
+  const date = new Date(createdAt);
   const day = date.getDate();
   const suffix =
     day % 10 === 1 && day !== 11 ? 'st' :
     day % 10 === 2 && day !== 12 ? 'nd' :
     day % 10 === 3 && day !== 13 ? 'rd' : 'th';
   const month = date.toLocaleString('default', { month: 'long' });
-  const year = date.getFullYear();
-  return `${day}${suffix} ${month} ${year}`;
+  return `OrderRec - ${vendorName || 'Vendor pending'} - ${day}${suffix} ${month} ${date.getFullYear()} - ${integerId}`;
 }
+
+// Keep this helper on the model: auth-backend mounts models without backend/utils.
+OrderReconciliationSchema.statics.buildFilename = orderRecFilename;
 
 // Export the OrderReconciliation model based on the schema
 module.exports = mongoose.model('OrderReconciliation', OrderReconciliationSchema);
