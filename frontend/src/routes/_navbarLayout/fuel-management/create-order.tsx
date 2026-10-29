@@ -5,7 +5,10 @@ import {
 import { cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
+import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
 import {
   Building2,
   Truck,
@@ -177,20 +180,12 @@ function CreateFuelOrder() {
     ],
   });
 
-  const authHeader = {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  };
-
   const [_, setProjections] = useState<Record<string, GradeProjection>>({});
   // --- Fetch Locations using TanStack Query ---
   const { data: locations = [], isLoading: isLoadingLocations } = useQuery({
     queryKey: ["locations-list"],
     queryFn: async () => {
-      const res = await axios.get(
-        "/api/fuel-station-tanks/all-locations",
-        authHeader,
-      );
-      return res.data;
+      return fuelStationTanksService.listLocations<any[]>('fuel-management.create-order', 'Fuel order station options viewed', 'fuelManagement.createOrder');
     },
     staleTime: 0,
   });
@@ -266,8 +261,8 @@ function CreateFuelOrder() {
     // 2. Global Logistics (Only for the first station/master)
     if (index === 0) {
       try {
-        const racksRes = await axios.get("/api/fuel-racks", authHeader);
-        setRacks(racksRes.data);
+        const rackOptions = await fuelRacksService.list<any[]>('fuel-management.create-order', 'Fuel rack options viewed while creating an order');
+        setRacks(rackOptions);
         const defaultRackId =
           station.defaultFuelRack?._id || station.defaultFuelRack || "";
         const stationDefaultCarrierId =
@@ -310,16 +305,11 @@ function CreateFuelOrder() {
     notifyCarrierFallback = false,
   ) => {
     try {
-      const rackRes = await axios.get(`/api/fuel-racks/${rackId}`, authHeader);
-      const rack = rackRes.data;
+      const rack = await fuelRacksService.get<any>(rackId, 'fuel-management.create-order');
       const rackGrades = rack.availableGrades || [];
       const rackCarriers = rack.associatedCarriers || [];
 
-      const supplierRes = await axios.get(
-        `/api/fuel-suppliers?associatedRack=${rackId}`,
-        authHeader,
-      );
-      const rackSuppliers = supplierRes.data;
+      const rackSuppliers = await fuelSuppliersService.list<FuelSupplier[]>(rackId, 'fuel-management.create-order', `Fuel suppliers viewed for rack ${rackId} while creating an order`);
 
       setSuppliers(rackSuppliers);
       setCarriers(rackCarriers);
@@ -490,7 +480,6 @@ function CreateFuelOrder() {
     station: any,
     oDate: string,
     dDate: string,
-    authHeader: any,
   ) => {
     if (!station || !oDate || !dDate) return { po: "", finalOrderDate: oDate };
 
@@ -507,11 +496,7 @@ function CreateFuelOrder() {
     const poPrefix = `NSP${formattedOrderDate}-${stationNum}`;
 
     try {
-      const res = await axios.get(
-        `/api/fuel-orders/check-existing?stationId=${station._id}&orderDate=${oDate}`,
-        authHeader,
-      );
-      const { existingOrders = [] } = res.data;
+      const { existingOrders = [] } = await fuelOrdersService.checkExisting<any>(station._id, oDate);
       const relevantOrders = existingOrders.filter((order: any) =>
         String(order.poNumber || "").startsWith(poPrefix),
       );
@@ -566,7 +551,7 @@ function CreateFuelOrder() {
           );
 
           // Recursive call with new date
-          return getPONumberHelper(station, tomorrowStr, dDate, authHeader);
+          return getPONumberHelper(station, tomorrowStr, dDate);
         }
       }
 
@@ -779,21 +764,12 @@ function CreateFuelOrder() {
         orders: processedOrders, // Array containing 1, 2, or 4 orders
       };
 
-      const response = await axios.post(
-        "/api/fuel-orders",
-        payload,
-        authHeader,
+      const res = await fuelOrdersService.create<any>(payload, processedOrders.length);
+      alert(
+        `Success! ${processedOrders.length} Order(s) created and Email Order draft pushed to ${res.pushedTo}'s Inbox.`,
       );
-
-      const res = response.data;
-
-      if (response.status === 201) {
-        alert(
-          `Success! ${processedOrders.length} Order(s) created and Email Order draft pushed to ${res.pushedTo}'s Inbox.`,
-        );
-        handleReset();
-        setIsPreviewOpen(false);
-      }
+      handleReset();
+      setIsPreviewOpen(false);
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to save orders.");
       console.error(err);
@@ -815,7 +791,6 @@ function CreateFuelOrder() {
         station,
         currentOrderDate,
         newDeliveryDate,
-        authHeader,
       );
 
       // Update global date if helper shifted it
@@ -843,7 +818,6 @@ function CreateFuelOrder() {
         station,
         currentOrderDate,
         newDeliveryDate,
-        authHeader,
       );
 
       // If any station in the split forces a date change, we must update the whole truck
@@ -897,14 +871,11 @@ function CreateFuelOrder() {
     const stationGrades = station.availableStationGrades || [];
 
     const tasks: Promise<any>[] = [];
-    tasks.push(getPONumberHelper(station, orderDate, deliveryDate, authHeader));
+    tasks.push(getPONumberHelper(station, orderDate, deliveryDate));
 
     if (deliveryDate) {
       tasks.push(
-        axios.get(
-          `/api/fuel-station-tanks/station/${stationId}?date=${deliveryDate}`,
-          authHeader,
-        ),
+        fuelStationTanksService.getStationProjection<any>(stationId, deliveryDate, 'fuel-management.create-order', 'fuelManagement.createOrder'),
       );
     }
 
@@ -912,7 +883,7 @@ function CreateFuelOrder() {
       const [poData, projRes] = await Promise.all(tasks);
 
       const groupedProjections =
-        projRes?.data.tanks.reduce((acc: any, tank: any) => {
+        projRes?.tanks.reduce((acc: any, tank: any) => {
           if (!acc[tank.grade])
             acc[tank.grade] = { opening: 0, sales: 0, capacity: 0, closing: 0 };
           acc[tank.grade].opening += tank.openingL;

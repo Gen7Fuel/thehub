@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Save, UserCheck, Plus, Trash2, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
-import axios from 'axios'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
+import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/suppliers/$id')({
@@ -26,14 +27,7 @@ function EditSupplierComponent() {
   // Fetch Racks for the dropdown with Authorization
   const { data: racks = [] } = useQuery({
     queryKey: ['fuel-racks'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-racks', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      return res.data;
-    }
+    queryFn: () => fuelRacksService.list<any[]>('fuel-management.manage.suppliers', 'Fuel racks viewed while editing a supplier')
   });
 
   // Fetch Current Supplier Data
@@ -41,10 +35,7 @@ function EditSupplierComponent() {
     const fetchSupplier = async () => {
       setIsLoading(true)
       try {
-        const res = await axios.get(`/api/fuel-suppliers/${id}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        })
-        setFormData(res.data)
+        setFormData(await fuelSuppliersService.get<any>(id))
       } catch (err) {
         console.error(err)
       } finally {
@@ -119,9 +110,7 @@ function EditSupplierComponent() {
     e.preventDefault()
     setIsSaving(true)
     try {
-      await axios.put(`/api/fuel-suppliers/${id}`, formData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      await fuelSuppliersService.update(id, formData, formData.supplierName)
       queryClient.invalidateQueries({ queryKey: ['fuel-suppliers'] })
       alert("Supplier updated successfully")
     } catch (err: any) {

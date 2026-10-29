@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Search, Truck, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { fuelCarriersService } from '@/api/fuel-management/fuel-carriers.service'
 import { useMemo, useState } from 'react'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/carriers')({
@@ -16,12 +16,7 @@ function CarrierListLayout() {
   // Assuming you're using React Query for data fetching
   const { data: carriers = [], isLoading } = useQuery({
     queryKey: ['fuel-carriers'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-carriers', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
-    }
+    queryFn: () => fuelCarriersService.list<any[]>(),
   })
 
   // Filter the list based on search term

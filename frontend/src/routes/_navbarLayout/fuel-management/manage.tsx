@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { Warehouse, Truck, UserCheck, MapPin, Send } from 'lucide-react'
-import axios from 'axios';
+import { fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage')({
   component: ManageLayout,
@@ -10,22 +10,8 @@ function ManageLayout() {
 
   const handleNotify = async () => {
     try {
-      const authHeader = {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      };
-
-      const res = await axios.get(
-        '/api/fuel-orders/notify-upcoming',
-        authHeader
-      );
-
-      if (res.status === 200) {
-        alert("Email notifications pushed to queue successfully!");
-      } else {
-        alert("Failed to trigger notifications.");
-      }
+      await fuelOrdersService.notifyUpcoming()
+      alert("Email notifications pushed to queue successfully!");
 
     } catch (err) {
       console.error(err);

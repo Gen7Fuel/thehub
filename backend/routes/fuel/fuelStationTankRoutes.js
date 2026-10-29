@@ -1,6 +1,7 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const router = express.Router();
+const { logChange } = require('../../middleware/changeLogger');
 const Location = require("../../models/Location");
 const FuelStationTank = require("../../models/fuel/FuelStationTank");
 const FuelSales = require("../../models/fuel/FuelSales");
@@ -1116,6 +1117,8 @@ router.put("/location/:id", async (req, res) => {
   } = req.body;
 
   try {
+    const before = await Location.findById(req.params.id).lean();
+    if (!before) return res.status(404).json({ message: 'Location not found' });
     const updated = await Location.findByIdAndUpdate(
       req.params.id,
       {
@@ -1134,6 +1137,11 @@ router.put("/location/:id", async (req, res) => {
       },
       { new: true },
     );
+    await logChange(req, {
+      action: 'update', resourceType: 'fuel-station', resourceId: updated._id,
+      resourceLabel: updated.stationName || updated.site, before, after: updated.toObject(),
+      success: true, statusCode: 200, source: 'fuel-management.manage.stations',
+    });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -1146,6 +1154,11 @@ router.post("/tanks", async (req, res) => {
   try {
     const newTank = new FuelStationTank(req.body);
     const saved = await newTank.save();
+    await logChange(req, {
+      action: 'create', resourceType: 'fuel-station-tank', resourceId: saved._id,
+      resourceLabel: `Tank #${saved.tankNo}`, before: null, after: saved.toObject(),
+      success: true, statusCode: 201, source: 'fuel-management.manage.stations',
+    });
     res.status(201).json(saved);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -1156,11 +1169,18 @@ router.post("/tanks", async (req, res) => {
 // @desc    Update tank details (capacity, ullage, etc)
 router.put("/tanks/:id", async (req, res) => {
   try {
+    const before = await FuelStationTank.findById(req.params.id).lean();
+    if (!before) return res.status(404).json({ message: 'Tank not found' });
     const updated = await FuelStationTank.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true },
     );
+    await logChange(req, {
+      action: 'update', resourceType: 'fuel-station-tank', resourceId: updated._id,
+      resourceLabel: `Tank #${updated.tankNo}`, before, after: updated.toObject(),
+      success: true, statusCode: 200, source: 'fuel-management.manage.stations',
+    });
     res.json(updated);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -1175,6 +1195,8 @@ router.patch("/manual-update/:tankId", async (req, res) => {
     // Combine strings: "YYYY-MM-DD HH:mm (Manual)"
     const statusString = `${manualDate} ${manualTime} (Manual)`;
 
+    const before = await FuelStationTank.findById(req.params.tankId).lean();
+    if (!before) return res.status(404).json({ message: 'Tank not found' });
     const updatedTank = await FuelStationTank.findByIdAndUpdate(
       req.params.tankId,
       {
@@ -1183,6 +1205,12 @@ router.patch("/manual-update/:tankId", async (req, res) => {
       },
       { new: true },
     );
+
+    await logChange(req, {
+      action: 'update', resourceType: 'fuel-station-tank', resourceId: updatedTank._id,
+      resourceLabel: `Tank #${updatedTank.tankNo}`, before, after: updatedTank.toObject(),
+      success: true, statusCode: 200, source: 'fuel-management.volume',
+    });
 
     res.json(updatedTank);
   } catch (err) {
@@ -1193,7 +1221,13 @@ router.patch("/manual-update/:tankId", async (req, res) => {
 // @route   DELETE /api/fuel-station-tanks/tanks/:id
 router.delete("/tanks/:id", async (req, res) => {
   try {
-    await FuelStationTank.findByIdAndDelete(req.params.id);
+    const deleted = await FuelStationTank.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ message: 'Tank not found' });
+    await logChange(req, {
+      action: 'delete', resourceType: 'fuel-station-tank', resourceId: deleted._id,
+      resourceLabel: `Tank #${deleted.tankNo}`, before: deleted.toObject(), after: null,
+      success: true, statusCode: 200, source: 'fuel-management.manage.stations',
+    });
     res.json({ message: "Tank removed" });
   } catch (err) {
     res.status(500).json({ message: err.message });

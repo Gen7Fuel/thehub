@@ -5,6 +5,7 @@ const HEADER_LIMITS = {
   message: 500,
   source: 100,
   resourceType: 80,
+  accessGroupId: 160,
 } as const
 
 const cleanHeaderValue = (value: string, maxLength: number) =>
@@ -14,6 +15,12 @@ export function requestConfig(options: RequestOptions = {}): AxiosRequestConfig 
   const headers: Record<string, string> = {}
 
   if (options.permission) headers['X-Required-Permission'] = options.permission
+  if (options.accessGroupId) {
+    headers['X-Action-Group-Id'] = cleanHeaderValue(
+      options.accessGroupId,
+      HEADER_LIMITS.accessGroupId,
+    )
+  }
 
   if (options.actionContext) {
     headers['X-Action-Type'] = options.actionContext.action

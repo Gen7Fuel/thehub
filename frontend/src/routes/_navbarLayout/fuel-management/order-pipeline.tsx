@@ -2,7 +2,8 @@ import { createFileRoute, Link } from '@tanstack/react-router'
 import { useState, useMemo, useEffect } from 'react';
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { buildFuelOrderAccessGroupId, fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { format, addDays, startOfDay, isAfter, isBefore } from 'date-fns';
 import {
   ChevronLeft, ChevronRight, Filter, ArrowRight,
@@ -25,8 +26,6 @@ export const Route = createFileRoute(
 })
 
 
-const authHeader = { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } };
-
 export function OrderPipelineComponent() {
   // --- 1. INITIAL STATE (Ontario selected by default) ---
   const [selectedDate, setSelectedDate] = useState(startOfDay(new Date()));
@@ -36,10 +35,7 @@ export function OrderPipelineComponent() {
   // --- 2. DATA FETCHING ---
   const { data: locations = [], isLoading: isLocationsLoading } = useQuery({
     queryKey: ['all-locations-pipeline'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-station-tanks/all-locations', authHeader);
-      return res.data;
-    },
+    queryFn: () => fuelStationTanksService.listLocations<any[]>('fuel-management.order-pipeline', 'Fuel order pipeline stations viewed', 'fuelManagement.orderPipeline'),
     retry: 2,
   });
 
@@ -57,6 +53,29 @@ export function OrderPipelineComponent() {
     if (selectedProvinces.length === 0) return [];
     return locations.filter((loc: any) => selectedProvinces.includes(loc.province));
   }, [selectedProvinces, locations]);
+
+  const selectedDateLabel = format(selectedDate, 'yyyy-MM-dd');
+  const orderAccessContext = useMemo(() => {
+    const isAllSites = locations.length > 0
+      && locations.every((location: any) => activeSites.some((site: any) => site._id === location._id));
+    const names = activeSites.map((site: any) =>
+      site.stationName || site.site || site.fuelCustomerName || site._id,
+    );
+    const selection = isAllSites ? 'all sites' : names.join(', ');
+
+    return {
+      message: `Fuel orders viewed in Order Pipeline for ${selection} on ${selectedDateLabel}`,
+      groupId: buildFuelOrderAccessGroupId(
+        'fuel-management.order-pipeline',
+        selectedDateLabel,
+        activeSites.map((site: any) => site._id),
+      ),
+    };
+  }, [activeSites, locations, selectedDateLabel]);
+  const projectionAccessContext = useMemo(() => ({
+    ...orderAccessContext,
+    message: orderAccessContext.message.replace('Fuel orders viewed', 'Fuel tank projections viewed'),
+  }), [orderAccessContext]);
 
   // --- 4. HANDLERS ---
   const shiftDate = (amount: number) => {
@@ -215,7 +234,13 @@ export function OrderPipelineComponent() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {activeSites.map((site: any) => (
-              <PipelineBlock key={site._id} site={site} date={selectedDate} />
+              <PipelineBlock
+                key={site._id}
+                site={site}
+                date={selectedDate}
+                orderAccessContext={orderAccessContext}
+                projectionAccessContext={projectionAccessContext}
+              />
             ))}
           </div>
         )}
@@ -224,7 +249,17 @@ export function OrderPipelineComponent() {
   );
 }
 
-function PipelineBlock({ site, date }: { site: any; date: Date }) {
+function PipelineBlock({
+  site,
+  date,
+  orderAccessContext,
+  projectionAccessContext,
+}: {
+  site: any;
+  date: Date;
+  orderAccessContext: { message: string; groupId: string };
+  projectionAccessContext: { message: string; groupId: string };
+}) {
   const [stationTime, setStationTime] = useState('');
   const gradeMap: Record<string, string> = {
     'Regular': 'REG',
@@ -242,8 +277,13 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
     queryKey: ['pipeline-tanks', site._id, selectedDateStr],
     queryFn: async () => {
       // Send the string, exactly like we do in StationStrip
-      const res = await axios.get(`/api/fuel-station-tanks/station/${site._id}?date=${selectedDateStr}`, authHeader);
-      return res.data;
+      return fuelStationTanksService.getStationProjection<any>(
+        site._id,
+        selectedDateStr,
+        'fuel-management.order-pipeline',
+        'fuelManagement.orderPipeline',
+        projectionAccessContext,
+      );
     },
     enabled: !!site?._id,
     retry: 2,
@@ -289,8 +329,12 @@ function PipelineBlock({ site, date }: { site: any; date: Date }) {
     queryKey: ['pipeline-orders', site._id, selectedDateStr],
     queryFn: async () => {
       // Use the string dateParam to match the Workspace behavior
-      const res = await axios.get(`/api/fuel-orders/workspace-orders?stationId=${site._id}&date=${selectedDateStr}`, authHeader);
-      return res.data;
+      return fuelOrdersService.listWorkspace<any[]>(
+        site._id,
+        selectedDateStr,
+        'fuel-management.order-pipeline',
+        orderAccessContext,
+      );
     },
     enabled: !!site?._id,
     retry: 2,

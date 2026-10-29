@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Save, UserCheck, Plus, Trash2, CheckCircle2 } from 'lucide-react'
-import axios from 'axios'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
+import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/suppliers/new')({
@@ -163,12 +164,7 @@ function NewSupplierComponent() {
   // Fetch Racks for the dropdown with Authorization
   const { data: racks = [] } = useQuery({
     queryKey: ['fuel-racks'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-racks', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      return res.data;
-    }
+    queryFn: () => fuelRacksService.list<any[]>('fuel-management.manage.suppliers', 'Fuel racks viewed while creating a supplier')
   });
 
   const [formData, setFormData] = useState({
@@ -205,9 +201,7 @@ function NewSupplierComponent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await axios.post('/api/fuel-suppliers', formData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      const supplier = await fuelSuppliersService.create<any>(formData, formData.supplierName)
 
       // Refresh the list in Column 2
       queryClient.invalidateQueries({ queryKey: ['fuel-suppliers'] })
@@ -215,7 +209,7 @@ function NewSupplierComponent() {
       // Redirect to the newly created supplier
       navigate({
         to: '/fuel-management/manage/suppliers/$id',
-        params: { id: res.data._id }
+        params: { id: supplier._id }
       })
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to create supplier")

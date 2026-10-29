@@ -1,7 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; // Recommended for fetching
-import axios from "axios";
+import { buildFuelOrderAccessGroupId, fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
+import { fuelSalesService } from '@/api/fuel-management/fuel-sales.service'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
+import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -86,10 +90,6 @@ interface RescheduleDialogProps {
   locationId: string;
 }
 
-const authHeader = {
-  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-};
-
 export const getStatusColor = (status: string) => {
   switch (status) {
     case "Created":
@@ -109,30 +109,17 @@ function WorkspaceComponent() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
-  const authHeader = {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  };
-
   // 1. Fetch Real Locations from your Backend
   const { data: locations = [], isLoading: isLocationsLoading } = useQuery({
     queryKey: ["all-locations"],
-    queryFn: async () => {
-      const res = await axios.get(
-        "/api/fuel-station-tanks/all-locations",
-        authHeader,
-      );
-      return res.data;
-    },
+    queryFn: () => fuelStationTanksService.listLocations<any[]>('fuel-management.workspace', 'Fuel workspace stations viewed'),
     retry: 2,
   });
 
   // Fetch all racks once at the top level
   const { data: racks = [] } = useQuery({
     queryKey: ["all-racks"],
-    queryFn: async () => {
-      const res = await axios.get("/api/fuel-racks", authHeader);
-      return res.data;
-    },
+    queryFn: () => fuelRacksService.list<any[]>('fuel-management.workspace', 'Fuel racks viewed in the workspace'),
     staleTime: 5 * 60 * 1000, // Optional: Keep data fresh for 5 minutes
   });
 
@@ -165,6 +152,30 @@ function WorkspaceComponent() {
       return indexA - indexB;
     });
   }, [selectedStationIds, locations]);
+
+  const selectedDateLabel = format(selectedDate, "yyyy-MM-dd");
+  const orderAccessContext = useMemo(() => {
+    const eligibleLocations = locations.filter((location: any) => location.tankCount > 0);
+    const isAllSites = eligibleLocations.length > 0
+      && eligibleLocations.every((location: any) => selectedStationIds.includes(location._id));
+    const names = sortedSelectedStations.map((location: any) =>
+      location.stationName || location.site || location.fuelCustomerName || location._id,
+    );
+    const selection = isAllSites ? "all sites" : names.join(", ");
+
+    return {
+      message: `Fuel orders viewed for ${selection} on ${selectedDateLabel}`,
+      groupId: buildFuelOrderAccessGroupId(
+        "fuel-management.workspace",
+        selectedDateLabel,
+        selectedStationIds,
+      ),
+    };
+  }, [locations, selectedDateLabel, selectedStationIds, sortedSelectedStations]);
+  const projectionAccessContext = useMemo(() => ({
+    ...orderAccessContext,
+    message: orderAccessContext.message.replace('Fuel orders viewed', 'Fuel tank projections viewed'),
+  }), [orderAccessContext]);
 
   const hasInitialLoaded = useRef(false);
 
@@ -470,6 +481,8 @@ function WorkspaceComponent() {
               date={selectedDate}
               racks={racks}
               locations={locations}
+              orderAccessContext={orderAccessContext}
+              projectionAccessContext={projectionAccessContext}
             />
           ))
         )}
@@ -483,11 +496,15 @@ function StationStrip({
   date,
   racks,
   locations,
+  orderAccessContext,
+  projectionAccessContext,
 }: {
   location: any;
   date: Date;
   racks: any[];
   locations: any[];
+  orderAccessContext: { message: string; groupId: string };
+  projectionAccessContext: { message: string; groupId: string };
 }) {
   const { user } = useAuth();
   const access = user?.access || {};
@@ -545,11 +562,13 @@ function StationStrip({
   } = useQuery({
     queryKey: ["station-tanks", location?._id, selectedDateStr],
     queryFn: async () => {
-      const res = await axios.get(
-        `/api/fuel-station-tanks/station/${location._id}?date=${selectedDateStr}`,
-        authHeader,
+      return fuelStationTanksService.getStationProjection<any>(
+        location._id,
+        selectedDateStr,
+        'fuel-management.workspace',
+        'fuelManagement.workspace',
+        projectionAccessContext,
       );
-      return res.data;
     },
     enabled: !!location?._id,
     retry: 2,
@@ -618,11 +637,12 @@ function StationStrip({
   } = useQuery({
     queryKey: ["workspace-orders", location?._id, dateParam], // Use dateParam
     queryFn: async () => {
-      const res = await axios.get(
-        `/api/fuel-orders/workspace-orders?stationId=${location._id}&date=${dateParam}`, // Send string, not ISO
-        authHeader,
+      return fuelOrdersService.listWorkspace<any[]>(
+        location._id,
+        dateParam,
+        'fuel-management.workspace',
+        orderAccessContext,
       );
-      return res.data;
     },
     enabled: !!location?._id,
     retry: 2,
@@ -647,7 +667,7 @@ function StationStrip({
 
   const syncMutation = useMutation({
     mutationFn: async () => {
-      return axios.post(`/api/fuel-sales/sync/${location._id}`, {}, authHeader);
+      return fuelSalesService.sync(location._id, location.stationName);
     },
     onSuccess: () => {
       // Refresh the tank query to show updated currentSales and closing volumes
@@ -1518,13 +1538,6 @@ export function RescheduleDialog({
   );
 
   const queryClient = useQueryClient();
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.rescheduleOrder",
-    },
-  };
-
   const allowedMinDate = useMemo(() => {
     const tz = order.station?.timezone || "America/Toronto";
 
@@ -1539,7 +1552,7 @@ export function RescheduleDialog({
 
   const mutation = useMutation({
     mutationFn: async (updateData: any) => {
-      return axios.put(`/api/fuel-orders/${order._id}`, updateData, authHeader);
+      return fuelOrdersService.update(order._id, updateData, `Fuel order ${order.poNumber || order._id} reschedule requested`, 'fuelManagement.workspace.rescheduleOrder');
     },
     onSuccess: () => {
       // Refresh both orders and tanks (since est closing depends on order dates)
@@ -1770,15 +1783,12 @@ export function UpdateStatusDialog({
     setRetainOrderDate(nextOrderDate);
 
     let cancelled = false;
-    axios
-      .get(
-        `/api/fuel-orders/retain-po-number?sourceOrderId=${order._id}&stationId=${retainStationId}&orderDate=${nextOrderDate}`,
-        authHeader,
-      )
-      .then((res) => {
+    fuelOrdersService
+      .getRetainPoNumber<any>(order._id, retainStationId, nextOrderDate)
+      .then((data) => {
         if (cancelled) return;
-        setRetainPoNumber(res.data.poNumber || "");
-        setRetainOrderDate(res.data.orderDate || nextOrderDate);
+        setRetainPoNumber(data.poNumber || "");
+        setRetainOrderDate(data.orderDate || nextOrderDate);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1811,13 +1821,6 @@ export function UpdateStatusDialog({
 
   const currentIndex = statuses.findIndex((s) => s.id === order.currentStatus);
 
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.updateOrderStatus",
-    },
-  };
-
   const mutation = useMutation({
     mutationFn: async ({
       status,
@@ -1836,7 +1839,7 @@ export function UpdateStatusDialog({
       if (items) {
         payload.items = items;
       }
-      return axios.put(`/api/fuel-orders/${order._id}`, payload, authHeader);
+      return fuelOrdersService.update(order._id, payload, `Fuel order ${order.poNumber || order._id} status update requested to ${status}`, 'fuelManagement.workspace.updateOrderStatus');
     },
     onSuccess: (_: any, variables: any) => {
       // 1. Always invalidate the orders list so the UI badges update immediately
@@ -1859,8 +1862,7 @@ export function UpdateStatusDialog({
 
   const retainOrderMutation = useMutation({
     mutationFn: async () => {
-      return axios.post(
-        "/api/fuel-orders/retain",
+      return fuelOrdersService.retain(
         {
           sourceOrderId: order._id,
           stationId: retainStationId,
@@ -1872,7 +1874,7 @@ export function UpdateStatusDialog({
           items: retainedPositiveItems,
           deliveredItems: retainActualItems,
         },
-        authHeader,
+        order._id,
       );
     },
     onSuccess: () => {
@@ -2506,23 +2508,14 @@ export function OrderCommentsDialog({
       setNewComment("");
     }
   }, [open]);
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission":
-        "fuelManagement.workspace.viewOrderComments.addOrderComments",
-    },
-  };
-
   const mutation = useMutation({
     mutationFn: async (text: string) => {
       // Frontend only passes the text textblock. The backend maps req.user session properties.
-      return axios.put(
-        `/api/fuel-orders/${order._id}`,
-        {
-          comment: { text: text.trim() },
-        },
-        authHeader,
+      return fuelOrdersService.update(
+        order._id,
+        { comment: { text: text.trim() } },
+        `Comment added to fuel order ${order.poNumber || order._id}`,
+        'fuelManagement.workspace.viewOrderComments.addOrderComments',
       );
     },
     onSuccess: () => {
@@ -2625,13 +2618,6 @@ export function EditMetaDialog({
   const [carrierName, _] = useState(order.carrier?.carrierName || "No Carrier");
   const [loading, setLoading] = useState(false);
 
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.editOrderMetadata",
-    },
-  };
-
   // Initialize and handle Rack changes
   const handleRackChange = async (rackId: string) => {
     try {
@@ -2639,16 +2625,11 @@ export function EditMetaDialog({
       setSelectedRack(rackId);
 
       // 1. Fetch Suppliers for this Rack
-      const supRes = await axios.get(
-        `/api/fuel-suppliers?associatedRack=${rackId}`,
-        authHeader,
-      );
-      const rackSuppliers = supRes.data;
+      const rackSuppliers = await fuelSuppliersService.list<any[]>(rackId, 'fuel-management.workspace', `Fuel suppliers viewed for rack ${rackId} while editing order logistics`);
       setSuppliers(rackSuppliers);
 
       // 2. Fetch Rack details for defaults
-      const rackRes = await axios.get(`/api/fuel-racks/${rackId}`, authHeader);
-      const rackData = rackRes.data;
+      const rackData = await fuelRacksService.get<any>(rackId, 'fuel-management.workspace');
 
       // 3. Set Defaults
       const defaultSup =
@@ -2687,14 +2668,15 @@ export function EditMetaDialog({
 
   const handleSave = async () => {
     try {
-      await axios.put(
-        `/api/fuel-orders/${order._id}`,
+      await fuelOrdersService.update(
+        order._id,
         {
           rack: selectedRack,
           supplier: selectedSupplier,
           badgeNo: badgeNo,
         },
-        authHeader,
+        `Fuel order ${order.poNumber || order._id} logistics update requested`,
+        'fuelManagement.workspace.editOrderMetadata',
       );
       onUpdateSuccess();
       onOpenChange(false);
@@ -2837,13 +2819,6 @@ export const gradeConfig: Record<string, { priority: number; short: string }> =
 export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<any[]>([]);
-  const authHeader = {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem("token")}`,
-      "X-Required-Permission": "fuelManagement.workspace.editOrderQty",
-    },
-  };
-
   useEffect(() => {
     if (order?.items) {
       // 2. Sort items based on the defined priority before setting state
@@ -2859,10 +2834,11 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
 
   const mutation = useMutation({
     mutationFn: async (updatedItems: any[]) => {
-      return axios.put(
-        `/api/fuel-orders/${order._id}`,
+      return fuelOrdersService.update(
+        order._id,
         { items: updatedItems },
-        authHeader,
+        `Fuel order ${order.poNumber || order._id} quantity update requested`,
+        'fuelManagement.workspace.editOrderQty',
       );
     },
     onSuccess: () => {
