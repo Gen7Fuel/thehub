@@ -10,6 +10,7 @@ import ExcelJS from 'exceljs';
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { OrderRecChat } from '@/components/custom/OrderRecChat'
+import { OrderRecVendorAssignment } from '@/components/custom/OrderRecVendorAssignment'
 import { OrderRecScanner } from '@/components/custom/OrderRecScanner'
 import { buildMissingItemMessage, findItemByScan, lookupItemName, parseCount, toGtin14 } from '@/lib/orderRecScan'
 import { Trash2 } from 'lucide-react'
@@ -1255,7 +1256,7 @@ function RouteComponent() {
           )}
           <Button
             variant="outline"
-            disabled={notifying || (!orderRec.completed && user?.email !== orderRec.email)}
+            disabled={notifying || (orderRec.source === 'scanner' && !orderRec.vendor) || (!orderRec.completed && user?.email !== orderRec.email)}
             onClick={handleNotify}
           >
             {notifying ? 'Notifying...' : 'Notify'}
@@ -1304,6 +1305,12 @@ function RouteComponent() {
         </div> */}
       </div>
 
+
+      <OrderRecVendorAssignment orderRec={orderRec} onAssigned={async updated => {
+        const merged = { ...orderRec, vendor: updated.vendor, filename: updated.filename }
+        setOrderRec(merged)
+        await saveOrderRec(merged)
+      }} />
 
       {access?.orderRec?.id?.scanItem && (
         <div className={`mb-4 max-w-2xl mx-auto ${scanning ? 'sticky top-0 z-30' : ''}`}>

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import React, { useEffect, useState } from "react"
 import { OrderCard } from "@/components/custom/ordercard"
+import { OrderRecVendorAssignment } from "@/components/custom/OrderRecVendorAssignment"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -665,6 +666,23 @@ function RouteComponent() {
         </TooltipProvider>
       </div>
       {/* Grid */}
+      {orderRecs.some(rec => rec.source === 'scanner' && !rec.vendor) && (
+        <section aria-label="Orders awaiting vendor" className="space-y-3 px-3">
+          <h2 className="text-lg font-bold">Awaiting vendor assignment</h2>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {orderRecs.filter(rec => rec.source === 'scanner' && !rec.vendor).map(rec => (
+              <Card key={rec._id} className="p-4">
+                <h3 className="font-semibold">{rec.site}</h3>
+                <p className="break-words text-sm">{rec.filename}</p>
+                <OrderRecVendorAssignment orderRec={rec} onAssigned={updated => {
+                  setOrderRecs(previous => previous.map(order => order._id === updated._id ? { ...order, ...updated } : order))
+                }} />
+                <Button variant="outline" onClick={() => navigate({ to: '/order-rec/$id', params: { id: rec._id } })}>View order</Button>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="relative max-h-[80vh]">
         <div className="overflow-x-auto overflow-y-auto max-h-[80vh] max-w-[calc(100vw-100px)] border rounded-lg">
           <table className="border-collapse w-full">
