@@ -178,7 +178,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Search, Calendar, Loader2, History } from 'lucide-react' // <-- Added History icon
 import { Input } from '@/components/ui/input'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from '@/components/custom/locationPicker'
@@ -230,11 +230,7 @@ function ScheduleListLayout() {
     queryKey: ['cycle-count-instances', site, viewMode],
     queryFn: async () => {
       if (!site) return { instances: [] }
-      const res = await axios.get('/api/cycle-count/instances', {
-        params: { site, view: viewMode }, // <-- Forwarding parameter flag configuration
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
+      return cycleCountService.listInstances<{ instances: CycleCountInstance[] }>(site, viewMode)
     },
     enabled: !!site
   })

@@ -7,7 +7,9 @@ import CycleCountTableGroup from "@/components/custom/CycleCountTableGroup"; // 
 import { Check, CheckCircle2, Star, ArrowDownToLine } from "lucide-react";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from "@/components/custom/locationPicker";
-import axios from "axios";
+import { productCategoriesService } from '@/api/product-categories/product-categories.service';
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
+import { isApiError } from '@/api/core/errors';
 // import {
 //   Dialog,
 //   DialogContent,
@@ -52,15 +54,7 @@ function RouteComponent() {
     if (!site) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/cycle-count/daily-items-v2?site=${encodeURIComponent(site)}`, {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-          "X-Required-Permission": "cycleCount",
-        }
-      });
-      if (res.status === 403) { navigate({ to: "/no-access" }); return; }
-
-      const data = await res.json();
+      const data = await cycleCountService.getDailyItems<any>(site);
       const fetchedItems = data.items || [];
       setItems(fetchedItems);
       setIsScheduled(Boolean(data.isScheduled));
@@ -105,6 +99,10 @@ function RouteComponent() {
       setMovedToBottom(autoCompleted);
 
     } catch (err) {
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       console.error("Fetch error:", err);
     } finally {
       setLoading(false);
@@ -192,35 +190,15 @@ function RouteComponent() {
 
     // 3. Database Sync Path
     try {
-      const res = await fetch("/api/cycle-count/save-item-v2", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "cycleCount",
-        },
-        body: JSON.stringify({
-          entryId: id,
-          field,
-          value: numericValue, // This updates the main loose pack column
-          breakdown,           // This contains packs and cartons for your columns
-          site,
-        }),
+      await cycleCountService.saveItem({ entryId: id, field, value: numericValue, breakdown, site });
+      const socket = getSocket();
+      socket.emit("cycle-count-field-updated-v2", {
+        entryId: id,
+        field,
+        value: numericValue,
+        breakdown,
+        site,
       });
-
-      if (res.ok) {
-        const socket = getSocket();
-        socket.emit("cycle-count-field-updated-v2", {
-          entryId: id,
-          field,
-          value: numericValue,
-          breakdown,
-          site,
-        });
-      } else {
-        // Optional: Handle error rollbacks if your backend rejects the save 
-        console.error("Server rejected the cycle count update");
-      }
     } catch (err) {
       console.error("Save failed", err);
     }
@@ -262,13 +240,8 @@ function RouteComponent() {
   useEffect(() => {
     const fetchVariance = async () => {
       try {
-        const res = await axios.get("/api/product-category/cycle-count-variance", {
-          headers: {
-            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount",
-          },
-        });
-        setVarianceMap(res.data.varianceMap || {});
+        const result = await productCategoriesService.getCycleCountVariance();
+        setVarianceMap(result.varianceMap || {});
       } catch (err) {
         console.error("Failed to fetch variance map", err);
       }
@@ -374,28 +347,16 @@ function RouteComponent() {
       // // Captures today's date formatted as 'YYYY-MM-DD'
       // const todayStr = new Date().toISOString().split("T")[0];
 
-      const response = await axios.post(
-        "/api/cycle-count/finalize-and-sync",
-        {
-          siteName: site,
-          // targetDate: todayStr,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount",
-          },
-        }
-      );
+      const response = await cycleCountService.finalize<any>(site);
 
-      if (response.data.success) {
+      if (response.success) {
         alert("Cycle Count pushed successfully!");
       } else {
-        alert(`⚠️ Sync flagged: ${response.data.reason || "Unknown response processing state."}`);
+        alert(`⚠️ Sync flagged: ${response.reason || "Unknown response processing state."}`);
       }
     } catch (err: any) {
       console.error("Pipeline Sync Fault:", err);
-      alert(err.response?.data?.message || "❌ CRITICAL Exception running automated data transmission.");
+      alert(err.message || "❌ CRITICAL Exception running automated data transmission.");
     } finally {
       setSyncing(false);
     }

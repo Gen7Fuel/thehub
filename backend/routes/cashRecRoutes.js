@@ -9,6 +9,7 @@ const Lottery = LotteryModule?.Lottery || LotteryModule?.default || LotteryModul
 const Location = require('../models/Location')
 const sageService = require('../services/sageService')
 const { SITE_BANK_ACCOUNTS } = require('../constants/sageBankAccounts')
+const { logChange } = require('../middleware/changeLogger')
 
 const TIMEZONE = 'America/Toronto'
 
@@ -267,10 +268,22 @@ router.post('/parse-kardpoll', express.json({ limit: '15mb' }), async (req, res)
         },
         { new: true }
       ).lean()
+      await logChange(req, {
+        action: 'update', resourceType: 'kardpoll-report', resourceId: updated._id,
+        success: true, statusCode: 200, source: 'cash-rec.kardpoll',
+        resourceLabel: `${updated.site} on ${updated.date}`, before: existing, after: updated,
+        diffOptions: { redactedPaths: ['ar_rows'], maxChanges: 30, maxValueLength: 1000 },
+      })
       return res.json({ saved: true, upserted: true, report: updated })
     }
 
     const saved = await doc.save()
+    await logChange(req, {
+      action: 'create', resourceType: 'kardpoll-report', resourceId: saved._id,
+      success: true, statusCode: 200, source: 'cash-rec.kardpoll',
+      resourceLabel: `${saved.site} on ${saved.date}`, before: null, after: saved.toObject(),
+      diffOptions: { redactedPaths: ['ar_rows'], maxChanges: 30, maxValueLength: 1000 },
+    })
     return res.json({ saved: true, report: saved })
   } catch (e) {
     console.error('cashRecRoutes.save-kardpoll error:', e)
@@ -325,6 +338,8 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       transferFrom,
     })
 
+    const before = await BankStatement.findOne({ site: doc.site, date: doc.date }).lean()
+
     // Upsert per site+date
     const saved = await BankStatement.findOneAndUpdate(
       { site: doc.site, date: doc.date },
@@ -348,6 +363,13 @@ router.post('/bank-statement', express.json({ limit: '1mb' }), async (req, res) 
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean()
+
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'bank-statement', resourceId: saved._id,
+      success: true, statusCode: 200, source: 'cash-rec.bank',
+      resourceLabel: `${saved.site} on ${saved.date}`, before, after: saved,
+      diffOptions: { maxChanges: 100, maxValueLength: 2500 },
+    })
 
     return res.json({ saved: true, upserted: true, statement: saved })
   } catch (e) {
@@ -440,12 +462,21 @@ router.patch('/bank-statement/merchant-fees', express.json(), async (req, res) =
     // Bank statements are stored under nextDate (date + 1), matching the entries endpoint convention
     const nextDate = addDaysYmd(date, 1)
     if (!nextDate) return res.status(400).json({ error: 'Invalid date' })
+    const before = await BankStatement.findOne({ site, date: nextDate }).lean()
     const saved = await BankStatement.findOneAndUpdate(
       { site, date: nextDate },
       { $set: { merchantFees } },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean()
     const intacct = await recordMerchantFeeInIntacct({ site, date, nextDate, merchantFees, saved })
+    const after = await BankStatement.findOne({ site, date: nextDate }).lean()
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'bank-statement', resourceId: saved._id,
+      success: true, statusCode: 200, source: 'cash-rec.report',
+      message: `Merchant fees for ${site} on ${date} updated to ${merchantFees.toFixed(2)} — Sage status: ${intacct.status}`,
+      before, after,
+      diffOptions: { maxChanges: 30, maxValueLength: 1000 },
+    })
     return res.json({ saved: true, statement: saved, intacct })
   } catch (e) {
     console.error('cashRecRoutes.update-merchant-fees error:', e)
@@ -1134,11 +1165,23 @@ router.post('/kardpoll', express.json({ limit: '1mb' }), async (req, res) => {
         },
         { new: true }
       ).lean()
+      await logChange(req, {
+        action: 'update', resourceType: 'kardpoll-report', resourceId: updated._id,
+        success: true, statusCode: 200, source: 'cash-rec.kardpoll',
+        resourceLabel: `${updated.site} on ${updated.date}`, before: existing, after: updated,
+        diffOptions: { redactedPaths: ['ar_rows'], maxChanges: 30, maxValueLength: 1000 },
+      })
       return res.json({ saved: true, upserted: true, report: updated })
     }
 
     const doc = KardpollReport.fromParsed(parsed)
     const saved = await doc.save()
+    await logChange(req, {
+      action: 'create', resourceType: 'kardpoll-report', resourceId: saved._id,
+      success: true, statusCode: 200, source: 'cash-rec.kardpoll',
+      resourceLabel: `${saved.site} on ${saved.date}`, before: null, after: saved.toObject(),
+      diffOptions: { redactedPaths: ['ar_rows'], maxChanges: 30, maxValueLength: 1000 },
+    })
     return res.json({ saved: true, report: saved })
   } catch (e) {
     console.error('cashRecRoutes.kardpoll error:', e)
@@ -1166,11 +1209,23 @@ router.post('/parse-kardpoll-excel', express.json({ limit: '1mb' }), async (req,
         { sales, litresSold },
         { new: true }
       ).lean()
+      await logChange(req, {
+        action: 'update', resourceType: 'kardpoll-report', resourceId: updated._id,
+        success: true, statusCode: 200, source: 'cash-rec.kardpoll',
+        resourceLabel: `${updated.site} on ${updated.date}`, before: existing, after: updated,
+        diffOptions: { redactedPaths: ['ar_rows'], maxChanges: 30, maxValueLength: 1000 },
+      })
       return res.json({ saved: true, upserted: true, report: updated })
     }
 
     const doc = new KardpollReport({ site, date, sales, litresSold, ar: 0, ar_rows: [] })
     const saved = await doc.save()
+    await logChange(req, {
+      action: 'create', resourceType: 'kardpoll-report', resourceId: saved._id,
+      success: true, statusCode: 200, source: 'cash-rec.kardpoll',
+      resourceLabel: `${saved.site} on ${saved.date}`, before: null, after: saved.toObject(),
+      diffOptions: { redactedPaths: ['ar_rows'], maxChanges: 30, maxValueLength: 1000 },
+    })
     return res.json({ saved: true, report: saved })
   } catch (e) {
     console.error('cashRecRoutes.parse-kardpoll-excel error:', e)
@@ -1183,6 +1238,13 @@ router.post('/send-weekly-ar-report', async (req, res) => {
   try {
     const { sendWeeklyArReport } = require('../cron_jobs/weeklyArReportCron')
     await sendWeeklyArReport()
+    await logChange(req, {
+      action: 'create', resourceType: 'weekly-ar-report',
+      success: true, statusCode: 200, source: 'settings.cash-rec',
+      message: 'Weekly accounts receivable report generated and queued for delivery',
+      changes: [{ operation: 'add', path: 'delivery.status', after: 'queued' }],
+      changeSummary: { added: 1, removed: 0, replaced: 0, total: 1 },
+    })
     return res.json({ success: true, message: 'Weekly AR report queued successfully.' })
   } catch (e) {
     console.error('send-weekly-ar-report error:', e)
@@ -1201,18 +1263,34 @@ router.get('/tags', async (req, res) => {
 router.post('/tags', express.json(), async (req, res) => {
   const { site, date } = req.body || {}
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
+  const before = await CashRecTag.findOne({ site, date }).lean()
   const tag = await CashRecTag.findOneAndUpdate(
     { site, date },
     { site, date },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean()
+  if (!before) {
+    await logChange(req, {
+      action: 'create', resourceType: 'cash-rec-tag', resourceId: tag._id,
+      success: true, statusCode: 200, source: 'cash-rec.tags',
+      resourceLabel: `${site} on ${date}`, before: null, after: tag,
+    })
+  }
   res.json(tag)
 })
 
 router.delete('/tags', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
-  await CashRecTag.deleteOne({ site, date })
+  const before = await CashRecTag.findOne({ site, date }).lean()
+  const result = await CashRecTag.deleteOne({ site, date })
+  if (before && result.deletedCount) {
+    await logChange(req, {
+      action: 'delete', resourceType: 'cash-rec-tag', resourceId: before._id,
+      success: true, statusCode: 200, source: 'cash-rec.tags',
+      resourceLabel: `${site} on ${date}`, before, after: null,
+    })
+  }
   res.json({ ok: true })
 })
 

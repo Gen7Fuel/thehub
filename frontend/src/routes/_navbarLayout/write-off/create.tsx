@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertTriangle, Info, PlusCircle, Search, Trash2, Image as ImageIcon } from 'lucide-react';
 import axios from 'axios';
 import { DatePicker } from '@/components/custom/datePicker';
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/create')({
   component: RouteComponent,
@@ -144,19 +146,10 @@ function RouteComponent() {
       if (formQuery.length > 2 && currentSite) {
         setIsSearching(true);
         try {
-          const res = await axios.get(`/api/cycle-count/search`, {
-            params: {
-              site: currentSite, // Sends the plain text string name like "Sarnia" or "Jocko Point"
-              q: formQuery
-            },
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('token')}`,
-              "X-Required-Permission": "writeOff.create"
-            }
-          });
-          setFormResults(res.data);
+          const result = await cycleCountService.searchItemsForWriteOff<any[]>(currentSite, formQuery);
+          setFormResults(result);
         } catch (err: any) {
-          if (err.response?.status === 403) navigate({ to: "/no-access" });
+          if (isApiError(err) && err.status === 403) navigate({ to: "/no-access" });
           setFormResults([]);
         } finally {
           setIsSearching(false);

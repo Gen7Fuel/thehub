@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
-import axios from 'axios'
+import { academyService } from '@/api/academy/academy.service'
+import { isApiError } from '@/api/core/errors'
 
 // Trainer-facing MCQ walkthrough for a single course. Pulls the same
 // published-course data Academy uses, but only ever renders the `mcq`
@@ -38,11 +39,6 @@ interface CourseData {
 export const Route = createFileRoute('/_navbarLayout/ai-customer/mcq/$courseId')({
   component: RouteComponent,
 })
-
-function makeAuthHeaders() {
-  const token = localStorage.getItem('token')
-  return { Authorization: `Bearer ${token}`, 'X-Required-Permission': 'academy' }
-}
 
 // The hardcoded "classic" question, kept as its own course in the list so
 // the feedback-modal styling has a known-good reference to check against.
@@ -109,10 +105,9 @@ function RouteComponent() {
     if (isDemo) return
     setLoading(true)
     setError(null)
-    axios
-      .get(`/api/academy/learner/courses/${courseId}`, { headers: makeAuthHeaders() })
-      .then((res) => {
-        const raw = res.data
+    academyService
+      .getCourse<any>(courseId, 'ai-customer.mcq')
+      .then((raw) => {
         const pages: MCQPage[] = []
         const sections = [...(raw.sections ?? [])].sort((a: any, b: any) => a.order - b.order)
         for (const section of sections) {
@@ -132,8 +127,8 @@ function RouteComponent() {
         setCourse({ title: raw.title, pages })
       })
       .catch((err) => {
-        if (err.response?.status === 403) navigate({ to: '/no-access' })
-        else if (err.response?.status === 404) setError('Course not found.')
+        if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' })
+        else if (isApiError(err) && err.status === 404) setError('Course not found.')
         else setError('Failed to load course.')
       })
       .finally(() => setLoading(false))

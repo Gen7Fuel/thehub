@@ -139,7 +139,6 @@ export default function Navbar() {
   const isHome = matchRoute({ to: '/' })
   const isCashSummary = matchRoute({ to: '/cash-summary', fuzzy: true })
   const isPurchaseOrder = matchRoute({ to: '/po', fuzzy: true })
-  const isKardpoll = matchRoute({ to: '/kardpoll', fuzzy: true })
   const isStatusSales = matchRoute({ to: '/status', fuzzy: true })
   const isReports = matchRoute({ to: '/reports', fuzzy: true })
   const isPayables = matchRoute({ to: '/payables', fuzzy: true })
@@ -158,7 +157,6 @@ export default function Navbar() {
     if (isHome) return 'Home'
     if (isCashSummary) return 'Cash Summary'
     if (isPurchaseOrder) return 'Purchase Order'
-    if (isKardpoll) return 'Kardpoll'
     if (isStatusSales) return 'Status Sales'
     if (isReports) return 'Reports'
     if (isPayables) return 'Payables'

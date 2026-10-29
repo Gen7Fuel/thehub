@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { getCsoCodeByStationName, getVendorNameById } from "@/lib/utils";
@@ -58,6 +59,7 @@ import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
 import { getPeriodKey } from "../_navbarLayout/audit/checklist/$id";
 import axios from "axios";
+import { auditService } from '@/api/audit/audit.service';
 import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 import { ArrowDownRight, ArrowUpRight, Minus, Table2 } from "lucide-react";
 
@@ -697,14 +699,7 @@ function RouteComponent() {
               throw new Error("Failed to fetch payables comparison data");
             return res.json();
           }),
-          fetch(
-            `/api/audit/station-stats?site=${encodeURIComponent(site)}&periodKeys=${encodeURIComponent(JSON.stringify(pKeys))}`,
-            { headers: authHeaders },
-          ).then(async (res) => {
-            if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error("Failed to fetch audit stats");
-            return res.json();
-          }),
+          auditService.getDashboardStats<any>(site, pKeys),
           fetchVendors(site),
           fetchOrderRecs(site, weekStart, weekEnd),
         ]);
@@ -807,7 +802,7 @@ function RouteComponent() {
           payablesResult,
           auditResult,
         ]) {
-          if (r.status === "rejected" && (r.reason as any)?.is403) {
+          if (r.status === "rejected" && ((r.reason as any)?.is403 || (r.reason as any)?.status === 403)) {
             navigate({ to: "/no-access" });
             return;
           }
@@ -2926,11 +2921,7 @@ const fetchDailyCounts = async (
   startDate: string,
   endDate: string,
 ) => {
-  // Simplified parameters block omitting legacy timezone parameters logic completely
-  const params = new URLSearchParams({ site, startDate, endDate });
-  return fetch(`/api/cycle-count/v2/daily-counts?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then((res) => res.json());
+  return cycleCountService.getDashboardDailyCounts<any>(site, startDate, endDate);
 };
 
 const fetchSalesData = async (rows: any) => {

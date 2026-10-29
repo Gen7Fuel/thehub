@@ -836,6 +836,8 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import * as XLSX from "xlsx";
 import { FileSpreadsheet, Trash2 } from "lucide-react"
 import Barcode from 'react-barcode'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
+import { isApiError } from '@/api/core/errors'
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/manage/item-bk')({
   component: RouteComponent,
@@ -1165,18 +1167,13 @@ function RouteComponent() {
     async function fetchItemBook() {
       setIsLoading(true)
       try {
-        const res = await fetch(`/api/cycle-count/item-bk?site=${encodeURIComponent(site)}`, {
-          headers: {
-            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-            "X-Required-Permission": "cycleCount.manageCount",
-          }
-        });
-        if (res.status === 403) { navigate({ to: "/no-access" }); return; }
-        if (res.ok) {
-          const data = await res.json()
-          setItems(data.items || [])
-        }
+        const data = await cycleCountService.getItemBook<{ items: any[] }>(site)
+        setItems(data.items || [])
       } catch (err) {
+        if (isApiError(err) && err.status === 403) {
+          navigate({ to: "/no-access" })
+          return
+        }
         console.error("Error loading items database context:", err)
       } finally {
         setIsLoading(false)
@@ -1398,50 +1395,18 @@ function RouteComponent() {
         updatesPayload.crt_in_case = editForm.crt_in_case === "CLEAR" ? null : editForm.crt_in_case;
       }
 
-      const res = await fetch("/api/cycle-count/item-bk/mass-edit", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-          "X-Required-Permission": "cycleCount.manageCount",
-        },
-        body: JSON.stringify({
-          ids: selectedIds,
-          updates: updatesPayload,
-        }),
-      });
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      if (res.ok) {
-        const updatedRes = await fetch(
-          `/api/cycle-count/item-bk?site=${encodeURIComponent(site)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-              "X-Required-Permission": "cycleCount.manageCount",
-            },
-          }
-        );
-        if (updatedRes.status === 403) {
-          navigate({ to: "/no-access" });
-          return;
-        }
-        if (updatedRes.ok) {
-          const data = await updatedRes.json();
-          setItems(data.items || []);
-        }
-        setSelectedIds([]);
-        onClose();
-      } else {
-        const errData = await res.json();
-        alert(`Update failed: ${errData.message || "Unknown Server Error"}`);
-      }
+      await cycleCountService.massEditItemBook(site, selectedIds, updatesPayload)
+      const data = await cycleCountService.getItemBook<{ items: any[] }>(site)
+      setItems(data.items || [])
+      setSelectedIds([])
+      onClose()
     } catch (err) {
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: "/no-access" })
+        return
+      }
       console.error("Critical failure updating bulk items:", err);
+      alert(`Update failed: ${err instanceof Error ? err.message : "Unknown Server Error"}`)
     } finally {
       setIsUpdating(false);
     }

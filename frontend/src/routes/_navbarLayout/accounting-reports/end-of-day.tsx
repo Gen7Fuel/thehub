@@ -5,7 +5,8 @@ import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
 import { useSite } from '@/context/SiteContext';
 import { useAuth } from '@/context/AuthContext';
-import axios from 'axios';
+import { accountingReportsService } from '@/api/accounting-reports/accounting-reports.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute(
   '/_navbarLayout/accounting-reports/end-of-day',
@@ -98,41 +99,29 @@ function RouteComponent() {
       setLoading(true);
       setStatusMessage('Requesting End of Day reports...');
 
-      const token = localStorage.getItem('token');
-
-      const response = await axios.post(
-        '/api/accounting-reports/eod-reports/cumulative',
-        {
-          stationName: site,
-          startDate: startDateStr,
-          endDate: endDateStr,
-          includeIndividualReports: shouldIncludeIndividual,
-          includeChickenDelight: shouldIncludeChickenDelight,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-            'X-Required-Permission': 'accounting.accountingReports.endOfDayReport',
-          },
-        }
-      );
+      const response = await accountingReportsService.requestEndOfDay({
+        stationName: site,
+        startDate: startDateStr,
+        endDate: endDateStr,
+        includeIndividualReports: shouldIncludeIndividual,
+        includeChickenDelight: shouldIncludeChickenDelight,
+      });
 
       // Display response feedback message
       const targetEmail = user?.email || 'your email address';
       setStatusMessage(
-        response.data?.message || `Reports generated! The reports will be emailed directly to ${targetEmail} shortly.`
+        response.message || `Reports generated! The reports will be emailed directly to ${targetEmail} shortly.`
       );
     } catch (err: any) {
       console.error('Error generating reports:', err);
 
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
 
       setErrorMessage(
-        err.response?.data?.error || err.message || 'Failed to generate reports.'
+        (isApiError(err) ? err.message : err?.message) || 'Failed to generate reports.'
       );
     } finally {
       setLoading(false);

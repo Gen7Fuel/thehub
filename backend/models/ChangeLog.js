@@ -18,7 +18,11 @@ const ChangeLogSchema = new mongoose.Schema(
       index: true,
     },
     resourceType: { type: String, required: true, index: true },
-    resourceId: { type: mongoose.Schema.Types.ObjectId, index: true },
+    // Mixed preserves existing Mongo ObjectIds while also allowing PostgreSQL
+    // integer/UUID primary keys for resources that do not live in MongoDB.
+    resourceId: { type: mongoose.Schema.Types.Mixed, index: true },
+    resourceIds: { type: [mongoose.Schema.Types.Mixed], default: undefined },
+    resourceStore: { type: String, enum: ['mongodb', 'postgresql', 'external'], index: true },
     success: { type: Boolean, required: true, index: true },
     statusCode: { type: Number },
     message: { type: String },

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import axios from "axios";
+import { accountingReportsService } from "@/api/accounting-reports/accounting-reports.service";
+import { isApiError } from "@/api/core/errors";
 import { Toaster, toast } from "sonner";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
@@ -32,8 +33,6 @@ export const Route = createFileRoute(
 function RouteComponent() {
   const { user } = useAuth();
   const { selectedSite } = useSite();
-  const navigate = useNavigate();
-
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,38 +88,23 @@ function RouteComponent() {
       formData.append("adminFee", adminFee);
       formData.append("provinceStatusDiscount", provinceStatusDiscount);
 
-      const response = await axios.post(
-        "/api/accounting-reports/infonet-reports",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "accounting.accountingReports.infonet",
-          },
-        },
-      );
-
-      if (response.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+      const response = await accountingReportsService.requestInfonet(formData, site);
 
       toast.success(
-        response.data?.message ||
+        response.message ||
           "Infonet reports generated and email queued successfully!",
       );
       setUploadedFile(null);
       setAdminFee("");
       setProvinceStatusDiscount("");
     } catch (err: any) {
-      if (axios.isAxiosError(err) && err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         window.location.href = "/no-access";
         return;
       }
 
       const errMsg =
-        err.response?.data?.error || "Failed to submit report to backend.";
+        (isApiError(err) ? err.message : undefined) || "Failed to submit report to backend.";
       setError(errMsg);
       toast.error(errMsg);
       console.error(err);

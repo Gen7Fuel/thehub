@@ -12,6 +12,12 @@ const { emailQueue } = require('../../queues/emailQueue');
 const User = require('../../models/User');
 const { pushNotification } = require("../../services/notificationService");
 const { resolveIssueRecipients } = require("../../utils/auditIssueRecipients");
+const { logChange } = require('../../middleware/changeLogger');
+
+function auditSource(req, fallback) {
+  const source = String(req.headers['x-action-source'] || '');
+  return /^station-audit\.(checklist|interface|visitor|templates)$/.test(source) ? source : fallback;
+}
 // GET /api/audit/category-options
 router.get('/category-options', async (req, res) => {
   try {
@@ -163,6 +169,11 @@ router.post('/', async (req, res) => {
     });
 
     await auditTemplate.save();
+    await logChange(req, {
+      action: 'create', resourceType: 'audit-template', resourceId: auditTemplate._id,
+      success: true, statusCode: 201, after: auditTemplate.toObject(),
+      resourceLabel: auditTemplate.name, source: 'station-audit.templates',
+    });
     res.status(201).json(auditTemplate);
   } catch (err) {
     console.error(err);
@@ -602,6 +613,7 @@ router.put('/issues/:id/status', async (req, res) => {
 
     const item = await AuditItem.findById(id);
     if (!item) return res.status(404).json({ error: "Item not found" });
+    const before = item.toObject();
 
     item.currentIssueStatus = status;
 
@@ -646,6 +658,13 @@ router.put('/issues/:id/status', async (req, res) => {
 
     await item.save();
 
+    await logChange(req, {
+      action: 'update', resourceType: 'audit-issue', resourceId: item._id,
+      success: true, statusCode: 200, before, after: item.toObject(),
+      resourceLabel: item.item, source: auditSource(req, 'station-audit.interface'),
+      diffOptions: { redactedTerms: ['photos'] },
+    });
+
     res.json({ message: "Status updated", item });
   } catch (err) {
     console.error("Error updating issue status:", err);
@@ -661,6 +680,7 @@ router.put('/issues/:id', async (req, res) => {
 
     const item = await AuditItem.findById(id);
     if (!item) return res.status(404).json({ error: "Item not found" });
+    const before = item.toObject();
 
     if (status !== undefined) {
       if (!["Created", "In Progress", "On Hold", "Resolved"].includes(status)) {
@@ -694,6 +714,12 @@ router.put('/issues/:id', async (req, res) => {
     if (notes !== undefined) item.notes = notes;
 
     await item.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'audit-issue', resourceId: item._id,
+      success: true, statusCode: 200, before, after: item.toObject(),
+      resourceLabel: item.item, source: auditSource(req, 'station-audit.interface'),
+      diffOptions: { redactedTerms: ['photos'] },
+    });
     res.json({ message: "Issue updated", item });
   } catch (err) {
     console.error("Error updating issue:", err);
@@ -774,6 +800,8 @@ router.post('/instance', async (req, res) => {
 
     const createdInstances = [];
     const allUpdatedItems = []; // 🔹 collect updated items for response & socket emit
+    const beforeItems = [];
+    const afterItems = [];
 
     for (const freq of frequenciesToProcess) {
       const periodKey = periodKeys?.[freq]; // gets the preriod key for all frequencies
@@ -796,6 +824,7 @@ router.post('/instance', async (req, res) => {
 
       for (const item of itemsForFreq) {
         const existingItem = await AuditItem.findOne({ instance: instance._id, item: item.item });
+        if (existingItem) beforeItems.push(existingItem.toObject());
 
         let updateFields = {
           category: item.category,
@@ -1141,6 +1170,13 @@ router.post('/instance', async (req, res) => {
             });
 
             await orderRec.save();
+            await logChange(req, {
+              action: 'create', resourceType: 'order-rec', resourceId: orderRec._id,
+              success: true, statusCode: 200, after: orderRec.toObject(),
+              resourceLabel: `for ${vendorDoc.name} at ${site}`,
+              source: 'station-audit.checklist',
+              diffOptions: { maxChanges: 50 },
+            });
             if (io) io.emit("orderCreated", orderRec);
 
             await AuditItem.updateOne(
@@ -1161,6 +1197,13 @@ router.post('/instance', async (req, res) => {
           lastChecked: lastCheckedValue,
           orderCreated: item.orderCreated || false,
         });
+        afterItems.push({
+          ...(existingItem?.toObject() || {}),
+          ...updateFields,
+          item: item.item,
+          frequency: item.frequency || freq,
+          orderCreated: item.orderCreated || existingItem?.orderCreated || false,
+        });
       }
     }
     if (io) {
@@ -1172,6 +1215,17 @@ router.post('/instance', async (req, res) => {
         updatedAt: new Date(),
       });
     }
+
+    await logChange(req, {
+      action: 'update', resourceType: 'audit-instance',
+      resourceId: createdInstances[0]?.instanceId,
+      success: true, statusCode: 200,
+      message: `Station audit saved for ${site} — ${allUpdatedItems.length} checklist items across ${frequenciesToProcess.join(', ')}`,
+      before: { items: beforeItems }, after: { items: afterItems },
+      source: 'station-audit.checklist',
+      bulk: { affectedCount: allUpdatedItems.length, truncated: allUpdatedItems.length > 100 },
+      diffOptions: { arrayKeys: { items: 'item' }, redactedTerms: ['photos'], maxChanges: 100 },
+    });
 
     res.json({
       message: "Audit saved successfully",
@@ -1201,6 +1255,8 @@ router.post('/visitor', async (req, res) => {
 
     const createdInstances = [];
     const allUpdatedItems = []; // 🔹 collect updated items for response & socket emit
+    const beforeItems = [];
+    const afterItems = [];
 
     for (const freq of frequenciesToProcess) {
       // const periodKey = getPeriodKey(freq, date);
@@ -1224,6 +1280,7 @@ router.post('/visitor', async (req, res) => {
 
       for (const item of itemsForFreq) {
         const existingItem = await AuditItem.findOne({ instance: instance._id, item: item.item });
+        if (existingItem) beforeItems.push(existingItem.toObject());
 
         let updateFields = {
           category: item.category,
@@ -1267,8 +1324,25 @@ router.post('/visitor', async (req, res) => {
           // lastChecked: lastCheckedValue,
           orderCreated: item.orderCreated || false,
         });
+        afterItems.push({
+          ...(existingItem?.toObject() || {}),
+          ...updateFields,
+          item: item.item,
+          frequency: item.frequency || freq,
+          orderCreated: item.orderCreated || existingItem?.orderCreated || false,
+        });
       }
     }
+    await logChange(req, {
+      action: 'update', resourceType: 'audit-instance',
+      resourceId: createdInstances[0]?.instanceId,
+      success: true, statusCode: 200,
+      message: `Visitor audit saved for ${site} — ${allUpdatedItems.length} checklist items across ${frequenciesToProcess.join(', ')}`,
+      before: { items: beforeItems }, after: { items: afterItems },
+      source: 'station-audit.visitor',
+      bulk: { affectedCount: allUpdatedItems.length, truncated: allUpdatedItems.length > 100 },
+      diffOptions: { arrayKeys: { items: 'item' }, redactedTerms: ['photos'], maxChanges: 100 },
+    });
     res.json({
       message: "Audit saved successfully",
       instances: createdInstances,
@@ -1289,6 +1363,7 @@ router.put('/:id', async (req, res) => {
 
     const template = await AuditTemplate.findById(req.params.id);
     if (!template) return res.status(404).json({ error: 'Not found' });
+    const before = template.toObject();
 
     const existingSites = template.sites || [];
     const newSites = updatedSites.filter(site => !existingSites.includes(site));
@@ -1344,6 +1419,11 @@ router.put('/:id', async (req, res) => {
     template.items = mergedItems;
 
     await template.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'audit-template', resourceId: template._id,
+      success: true, statusCode: 200, before, after: template.toObject(),
+      resourceLabel: template.name, source: 'station-audit.templates',
+    });
     console.log("Template updated successfully:", template._id);
     res.json(template);
   } catch (err) {
@@ -1358,6 +1438,11 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const template = await AuditTemplate.findByIdAndDelete(req.params.id);
   if (!template) return res.status(404).json({ error: 'Not found' });
+  await logChange(req, {
+    action: 'delete', resourceType: 'audit-template', resourceId: template._id,
+    success: true, statusCode: 200, before: template.toObject(),
+    resourceLabel: template.name, source: 'station-audit.templates',
+  });
   res.json({ success: true });
 });
 
@@ -1368,8 +1453,14 @@ router.post('/:id/items', async (req, res) => {
   const { text, required } = req.body;
   const template = await AuditTemplate.findById(req.params.id);
   if (!template) return res.status(404).json({ error: 'Template not found' });
+  const before = template.toObject();
   template.items.push({ text, required });
   await template.save();
+  await logChange(req, {
+    action: 'update', resourceType: 'audit-template', resourceId: template._id,
+    success: true, statusCode: 201, before, after: template.toObject(),
+    resourceLabel: template.name, source: 'station-audit.templates',
+  });
   res.status(201).json(template);
 });
 
@@ -1378,11 +1469,17 @@ router.put('/:id/items/:itemId', async (req, res) => {
   const { text, required } = req.body;
   const template = await AuditTemplate.findById(req.params.id);
   if (!template) return res.status(404).json({ error: 'Template not found' });
+  const before = template.toObject();
   const item = template.items.id(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   if (text !== undefined) item.text = text;
   if (required !== undefined) item.required = required;
   await template.save();
+  await logChange(req, {
+    action: 'update', resourceType: 'audit-template', resourceId: template._id,
+    success: true, statusCode: 200, before, after: template.toObject(),
+    resourceLabel: template.name, source: 'station-audit.templates',
+  });
   res.json(template);
 });
 
@@ -1390,10 +1487,16 @@ router.put('/:id/items/:itemId', async (req, res) => {
 router.delete('/:id/items/:itemId', async (req, res) => {
   const template = await AuditTemplate.findById(req.params.id);
   if (!template) return res.status(404).json({ error: 'Template not found' });
+  const before = template.toObject();
   const item = template.items.id(req.params.itemId);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   item.remove();
   await template.save();
+  await logChange(req, {
+    action: 'update', resourceType: 'audit-template', resourceId: template._id,
+    success: true, statusCode: 200, before, after: template.toObject(),
+    resourceLabel: template.name, source: 'station-audit.templates',
+  });
   res.json(template);
 });
 

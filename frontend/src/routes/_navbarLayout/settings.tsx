@@ -1,6 +1,7 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { useState } from 'react'
 import axios from 'axios'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 import { useAuth } from "@/context/AuthContext";
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
@@ -69,14 +70,10 @@ function RouteComponent() {
     setArReportSending(true);
     setArReportMessage('');
     try {
-      const res = await axios.post('/api/cash-rec/send-weekly-ar-report', null, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      setArReportMessage(res.data.message || 'Report queued successfully.');
+      const result = await cashRecService.sendWeeklyArReport();
+      setArReportMessage(result.message || 'Report queued successfully.');
     } catch (err: any) {
-      setArReportMessage(err.response?.data?.error || 'Failed to send AR report.');
+      setArReportMessage(err.message || 'Failed to send AR report.');
     } finally {
       setArReportSending(false);
     }

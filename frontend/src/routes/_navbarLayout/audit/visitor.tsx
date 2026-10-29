@@ -1,7 +1,8 @@
 import { createFileRoute, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useState } from "react"
 // import { Button } from '@/components/ui/button'
-import axios from "axios"
+import { auditService } from '@/api/audit/audit.service'
+import { isApiError } from '@/api/core/errors'
 // import { LocationPicker } from "@/components/custom/locationPicker";
 // import { createContext } from "react";
 import { useAuth } from "@/context/AuthContext";
@@ -56,20 +57,20 @@ function RouteComponent() {
   }, [site, user?.location, navigate]);
 
   const handleSiteChange = (newSite: string) => {
-    const activeTemplateId = templates.find(t =>
+    const activeTemplate = templates.find(t =>
       matchRoute({
         to: "/audit/visitor/$id",
         params: { id: t._id },
         fuzzy: true,
       })
-    )?._id;
+    );
 
     navigate(
-      activeTemplateId
+      activeTemplate
         ? {
           to: "/audit/visitor/$id",
-          params: { id: activeTemplateId },
-          search: { site: newSite },
+          params: { id: activeTemplate._id },
+          search: { site: newSite, checklistName: activeTemplate.name },
         }
         : {
           to: "/audit/visitor",
@@ -85,15 +86,10 @@ function RouteComponent() {
     setLoading(true);
     setError("");
 
-    axios
-      .get("/api/audit", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "stationAudit.visitor"
-        },
-      })
-      .then(res => {
-        const filtered = res.data.filter(
+    auditService
+      .listVisitorTemplates<AuditTemplate[]>()
+      .then(data => {
+        const filtered = data.filter(
           (t: AuditTemplate) => t.sites && t.sites.includes(site)
         );
         setTemplates(filtered);
@@ -102,7 +98,7 @@ function RouteComponent() {
         // localStorage.setItem("location", stationName);
       })
       .catch((err) => {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {
@@ -160,7 +156,7 @@ function RouteComponent() {
               navigate({
                 to: "/audit/visitor/$id",
                 params: { id: templates[prevIndex]._id },
-                search: (prev: any) => ({ site: prev.site }),
+                search: (prev: any) => ({ site: prev.site, checklistName: templates[prevIndex].name }),
               });
             }}
           >
@@ -198,7 +194,7 @@ function RouteComponent() {
               navigate({
                 to: "/audit/visitor/$id",
                 params: { id: templates[nextIndex]._id },
-                search: (prev: any) => ({ site: prev.site }),
+                search: (prev: any) => ({ site: prev.site, checklistName: templates[nextIndex].name }),
               });
             }}
           >

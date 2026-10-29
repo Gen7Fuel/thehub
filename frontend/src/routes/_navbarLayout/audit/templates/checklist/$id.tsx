@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { auditService } from '@/api/audit/audit.service';
+import { auditSupportService } from '@/api/audit/audit-support.service';
+import { isApiError } from '@/api/core/errors';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useNavigate, useParams } from "@tanstack/react-router";
@@ -10,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 export const Route = createFileRoute(
   '/_navbarLayout/audit/templates/checklist/$id',
 )({
+  validateSearch: (search: { name?: string }) => ({ name: search.name }),
   component: RouteComponent,
 })
 
@@ -38,6 +41,7 @@ interface ChecklistItem {
 
 function RouteComponent() {
   const { id } = useParams({ from: '/_navbarLayout/audit/templates/checklist/$id' });
+  const { name: checklistName } = Route.useSearch();
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
   const [items, setItems] = useState<ChecklistItem[]>([
     { category: "", item: "", statusTemplate: "", followUpTemplate: "Follow Up", assignedTo: "Assigned To", frequency: "daily", commentRequired: false, _open: false },
@@ -142,36 +146,18 @@ function RouteComponent() {
     const fetchAllData = async () => {
       try {
         setLoading(true); // start loading
-        const token = localStorage.getItem("token");
-        const headers = {
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "stationAudit.template",
-        };
-
         // Fetch all necessary data in parallel
-        const [auditRes, selectRes, vendorRes, sitesRes] = await Promise.all([
-          axios.get(`/api/audit/${id}`, { headers }),
-          axios.get("/api/audit/select-templates", { headers }),
-          axios.get("/api/vendors", { headers }),
-          axios.get("/api/locations", { headers }),
+        const [audit, selectData, vendorData, siteData] = await Promise.all([
+          auditService.getTemplateForAdmin<any>(id, checklistName),
+          auditService.listSelectTemplates<SelectTemplate[]>('templates'),
+          auditSupportService.listVendors<{ name: string; category: string }[]>(),
+          auditSupportService.listSites<{ _id: string; stationName: string }[]>(),
         ]);
 
-        // ✅ Check if any of the responses returned 403
-        if (
-          auditRes.status === 403 ||
-          selectRes.status === 403 ||
-          vendorRes.status === 403 ||
-          sitesRes.status === 403
-        ) {
-          navigate({ to: "/no-access" });
-          return;
-        }
-
         // --- handle select templates
-        setSelectTemplates(selectRes.data);
+        setSelectTemplates(selectData);
 
         // --- handle vendors
-        const vendorData = vendorRes.data as { name: string; category: string }[];
         const stationVendors = vendorData.filter(
           (v) => v.category?.trim() === "Station Supplies"
         );
@@ -181,10 +167,9 @@ function RouteComponent() {
         setUniqueVendors(vendors);
 
         // --- handle sites
-        setSites(sitesRes.data);
+        setSites(siteData);
 
         // --- handle audit template
-        const audit = auditRes.data;
         setName(audit.templateName || "");
         setDescription(audit.description || "");
         setSelectedSites(audit.sites || []);
@@ -227,6 +212,10 @@ function RouteComponent() {
             ]
         );
       } catch (err) {
+        if (isApiError(err) && err.status === 403) {
+          navigate({ to: '/no-access' });
+          return;
+        }
         console.error("Failed to load audit template data:", err);
         setError("Failed to load audit template data");
       } finally {
@@ -291,28 +280,14 @@ function RouteComponent() {
     console.log("Submitting checklist template:", payload);
 
     try {
-      const res = await axios.put(
-        `/api/audit/${id}`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "stationAudit.template",
-          },
-        }
-      );
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+      await auditService.updateTemplate(id, payload, name);
 
       navigate({ to: "/audit/templates/checklist/list" });
     } catch (err: any) {
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
       } else {
-        setError(err?.response?.data?.message || "Failed to update checklist template");
+        setError((isApiError(err) ? err.message : undefined) || "Failed to update checklist template");
       }
     } finally {
       setSaving(false);

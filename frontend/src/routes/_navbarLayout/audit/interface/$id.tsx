@@ -315,6 +315,10 @@ import { Button } from "@/components/ui/button";
 import { ChecklistItemCard } from "@/components/custom/ChecklistItem";
 import { RouteContext } from "../interface";
 import { useAuth } from "@/context/AuthContext";
+import { auditService } from '@/api/audit/audit.service';
+import { auditSupportService } from '@/api/audit/audit-support.service';
+import { describeAuditPeriod } from '@/api/audit/audit-period';
+import { isApiError } from '@/api/core/errors';
 
 interface SelectOption {
   text: string;
@@ -347,6 +351,9 @@ interface AuditItem {
 }
 
 export const Route = createFileRoute("/_navbarLayout/audit/interface/$id")({
+  validateSearch: (search: { checklistName?: string }) => ({
+    checklistName: search.checklistName,
+  }),
   component: RouteComponent,
 });
 
@@ -396,6 +403,7 @@ function getPeriodKey(frequency: AuditFrequency, date: Date = new Date()) {
 
 function RouteComponent() {
   const { id } = useParams({ from: "/_navbarLayout/audit/interface/$id" });
+  const { checklistName } = Route.useSearch();
   const [frequency, setFrequency] =
     useState<"daily" | "weekly" | "monthly">("daily");
   const navigate = useNavigate();
@@ -418,7 +426,6 @@ function RouteComponent() {
   const [selectTemplates, setSelectTemplates] = useState<SelectTemplate[]>([]);
 
 
-  const token = localStorage.getItem("token");
   const { stationName } = useContext(RouteContext);
   const { user } = useAuth();
   const site = stationName || user?.location || "";
@@ -440,27 +447,14 @@ function RouteComponent() {
   useEffect(() => {
     if (!site) return;
 
-    const controller = new AbortController();
-
-    fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to fetch location");
-        return res.json();
-      })
+    auditSupportService.getSite<{ timezone?: string }>(site, 'interface')
       .then((location) => {
         setSiteTimezone(location?.timezone || "");
       })
       .catch((err) => {
-        // ignore abort errors
-        if (err?.name !== "AbortError") {
-          console.error("Failed to fetch location timezone:", err);
-        }
+        console.error("Failed to fetch location timezone:", err);
         setSiteTimezone("");
       });
-
-    return () => controller.abort();
   }, [site]);
 
   // const fetchItemsForInstance = async () => {
@@ -585,32 +579,24 @@ function RouteComponent() {
   const [storeItemsAll, setStoreItemsAll] = useState<AuditItem[]>([]);
 
   const fetchItemsForInstance = async () => {
-    if (!id || !currentDate || !site || !token) return;
+    if (!id || !currentDate || !site) return;
     setLoading(true);
 
     try {
       const periodKey = getPeriodKey(frequency, currentDate);
 
-      const res = await fetch(
-        `/api/audit/compare?template=${id}&site=${encodeURIComponent(
-          site
-        )}&frequency=${frequency}&periodKey=${periodKey}`,
+      const data = await auditService.compareAudits<{
+        auditorName?: string;
+        storeItems?: AuditItem[];
+        visitorItems?: AuditItem[];
+        storeItemsAll?: AuditItem[];
+      }>(
+        { template: id, site, frequency, periodKey },
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "stationAudit.interface",
-          },
-        }
+          checklistName,
+          periodLabel: describeAuditPeriod(frequency, currentDate),
+        },
       );
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      if (!res.ok) throw new Error("Failed to fetch audit comparison");
-
-      const data = await res.json();
 
       setAuditorName(data.auditorName || "N/A");
 
@@ -628,6 +614,10 @@ function RouteComponent() {
       setShowVisitorComparison(false);
 
     } catch (err) {
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: '/no-access' });
+        return;
+      }
       console.error(err);
       setItems([]);
       setVisitorItems([]);
@@ -644,17 +634,11 @@ function RouteComponent() {
   useEffect(() => {
     fetchItemsForInstance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frequency, currentDate, id, site, token]);
+  }, [frequency, currentDate, id, site]);
 
   // Load dropdown select templates
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    fetch("/api/audit/select-templates", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
+    auditService.listSelectTemplates<SelectTemplate[]>('interface')
       .then(setSelectTemplates)
       .catch(() => setSelectTemplates([]));
   }, []);

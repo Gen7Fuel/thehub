@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
+import { cashSummaryService } from "@/api/cash-summary/cash-summary.service";
+import { isApiError } from "@/api/core/errors";
 
 const SITE_CONFIG = {
   waversCheques: ["Wavers West", "Wavers East"],
@@ -137,59 +139,29 @@ export const Route = createFileRoute("/_navbarLayout/cash-summary/report")({
       };
     }
 
-    const token = localStorage.getItem("token") || "";
     let isManitoba = false;
 
     try {
-      const locResp = await fetch(
-        `/api/locations?stationName=${encodeURIComponent(site)}`,
-        {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        },
-      );
-      if (locResp.ok) {
-        const loc = await locResp.json();
-        isManitoba = loc?.province?.trim().toLowerCase() === "manitoba";
-      }
+      const loc = await cashSummaryService.getLocationProfile<any>(site, 'cash-summary.report', 'accounting.cashSummary.report');
+      isManitoba = loc?.province?.trim().toLowerCase() === "manitoba";
     } catch (locErr) {
       console.error("Failed to resolve site location profile info", locErr);
     }
 
     try {
-      const res = await fetch(
-        `/api/cash-summary/report?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "accounting.cashSummary.report",
-          },
-        },
-      );
-
-      if (res.status === 403) {
-        return { report: null, error: null, accessDenied: true, isManitoba };
-      }
-
-      if (!res.ok) {
-        const msg = await res.text().catch(() => "Failed to load");
-        return {
-          report: null,
-          error: msg || "Failed to load",
-          accessDenied: false,
-          isManitoba,
-        };
-      }
-
       return {
-        report: (await res.json()) as ReportData,
+        report: await cashSummaryService.getReport<ReportData>(site, date),
         error: null,
         accessDenied: false,
         isManitoba,
       };
-    } catch {
+    } catch (error) {
+      if (isApiError(error) && error.status === 403) {
+        return { report: null, error: null, accessDenied: true, isManitoba };
+      }
       return {
         report: null,
-        error: "Network error",
+        error: error instanceof Error ? error.message : "Network error",
         accessDenied: false,
         isManitoba,
       };
@@ -308,28 +280,7 @@ function RouteComponent() {
     const statusLabel = newSubmittedState ? "Submitted" : "Unlocked";
 
     try {
-      const res = await fetch("/api/cash-summary/report/submitted", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-          "X-Required-Permission": "accounting.cashSummary.report.unlockShift",
-        },
-        body: JSON.stringify({ site, date, submitted: newSubmittedState }),
-      });
-
-      if (res.status === 403) {
-        toast.error("Permission denied: You cannot unlock/submit shifts");
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(
-          errData.error || `Failed to set report status to ${statusLabel}`,
-        );
-      }
+      await cashSummaryService.setSubmitted(site, date, newSubmittedState);
 
       // Success toast notification
       toast.success(`Shift report marked as ${statusLabel.toLowerCase()}`);
@@ -341,6 +292,10 @@ function RouteComponent() {
       });
     } catch (err: any) {
       console.error("Failed to toggle submitted status:", err);
+      if (isApiError(err) && err.status === 403) {
+        navigate({ to: "/no-access" });
+        return;
+      }
       toast.error(err.message || "Failed to update shift status");
     } finally {
       setTogglingSubmitted(false);
@@ -353,19 +308,10 @@ function RouteComponent() {
       if (!site || !date || SITE_CONFIG.excludeAP.includes(site)) return;
 
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(
-          `/api/cash-summary/payouts-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token || ""}`,
-              "X-Required-Permission": "accounting.cashSummary.report",
-            },
-          },
-        );
-        if (res.status === 403) return navigate({ to: "/no-access" });
-        if (res.ok) setPayoutsCheckMatch((await res.json()).match);
-      } catch {
+        const result = await cashSummaryService.getPayoutsCheck<{ match: boolean }>(site, date);
+        setPayoutsCheckMatch(result.match);
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) return navigate({ to: "/no-access" });
         setPayoutsCheckMatch(null);
       }
     };
@@ -380,23 +326,11 @@ function RouteComponent() {
       if (!site || !date || SITE_CONFIG.excludeAR.includes(site)) return;
 
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(
-          `/api/cash-summary/ar-check?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token || ""}`,
-              "X-Required-Permission": "accounting.cashSummary.report",
-            },
-          },
-        );
-        if (res.status === 403) return navigate({ to: "/no-access" });
-        if (res.ok) {
-          const data = (await res.json()) as ArCheckData;
-          setArCheckMatch(data.match);
-          setArData(data);
-        }
-      } catch {
+        const data = await cashSummaryService.getArCheck<ArCheckData>(site, date);
+        setArCheckMatch(data.match);
+        setArData(data);
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) return navigate({ to: "/no-access" });
         setArCheckMatch(null);
         setArData(null);
       }
@@ -414,28 +348,11 @@ function RouteComponent() {
       }
 
       try {
-        const token = localStorage.getItem("token");
-        const resp = await fetch(
-          `/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-          {
-            headers: token
-              ? {
-                  Authorization: `Bearer ${token}`,
-                  "X-Required-Permission": "accounting.cashSummary.report",
-                }
-              : {},
-          },
-        );
-        if (resp.status === 403) return navigate({ to: "/no-access" });
-        if (!resp.ok) {
-          setLottery(null);
-          setBullock(null);
-          return;
-        }
-        const data = await resp.json();
+        const data = await cashSummaryService.getLottery<any>(site, date, 'report');
         setLottery(data?.lottery ?? null);
         setBullock(data?.totals ?? null);
-      } catch {
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) return navigate({ to: "/no-access" });
         setLottery(null);
         setBullock(null);
       }
@@ -445,29 +362,16 @@ function RouteComponent() {
   }, [date, navigate, site]);
 
   const saveReportField = async (
-    endpoint: string,
-    body: Record<string, unknown>,
     field: "notes" | "unsettledPrepays" | "handheldDebit",
+    value?: number,
   ): Promise<boolean> => {
     try {
       setSavingReportField(field);
-      const res = await fetch(endpoint, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
-          "X-Required-Permission": "accounting.cashSummary.report",
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return false;
-      }
-
-      return res.ok;
-    } catch {
+      if (field === 'notes') await cashSummaryService.saveNotes(site, date, noteText);
+      else if (value !== undefined) await cashSummaryService.saveAdjustment(site, date, field, value);
+      return true;
+    } catch (error) {
+      if (isApiError(error) && error.status === 403) navigate({ to: "/no-access" });
       return false;
     } finally {
       setSavingReportField(null);
@@ -476,11 +380,7 @@ function RouteComponent() {
 
   const saveNotes = () => {
     if (!site || !date || submitted || !noteText.trim()) return;
-    saveReportField(
-      "/api/cash-summary/report/notes",
-      { site, date, notes: noteText },
-      "notes",
-    );
+    saveReportField("notes");
   };
 
   const saveField = async (
@@ -491,13 +391,7 @@ function RouteComponent() {
     const num = Number(value);
     if (!Number.isFinite(num)) return;
 
-    const success = await saveReportField(
-      key === "unsettledPrepays"
-        ? "/api/cash-summary/report/unsettled-prepays"
-        : "/api/cash-summary/report/handheld-debit",
-      { site, date, [key]: num },
-      key,
-    );
+    const success = await saveReportField(key, num);
 
     if (success) {
       if (key === "unsettledPrepays") {
@@ -513,20 +407,9 @@ function RouteComponent() {
 
     setLoadingVoided(true);
     try {
-      const token = localStorage.getItem("token");
-      const resp = await fetch(
-        `/api/cash-summary/voided-transactions-details?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-        {
-          headers: token
-            ? {
-                Authorization: `Bearer ${token}`,
-                "X-Required-Permission": "accounting.cashSummary.report",
-              }
-            : {},
-        },
-      );
-      if (resp.status === 403) return navigate({ to: "/no-access" });
-      if (resp.ok) setVoidedDetails(await resp.json());
+      setVoidedDetails(await cashSummaryService.getVoidedDetails<any[]>(site, date));
+    } catch (error) {
+      if (isApiError(error) && error.status === 403) navigate({ to: "/no-access" });
     } finally {
       setLoadingVoided(false);
     }

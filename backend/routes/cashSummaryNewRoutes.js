@@ -19,6 +19,7 @@ const { emailQueue } = require('../queues/emailQueue')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateEodReportPdf } = require('../utils/eodReport');
 const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWavers');
+const { logChange } = require('../middleware/changeLogger')
 const { generateShiftReportsPdf } = require('../utils/shiftReportsPdf')
 const { generateLotteryImagesPdf } = require('../utils/lotteryImagesPdf')
 const { getRefundTransactions, getShiftEmployees } = require('../services/sqlService');
@@ -901,6 +902,7 @@ router.post('/batch', async (req, res) => {
     });
 
     await CashSummary.bulkWrite(bulkOperations);
+    const updatedDocs = await CashSummary.find({ _id: { $in: itemIds } }).lean();
 
     // 2. Resolve Site and Date context for Safesheet entry & CashSummaryReport
     let targetSite = items[0]?.site;
@@ -1004,6 +1006,15 @@ router.post('/batch', async (req, res) => {
 
       await sheet.save();
     }
+
+    await logChange(req, {
+      action: 'update', resourceType: 'cash-summary-shift', success: true, statusCode: 200,
+      source: 'cash-summary.form',
+      message: `${updatedDocs.length} Cash Summary shifts updated${targetSite ? ` for ${targetSite}` : ''}${targetDateRaw ? ` on ${String(targetDateRaw).slice(0, 10)}` : ''}${targetSite && targetDateRaw ? '; daily Safesheet deposit synchronized' : ''}`,
+      before: existingDocs, after: updatedDocs,
+      bulk: { affectedCount: updatedDocs.length, truncated: updatedDocs.length > 25 },
+      diffOptions: { maxChanges: 100, maxValueLength: 1500 },
+    });
 
     res.json({ success: true, count: items.length });
   } catch (err) {
@@ -1210,6 +1221,13 @@ router.post('/', async (req, res) => {
 
     const saved = await doc.save()
     await upsertDailyDepositForSiteDate(site, date).catch(() => { })
+    await logChange(req, {
+      action: 'create', resourceType: 'cash-summary-shift', resourceId: saved._id,
+      success: true, statusCode: 201, source: 'cash-summary.form',
+      resourceLabel: `${saved.site} shift ${saved.shift_number} on ${new Date(saved.date).toISOString().slice(0, 10)}`,
+      before: null, after: saved.toObject(),
+      diffOptions: { maxChanges: 100, maxValueLength: 1500 },
+    })
     res.status(201).json(saved)
   } catch (err) {
     console.error('CashSummary create error:', err)
@@ -1367,12 +1385,19 @@ router.post('/lottery', async (req, res) => {
       datawaveImages: Array.isArray(datawaveImages) ? datawaveImages.map(String) : [],
     }
 
+    const before = await Lottery.findOne({ site: payload.site, date: payload.date }).lean()
     const updated = await Lottery.findOneAndUpdate(
       { site: payload.site, date: payload.date },
       { $set: payload },
       { upsert: true, new: true, runValidators: true }
     )
 
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'lottery-summary', resourceId: updated._id,
+      success: true, statusCode: 200, source: 'cash-summary.lottery',
+      resourceLabel: `${payload.site} on ${payload.date}`, before, after: updated.toObject(),
+      diffOptions: { maxChanges: 60, maxValueLength: 1500 },
+    })
     res.status(200).json({ saved: true, lottery: updated })
   } catch (err) {
     console.error('Lottery save error:', err)
@@ -1463,6 +1488,18 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
     // Respond to client first
     const entryId = idx >= 0 ? sheet.entries[idx]._id : sheet.entries[sheet.entries.length - 1]._id
+    await logChange(req, {
+      action: 'update', resourceType: 'cash-summary-report',
+      success: true, statusCode: 200, source: 'cash-summary.report',
+      message: `Cash Summary for ${site} on ${date} submitted; Safesheet daily deposit set to ${totalCanadianCashCollected.toFixed(2)} and report delivery processing started`,
+      changes: [
+        { operation: 'replace', path: 'submitted', before: false, after: true },
+        { operation: idx >= 0 ? 'replace' : 'add', path: 'safesheet.dailyDeposit', after: totalCanadianCashCollected },
+        { operation: 'add', path: 'reportDelivery.status', after: 'processing-started' },
+      ],
+      changeSummary: { added: idx >= 0 ? 1 : 2, removed: 0, replaced: idx >= 0 ? 2 : 1, total: 3 },
+      bulk: { affectedCount: 1, truncated: false },
+    })
     res.json({ site, date, cashIn: totalCanadianCashCollected, entryId })
 
       // Background: generate PDFs and email them with optional deposit slip image
@@ -1701,18 +1738,25 @@ async function saveCashSummaryReportFields({ site, date, fields }) {
   }
 
   const { start } = startEndOfYmd(date)
-  return CashSummaryReport.findOneAndUpdate(
+  const before = await CashSummaryReport.findOne({ site, date: start }).lean()
+  const doc = await CashSummaryReport.findOneAndUpdate(
     { site, date: start },
     { $set: { site, date: start, ...fields } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean()
+  return { before, doc }
 }
 
 router.put('/report/notes', async (req, res) => {
   try {
     const { site, date, notes = '' } = req.body || {}
     if (typeof notes !== 'string') return res.status(400).json({ error: 'notes must be a string' })
-    const doc = await saveCashSummaryReportFields({ site, date, fields: { notes } })
+    const { before, doc } = await saveCashSummaryReportFields({ site, date, fields: { notes } })
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'cash-summary-report', resourceId: doc._id,
+      success: true, statusCode: 200, source: 'cash-summary.report',
+      resourceLabel: `${site} on ${date}`, before, after: doc,
+    })
     res.json(doc)
   } catch (err) {
     console.error('CashSummary report notes save error:', err)
@@ -1725,7 +1769,12 @@ router.put('/report/unsettled-prepays', async (req, res) => {
     const { site, date, unsettledPrepays } = req.body || {}
     const value = norm(unsettledPrepays)
     if (value === undefined) return res.status(400).json({ error: 'unsettledPrepays must be a number' })
-    const doc = await saveCashSummaryReportFields({ site, date, fields: { unsettledPrepays: value } })
+    const { before, doc } = await saveCashSummaryReportFields({ site, date, fields: { unsettledPrepays: value } })
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'cash-summary-report', resourceId: doc._id,
+      success: true, statusCode: 200, source: 'cash-summary.report',
+      resourceLabel: `${site} on ${date}`, before, after: doc,
+    })
     res.json(doc)
   } catch (err) {
     console.error('CashSummary report unsettled prepays save error:', err)
@@ -1738,7 +1787,12 @@ router.put('/report/handheld-debit', async (req, res) => {
     const { site, date, handheldDebit } = req.body || {}
     const value = norm(handheldDebit)
     if (value === undefined) return res.status(400).json({ error: 'handheldDebit must be a number' })
-    const doc = await saveCashSummaryReportFields({ site, date, fields: { handheldDebit: value } })
+    const { before, doc } = await saveCashSummaryReportFields({ site, date, fields: { handheldDebit: value } })
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'cash-summary-report', resourceId: doc._id,
+      success: true, statusCode: 200, source: 'cash-summary.report',
+      resourceLabel: `${site} on ${date}`, before, after: doc,
+    })
     res.json(doc)
   } catch (err) {
     console.error('CashSummary report handheld debit save error:', err)
@@ -1754,12 +1808,18 @@ router.put('/report/submitted', async (req, res) => {
       return res.status(400).json({ error: 'submitted must be a boolean' })
     }
 
-    const doc = await saveCashSummaryReportFields({
+    const { before, doc } = await saveCashSummaryReportFields({
       site,
       date,
       fields: { submitted }
     })
 
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'cash-summary-report', resourceId: doc._id,
+      success: true, statusCode: 200, source: 'cash-summary.report',
+      message: `Cash Summary report for ${site} on ${date} ${submitted ? 'submitted' : 'unlocked'}`,
+      before, after: doc,
+    })
     res.json(doc)
   } catch (err) {
     console.error('CashSummary report submitted update error:', err)
@@ -1776,6 +1836,7 @@ router.put('/report', async (req, res) => {
     }
 
     const { start } = startEndOfYmd(date)
+    const before = await CashSummaryReport.findOne({ site, date: start }).lean()
     // Build $set payload only for provided fields
     const setPayload = { site, date: start }
     if (typeof notes === 'string') setPayload.notes = notes
@@ -1794,6 +1855,11 @@ router.put('/report', async (req, res) => {
       { upsert: true, new: true, setDefaultsOnInsert: true }
     ).lean()
 
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'cash-summary-report', resourceId: doc._id,
+      success: true, statusCode: 200, source: 'cash-summary.report',
+      resourceLabel: `${site} on ${date}`, before, after: doc,
+    })
     res.json(doc)
   } catch (err) {
     console.error('CashSummary report upsert error:', err)
@@ -1818,9 +1884,19 @@ router.post('/submit', async (req, res) => {
       { $set: { submitted: true } }
     )
 
+    const matched = result.matchedCount ?? result.n
+    const modified = result.modifiedCount ?? result.nModified
+    await logChange(req, {
+      action: 'update', resourceType: 'cash-summary-shift', success: true, statusCode: 200,
+      source: 'cash-summary.report',
+      message: `${modified || 0} of ${matched || 0} Cash Summary shifts submitted for ${site} on ${date}`,
+      changes: [{ operation: 'replace', path: 'submitted', before: false, after: true }],
+      changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+      bulk: { affectedCount: modified || 0, truncated: true },
+    })
     res.json({
-      matched: result.matchedCount ?? result.n,
-      modified: result.modifiedCount ?? result.nModified,
+      matched,
+      modified,
     })
   } catch (err) {
     console.error('CashSummary submit error:', err)
@@ -2499,6 +2575,13 @@ router.put('/:id', async (req, res) => {
       await upsertDailyDepositForSiteDate(existing.site, existing.date).catch(() => { })
     }
 
+    await logChange(req, {
+      action: 'update', resourceType: 'cash-summary-shift', resourceId: updated._id,
+      success: true, statusCode: 200, source: 'cash-summary.form',
+      resourceLabel: `${updated.site} shift ${updated.shift_number} on ${new Date(updated.date).toISOString().slice(0, 10)}`,
+      before: existing, after: updated,
+      diffOptions: { maxChanges: 100, maxValueLength: 1500 },
+    })
     res.json(updated)
   } catch (err) {
     console.error('CashSummary update error:', err)
@@ -2516,6 +2599,13 @@ router.delete('/:id', async (req, res) => {
     // Refresh the daily deposit for the affected site/date
     await upsertDailyDepositForSiteDate(existing.site, existing.date).catch(() => { })
 
+    await logChange(req, {
+      action: 'delete', resourceType: 'cash-summary-shift', resourceId: existing._id,
+      success: true, statusCode: 200, source: 'cash-summary.list',
+      resourceLabel: `${existing.site} shift ${existing.shift_number} on ${new Date(existing.date).toISOString().slice(0, 10)}`,
+      before: existing, after: null,
+      diffOptions: { maxChanges: 100, maxValueLength: 1500 },
+    })
     res.json({ success: true, _id: req.params.id })
   } catch (err) {
     console.error('CashSummary delete error:', err)
@@ -2556,6 +2646,7 @@ router.put('/:id/attributes/:name', async (req, res) => {
     const cast = castAttributeValue(type, value)
     if (cast.error) return res.status(400).json({ error: cast.error })
 
+    const before = await CashSummary.findById(id).lean()
     const result = await CashSummary.collection.updateOne(
       { _id: new mongoose.Types.ObjectId(id) },
       { $set: { [name]: cast.value } }
@@ -2563,6 +2654,12 @@ router.put('/:id/attributes/:name', async (req, res) => {
     if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
 
     const updated = await CashSummary.findById(id).lean()
+    await logChange(req, {
+      action: 'update', resourceType: 'cash-summary-shift', resourceId: updated._id,
+      success: true, statusCode: 200, source: 'cash-summary.attributes',
+      message: `Custom Cash Summary field ${name} updated for ${updated.site} shift ${updated.shift_number}`,
+      before, after: updated,
+    })
     res.json(updated)
   } catch (err) {
     console.error('CashSummary set attribute error:', err)
@@ -2574,6 +2671,7 @@ router.delete('/:id/attributes/:name', async (req, res) => {
   try {
     const { id, name } = req.params
 
+    const before = await CashSummary.findById(id).lean()
     const result = await CashSummary.collection.updateOne(
       { _id: new mongoose.Types.ObjectId(id) },
       { $unset: { [name]: '' } }
@@ -2581,6 +2679,12 @@ router.delete('/:id/attributes/:name', async (req, res) => {
     if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' })
 
     const updated = await CashSummary.findById(id).lean()
+    await logChange(req, {
+      action: 'update', resourceType: 'cash-summary-shift', resourceId: updated._id,
+      success: true, statusCode: 200, source: 'cash-summary.attributes',
+      message: `Custom Cash Summary field ${name} removed from ${updated.site} shift ${updated.shift_number}`,
+      before, after: updated,
+    })
     res.json(updated)
   } catch (err) {
     console.error('CashSummary remove attribute error:', err)

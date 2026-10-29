@@ -12,7 +12,8 @@ import { DatePicker } from "@/components/custom/datePicker";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useSite } from "@/context/SiteContext";
 import { useAuth } from "@/context/AuthContext";
-import axios from "axios";
+import { accountingReportsService } from "@/api/accounting-reports/accounting-reports.service";
+import { isApiError } from "@/api/core/errors";
 
 export const Route = createFileRoute(
   "/_navbarLayout/accounting-reports/ap-customer-report",
@@ -46,24 +47,16 @@ function RouteComponent() {
     try {
       setLoading(true);
       setStatus("Requesting A/P Customer report...");
-      const token = localStorage.getItem("token");
-      const response = await axios.post(
-        "/api/accounting-reports/ap-customer-report",
-        { stationName: site, startDate: ymd(fromDate), endDate: ymd(toDate) },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission":
-              "accounting.accountingReports.apCustomerReport",
-          },
-        },
-      );
-      setStatus(response.data?.message || "Report will be emailed shortly.");
+      const response = await accountingReportsService.requestApCustomer({
+        stationName: site,
+        startDate: ymd(fromDate),
+        endDate: ymd(toDate),
+      });
+      setStatus(response.message || "Report will be emailed shortly.");
     } catch (err: any) {
-      if (err.response?.status === 403) return navigate({ to: "/no-access" });
+      if (isApiError(err) && err.status === 403) return navigate({ to: "/no-access" });
       setError(
-        err.response?.data?.error ||
-          err.message ||
+        (isApiError(err) ? err.message : err?.message) ||
           "Failed to generate A/P report.",
       );
     } finally {

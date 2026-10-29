@@ -3,6 +3,7 @@ const router = express.Router();
 const Event = require('../models/Event');
 const Location = require('../models/Location');
 const { pushNotification } = require('../services/notificationService');
+const { logChange } = require('../middleware/changeLogger');
 
 const escapeHtml = (s = '') =>
   String(s)
@@ -119,6 +120,20 @@ router.post('/', async (req, res) => {
         lastName: req.user.lastName || '',
         email: req.user.email || '',
       },
+    });
+
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'event',
+      resourceId: event._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: 'events.calendar',
+      resourceLabel: event.title,
+      message: `Event "${event.title}" created for ${event.site} on ${event.date}`,
+      before: null,
+      after: event.toObject(),
     });
 
     // Send HTTP response immediately
@@ -242,7 +257,21 @@ router.delete('/:id', async (req, res) => {
       });
     }
 
+    const before = event.toObject();
     await event.deleteOne();
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'event',
+      resourceId: event._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: 'events.calendar',
+      resourceLabel: event.title,
+      message: `Event "${event.title}" deleted for ${event.site} on ${event.date}`,
+      before,
+      after: null,
+    });
     res.json({ success: true, _id: req.params.id });
   } catch (error) {
     console.error('Event delete error:', error);

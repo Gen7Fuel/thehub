@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import Barcode from 'react-barcode'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
 import { Dialog, DialogContent } from '@/components/ui/dialog' // Adjust import path to your project rules
 import { useAuth } from '@/context/AuthContext'
 
@@ -29,10 +29,6 @@ export const Route = createFileRoute(
   '/_navbarLayout/cycle-count/manage/schedule/$id',
 )({
   component: RouteComponent,
-})
-
-const getAuthHeaders = () => ({
-  Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
 })
 
 // Sample style mappings copied from your Item Book reference code
@@ -215,16 +211,7 @@ function RouteComponent() {
   const { data, isLoading, isError, error } = useQuery<ScheduleInstancePayload>({
     queryKey: ['cycleCountInstanceDetails', id],
     queryFn: async () => {
-      // Retrieve the token from localStorage right when the request fires
-      const token = localStorage.getItem('token') // Change 'token' to your actual storage key
-
-      const response = await axios.get(`/api/cycle-count/schedules/details/${id}`, {
-        headers: {
-          // Attach the token as a standard Bearer header
-          Authorization: token ? `Bearer ${token}` : '',
-        }
-      })
-      return response.data
+      return cycleCountService.getSchedule<ScheduleInstancePayload>(id)
     },
     enabled: !!id,
   })
@@ -370,16 +357,7 @@ function RouteComponent() {
   // --- TANSTACK MUTATION FOR BATCH RECOVERY CLEANUPS ---
   const deleteItemsMutation = useMutation({
     mutationFn: async (productIds: number[]) => {
-      // Fetches security storage tokens inline dynamically
-      const token = localStorage.getItem('token')
-
-      const response = await axios.delete(`/api/cycle-count/schedules/details/${id}/items`, {
-        data: { productIds },
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        }
-      })
-      return response.data
+      return cycleCountService.removeScheduleItems(id, productIds)
     },
     onSuccess: () => {
       // 1. Invalidate cash indexes to invoke clean layout updates instantly
@@ -410,14 +388,7 @@ function RouteComponent() {
   // --- 2. Update your Mutation Handler ---
   const deleteEntireScheduleMutation = useMutation({
     mutationFn: async () => {
-      const token = localStorage.getItem('token');
-
-      const response = await axios.delete(`/api/cycle-count/instance/${id}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : '',
-        }
-      });
-      return response.data;
+      return cycleCountService.deleteInstance(id);
     },
     onSuccess: () => {
       // Force a fresh layout reload on the side panel's master index list cache track
@@ -879,14 +850,7 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
     queryKey: ['catalogSearch', debouncedSearch, siteMongoId, isOpen],
     queryFn: async () => {
       console.log(`🚀 API Fetching with query: "${debouncedSearch}" for site: ${siteMongoId}`);
-      const res = await axios.get('/api/cycle-count/schedules/items/search', {
-        params: {
-          query: debouncedSearch,
-          siteMongoId: siteMongoId // <-- Send site filter mapping through network parameters
-        },
-        headers: getAuthHeaders(),
-      });
-      return res.data;
+      return cycleCountService.searchScheduleItems<CatalogItem[]>(debouncedSearch, siteMongoId);
     },
     // Only fetch if modal is completely visible AND we have a valid site location scope string loaded
     enabled: isOpen && !!siteMongoId,
@@ -896,19 +860,14 @@ export const AddItemsModal: React.FC<AddItemsModalProps> = ({
   // 3. Save Mutation Put Execution Hooks
   const appendMutation = useMutation({
     mutationFn: async (productIds: number[]) => {
-      const res = await axios.put(
-        `/api/cycle-count/schedules/details/${instanceId}/items`,
-        { productIds },
-        { headers: getAuthHeaders() },
-      );
-      return res.data;
+      return cycleCountService.addScheduleItems(instanceId, productIds);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cycleCountInstanceDetails', instanceId] });
       handleClose();
     },
     onError: (err: any) => {
-      alert(`Error appending records: ${err.response?.data?.message || 'Transaction failed.'}`);
+      alert(`Error appending records: ${err.message || 'Transaction failed.'}`);
     }
   });
 

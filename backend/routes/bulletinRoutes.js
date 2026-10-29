@@ -1,6 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const BulletinPost = require('../models/BulletinPost');
+const { logChange } = require('../middleware/changeLogger');
+
+function displayName(person = {}) {
+  return `${person.firstName || ''} ${person.lastName || ''}`.trim()
+    || person.username
+    || person.email
+    || 'Unknown user';
+}
 
 // GET /api/bulletin?site=... — list posts for a site
 router.get('/', async (req, res) => {
@@ -41,6 +49,18 @@ router.post('/', async (req, res) => {
       },
     });
 
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'bulletin-post',
+      resourceId: post._id,
+      success: true,
+      statusCode: 201,
+      message: `Bulletin post created for ${site} by ${displayName(req.user)}`,
+      after: post.toObject(),
+      source: 'bulletin.board',
+      diffOptions: { maxChanges: 20, maxValueLength: 2500 },
+    });
+
     res.status(201).json({ success: true, data: post });
   } catch (error) {
     console.error('Bulletin create error:', error);
@@ -62,7 +82,19 @@ router.delete('/:id', async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not allowed to delete this post.' });
     }
 
+    const before = post.toObject();
     await post.deleteOne();
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'bulletin-post',
+      resourceId: post._id,
+      success: true,
+      statusCode: 200,
+      message: `Bulletin post deleted from ${post.site} — originally posted by ${displayName(post.author)}`,
+      before,
+      source: 'bulletin.board',
+      diffOptions: { maxChanges: 20, maxValueLength: 2500 },
+    });
     res.json({ success: true, _id: req.params.id });
   } catch (error) {
     console.error('Bulletin delete error:', error);
