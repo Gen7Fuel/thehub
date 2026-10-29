@@ -202,6 +202,7 @@ function RouteComponent() {
                 </div>
 
                 {/* Meta */}
+                {rec.source === 'scanner' && !rec.vendor && <div className="text-sm font-semibold text-amber-700">Vendor pending</div>}
                 <div className="text-sm text-muted-foreground">
                   Uploaded: {new Date(rec.createdAt).toLocaleString()}
                 </div>

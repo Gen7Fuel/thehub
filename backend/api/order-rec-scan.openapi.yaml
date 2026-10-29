@@ -45,7 +45,9 @@ paths:
       operationId: createScannedOrderRec
       summary: Create an order rec from scanned item IDs and case quantities
       description: >-
-        The vendor must belong to the store. Product data and current inventory
+        The vendor is left pending (empty string); any submitted vendor is ignored.
+        Head office assigns it later through PATCH /api/order-rec/{id}/vendor.
+        Product data and current inventory
         are reloaded on save, and the creator email comes from authentication.
         Items removed from the store are rejected. Unknown packing is stored as
         zero units per case; case quantities are preserved. This endpoint is not
@@ -56,10 +58,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [site, vendor, items]
+              required: [site, items]
               properties:
                 site: { type: string, example: Rankin }
-                vendor: { type: string, description: Mongo vendor ID for this store }
                 items:
                   type: array
                   minItems: 1
@@ -72,7 +73,6 @@ paths:
                       quantity: { type: integer, minimum: 1, maximum: 99999, description: Cases to order }
             example:
               site: Rankin
-              vendor: 507f1f77bcf86cd799439011
               items: [{ id: 7, quantity: 3 }]
       responses:
         '201':
@@ -81,10 +81,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [_id, source, currentStatus, categories]
+                required: [_id, source, vendor, currentStatus, categories]
                 properties:
                   _id: { type: string }
                   source: { type: string, enum: [scanner] }
+                  vendor: { type: string, enum: [''], description: Awaiting head-office assignment }
                   currentStatus: { type: string, enum: [Created] }
                   categories: { type: array, items: { type: object } }
         '400': { $ref: '#/components/responses/InvalidInput' }
@@ -93,11 +94,45 @@ paths:
         '404': { description: Store not found }
         '409': { description: Item removed from this store or product codes are missing or duplicated }
         '500': { description: Creation failed; draft should be retained }
+  /api/order-rec/{id}/vendor:
+    patch:
+      operationId: assignScannedOrderRecVendor
+      summary: Assign a pending store-created order rec to a vendor
+      description: >-
+        Requires orderRec.workflow, its parent orderRec permission, and access to
+        the order's site. The vendor must belong to that site. Only unassigned
+        scanner orders may be assigned; placed/delivered orders are rejected.
+        Assignment updates the generated filename and emits orderUpdated.
+        Pending orders cannot be marked Placed, Delivered, or Invoice Received,
+        or have orderPlaced/delivered flags enabled, until a vendor is assigned.
+        Uploaded-file order creation continues to require a vendor.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, description: Mongo order rec ID }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor]
+              properties:
+                vendor: { type: string, description: Mongo vendor ID for this store }
+      responses:
+        '200': { description: Updated order rec with assigned vendor and regenerated filename }
+        '400': { description: Invalid vendor ID or vendor does not belong to this site }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { description: Missing orderRec.workflow/parent permission or site access }
+        '404': { description: Order rec not found }
+        '409': { description: Order is already assigned, is not store-created, or has been placed/delivered }
+        '500': { description: Assignment failed; check the current vendor before retrying }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
   responses:
-    InvalidInput: { description: Missing or invalid input, duplicate IDs, invalid quantities, or vendor outside this store }
+    InvalidInput: { description: Missing or invalid input, duplicate IDs, or invalid quantities }
     Unauthenticated: { description: Missing or invalid authentication }
     Forbidden: { description: Missing orderRec.scanToOrder or parent orderRec permission, or access to this store }
   schemas:

@@ -15,8 +15,11 @@ const { pushNotification } = require('../services/notificationService');
 const { createOrderRecScanRouter } = require('./orderRecScanRoutes');
 const { getPg } = require('../config/pg');
 const { getPermissionMap } = require('../utils/permissionStore');
+const { createOrderRecVendorRouter } = require('./orderRecVendorRoutes');
+const { ensureVendorAssigned } = require('../services/orderRecScanner');
 
-router.use('/scan', createOrderRecScanRouter({ getPg, Location, Vendor, getPermissionMap, createOrderRec }));
+router.use('/scan', createOrderRecScanRouter({ getPg, Location, getPermissionMap, createOrderRec }));
+router.use(createOrderRecVendorRouter({ OrderRec, Vendor, getPermissionMap }));
 
 // Get all
 router.get('/', async (req, res) => {
@@ -598,6 +601,11 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
 // Update one
 router.put('/:id', async (req, res) => {
   try {
+    if (req.body.orderPlaced || req.body.delivered) {
+      const current = await OrderRec.findById(req.params.id).lean();
+      if (!current) return res.status(404).json({ message: 'Not found' });
+      ensureVendorAssigned(current, req.body);
+    }
     const update = {};
     if ('categories' in req.body) update.categories = req.body.categories;
     if ('orderPlaced' in req.body) update.orderPlaced = req.body.orderPlaced;
@@ -611,7 +619,7 @@ router.put('/:id', async (req, res) => {
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
     res.json(orderRec);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 // router.put('/:id', async (req, res) => {
@@ -720,7 +728,7 @@ async function createOrderRec(req, res) {
     if (!site) {
       return res.status(400).json({ message: "Site is required." });
     }
-    if (!vendor) {
+    if (!vendor && req.orderRecSource !== 'scanner') {
       return res.status(400).json({ message: "Vendor is required." });
     }
 
@@ -859,7 +867,7 @@ async function createOrderRec(req, res) {
       currentStatus: "Created",
       statusHistory: [{ status: "Created", timestamp: new Date() }],
       comments: [],
-      source: req.body.source === 'scanner' ? 'scanner' : 'upload',
+      source: req.orderRecSource === 'scanner' ? 'scanner' : 'upload',
       planogramCheckedAt: planogramGtins ? new Date() : null
     });
 
@@ -929,6 +937,8 @@ router.put('/:id/status', async (req, res) => {
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
 
+    ensureVendorAssigned(orderRec, { status });
+
     if (status === "Invoice Received" && (!invoiceId || !invoiceDate)) {
       return res.status(400).json({ message: 'Invoice ID and invoice date are required.' });
     }
@@ -990,7 +1000,7 @@ router.put('/:id/status', async (req, res) => {
     res.json(orderRec);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message });
   }
 });
 

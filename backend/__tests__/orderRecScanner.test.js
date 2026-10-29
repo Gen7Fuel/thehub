@@ -3,7 +3,7 @@ import express from 'express'
 import { createServer } from 'node:http'
 import knex from 'knex'
 import { createOrderRecScanRouter } from '../routes/orderRecScanRoutes.js'
-import { validateBarcode, validateScanLines, buildScanCategories, requireStoreAccess, lookupScanItem } from '../services/orderRecScanner.js'
+import { validateBarcode, validateScanLines, buildScanCategories, requireStoreAccess, lookupScanItem, ensureVendorAssigned } from '../services/orderRecScanner.js'
 
 const permissionMap = new Map([['orderRec', 42], ['orderRec.scanToOrder', 43]])
 const user = () => ({ stationName: 'Rankin', email: 'store@example.com', role: { permissionsArray: [{ permId: 42, value: true }, { permId: 43, value: true }] } })
@@ -63,12 +63,11 @@ describe('scanned order validation', () => {
 })
 
 describe('scan endpoints (HTTP, isolated database dependencies)', () => {
-  let server, baseUrl, currentUser, rows, location, vendor, lookupFailed, db, createOrderRec
+  let server, baseUrl, currentUser, rows, location, lookupFailed, db, createOrderRec
   beforeEach(async () => {
     currentUser = user()
     rows = [row]
     location = { _id: 'location-1' }
-    vendor = { _id: '507f1f77bcf86cd799439011' }
     lookupFailed = false
     db = vi.fn(() => {
       const builder = {
@@ -92,7 +91,6 @@ describe('scan endpoints (HTTP, isolated database dependencies)', () => {
     app.use('/api/order-rec/scan', createOrderRecScanRouter({
       getPg: () => db,
       Location: { findOne: () => ({ lean: async () => location }) },
-      Vendor: { findOne: () => ({ lean: async () => vendor }) },
       getPermissionMap: () => permissionMap,
       createOrderRec,
     }))
@@ -104,7 +102,7 @@ describe('scan endpoints (HTTP, isolated database dependencies)', () => {
     server.closeAllConnections()
     await new Promise(resolve => server.close(resolve))
   })
-  const payload = () => ({ site: 'Rankin', vendor: '507f1f77bcf86cd799439011', items: [{ id: 7, quantity: 2 }] })
+  const payload = () => ({ site: 'Rankin', items: [{ id: 7, quantity: 2 }] })
   const post = (body) => fetch(baseUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
   it('returns the selected store inventory and scopes the query to its location ID', async () => {
@@ -147,17 +145,30 @@ describe('scan endpoints (HTTP, isolated database dependencies)', () => {
     const response = await post({ ...payload(), email: 'spoof@example.com', categories: [{ number: '999' }], onHandQty: 999 })
     expect(response.status).toBe(201)
     const order = await response.json()
-    expect(order).toMatchObject({ source: 'scanner', email: 'store@example.com', categories: [{ number: '100', items: [{ onHandQty: 12.5, casesToOrder: 2 }] }] })
+    expect(order).toMatchObject({ source: 'scanner', vendor: '', email: 'store@example.com', categories: [{ number: '100', items: [{ onHandQty: 12.5, casesToOrder: 2 }] }] })
+    expect(createOrderRec.mock.calls[0][0].orderRecSource).toBe('scanner')
     expect(createOrderRec).toHaveBeenCalledOnce()
     expect(db.mock.results[0].value.whereIn).toHaveBeenCalledWith('id', [7])
   })
-  it('rejects missing vendors, vendors outside the store, and removed items', async () => {
-    expect((await post({ ...payload(), vendor: '' })).status).toBe(400)
-    vendor = null
-    expect((await post(payload())).status).toBe(400)
-    vendor = { _id: payload().vendor }
+  it('leaves vendor pending even if a store submits one', async () => {
+    const response = await post({ ...payload(), vendor: '507f1f77bcf86cd799439011' })
+    expect(response.status).toBe(201)
+    expect((await response.json()).vendor).toBe('')
+  })
+  it('rejects removed items', async () => {
     rows = []
     expect((await post(payload())).status).toBe(409)
     expect(createOrderRec).not.toHaveBeenCalled()
+  })
+})
+
+describe('pending vendor placement guard', () => {
+  it.each([{ status: 'Placed' }, { status: 'Delivered' }, { status: 'Invoice Received' }, { orderPlaced: true }, { delivered: true }])('blocks fulfillment %j before vendor assignment', updates => {
+    expect(() => ensureVendorAssigned({ source: 'scanner', vendor: '' }, updates)).toThrow(/assign a vendor/)
+  })
+  it('allows review completion before assignment and placement after assignment', () => {
+    expect(() => ensureVendorAssigned({ source: 'scanner', vendor: '' }, { status: 'Completed' })).not.toThrow()
+    expect(() => ensureVendorAssigned({ source: 'scanner', vendor: 'vendor-1' }, { status: 'Placed' })).not.toThrow()
+    expect(() => ensureVendorAssigned({ source: 'upload', vendor: 'vendor-1' }, { orderPlaced: true })).not.toThrow()
   })
 })

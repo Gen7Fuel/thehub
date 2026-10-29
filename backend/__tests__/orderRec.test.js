@@ -31,6 +31,18 @@ describe('OrderRec schema — field validation', () => {
     expect(err?.errors.vendor).toBeDefined()
   })
 
+  it('allows a store-created order to await vendor assignment', () => {
+    const doc = new OrderRec({ site: 'Rankin', source: 'scanner' })
+    expect(doc.validateSync()).toBeUndefined()
+    expect(doc.vendor).toBe('')
+  })
+
+  it('uses a pending filename until head office assigns a vendor', () => {
+    const date = new Date(2026, 9, 29)
+    expect(OrderRec.buildFilename('', date, 17)).toBe('OrderRec - Vendor pending - 29th October 2026 - 17')
+    expect(OrderRec.buildFilename('Acme', date, 17)).toBe('OrderRec - Acme - 29th October 2026 - 17')
+  })
+
   it('defaults completed to false', () => {
     const doc = new OrderRec(base())
     expect(doc.completed).toBe(false)

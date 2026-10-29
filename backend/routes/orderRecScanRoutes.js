@@ -1,9 +1,8 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const { requireStoreAccess, lookupScanItem, validateBarcode, validateScanLines, buildScanCategories } = require('../services/orderRecScanner');
 
 // Dependencies are passed in so endpoint behavior can be verified without live databases.
-function createOrderRecScanRouter({ getPg, Location, Vendor, getPermissionMap, createOrderRec }) {
+function createOrderRecScanRouter({ getPg, Location, getPermissionMap, createOrderRec }) {
   const router = express.Router();
 
   router.get('/item', async (req, res) => {
@@ -23,24 +22,18 @@ function createOrderRecScanRouter({ getPg, Location, Vendor, getPermissionMap, c
 
   router.post('/', async (req, res) => {
     try {
-      const { site, vendor, items } = req.body;
+      const { site, items } = req.body;
       requireStoreAccess(req.user, site, getPermissionMap());
       validateScanLines(items);
-      if (typeof vendor !== 'string' || !mongoose.isValidObjectId(vendor)) {
-        return res.status(400).json({ message: 'Select a vendor for this store.' });
-      }
-      const [location, vendorDoc] = await Promise.all([
-        Location.findOne({ site }).lean(),
-        Vendor.findOne({ _id: vendor, location: site }).lean(),
-      ]);
+      const location = await Location.findOne({ site }).lean();
       if (!location) return res.status(404).json({ message: 'Store not found.' });
-      if (!vendorDoc) return res.status(400).json({ message: 'Select a vendor for this store.' });
       const rows = await getPg()('item_bk').where({ site: String(location._id) })
         .whereIn('id', items.map(item => item.id)).select('*');
       req.body = {
-        site, vendor, email: req.user.email, source: 'scanner',
+        site, vendor: '', email: req.user.email, source: 'scanner',
         categories: buildScanCategories(rows, items),
       };
+      req.orderRecSource = 'scanner';
       return createOrderRec(req, res);
     } catch (err) {
       if (!err.status) console.error('Creating scanned order rec failed:', err);

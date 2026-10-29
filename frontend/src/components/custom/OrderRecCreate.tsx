@@ -3,7 +3,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { Barcode, Check, Minus, Package, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
-import { VendorPicker } from '@/components/custom/vendorPicker'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { useHandheldScanner } from '@/lib/useHandheldScanner'
@@ -23,7 +22,7 @@ interface ScannedItem {
   quantity: number
 }
 
-interface Draft { vendor: string; items: ScannedItem[] }
+interface Draft { items: ScannedItem[] }
 const headers = () => ({
   Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
   'X-Required-Permission': 'orderRec.scanToOrder',
@@ -59,11 +58,11 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
   const [draft, setDraft] = useState<Draft>(() => {
     try {
       const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null')
-      if (saved && typeof saved.vendor === 'string' && Array.isArray(saved.items) && saved.items.length <= 500 &&
+      if (saved && Array.isArray(saved.items) && saved.items.length <= 500 &&
           saved.items.every((item: ScannedItem) => item && Number.isSafeInteger(item.id) && typeof item.itemName === 'string' &&
-            Number.isSafeInteger(item.quantity) && item.quantity >= 0 && item.quantity <= 99999)) return saved
+            Number.isSafeInteger(item.quantity) && item.quantity >= 0 && item.quantity <= 99999)) return { items: saved.items }
     } catch { /* A damaged or unavailable cache must not prevent scanning. */ }
-    return { vendor: '', items: [] }
+    return { items: [] }
   })
   const [upc, setUpc] = useState('')
   const [focused, setFocused] = useState(false)
@@ -78,7 +77,7 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
   const mounted = useRef(true)
   const latestDraft = useRef(draft)
   latestDraft.current = draft
-  const { items, vendor } = draft
+  const { items } = draft
   const total = items.reduce((sum, item) => sum + item.quantity, 0)
 
   useEffect(() => {
@@ -142,8 +141,8 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
 
   async function save() {
     if (submitting.current || pending) return
-    if (!site || !vendor || !items.length || items.some(item => item.quantity < 1)) {
-      setError('Choose a store and vendor, and give every item a quantity of at least 1. Remove any unwanted rows.')
+    if (!site || !items.length || items.some(item => item.quantity < 1)) {
+      setError('Choose a store, and give every item a quantity of at least 1. Remove any unwanted rows.')
       return
     }
     submitting.current = true
@@ -152,9 +151,9 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
     try {
       const order = await request<{ _id: string }>('/api/order-rec/scan', {
         method: 'POST', headers: headers(),
-        body: JSON.stringify({ site, vendor, items: items.map(({ id, quantity }) => ({ id, quantity })) }),
+        body: JSON.stringify({ site, items: items.map(({ id, quantity }) => ({ id, quantity })) }),
       })
-      setDraft({ vendor: '', items: [] })
+      setDraft({ items: [] })
       try { sessionStorage.removeItem(storageKey) } catch { /* Navigation can continue. */ }
       await navigate({ to: '/order-rec/$id', params: { id: order._id } })
     } catch (err) {
@@ -177,9 +176,10 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
           <legend className="mb-1 text-sm font-medium">Store</legend>
           <SitePicker value={site} onValueChange={setSite} className="h-11 w-full" />
         </fieldset>
-        <div className="min-w-0 space-y-1 [&_button]:h-11 [&_button]:w-full">
+        <div className="min-w-0 space-y-1">
           <p className="text-sm font-medium">Vendor</p>
-          <VendorPicker value={vendor} setVendor={value => setDraft(current => ({ ...current, vendor: value }))} location={site} disabled={!site || saving} />
+          <p className="text-sm font-semibold text-amber-700">Pending</p>
+          <p className="text-xs text-muted-foreground">Head office will select the vendor after you submit.</p>
         </div>
         {items.length > 0 && <p className="text-xs text-muted-foreground min-[400px]:col-span-2">Store is locked while this order has items.</p>}
       </div>
@@ -268,7 +268,7 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
       )}
 
       <div className="space-y-2 rounded-xl border bg-background p-3">
-        <Button className="h-12 w-full text-base" disabled={saving || pending > 0 || !items.length || !vendor || items.some(item => item.quantity < 1)} onClick={save}>
+        <Button className="h-12 w-full text-base" disabled={saving || pending > 0 || !items.length || items.some(item => item.quantity < 1)} onClick={save}>
           <Check />{saving ? 'Creating order rec…' : 'Create order rec'}
         </Button>
         <p className="text-center text-xs text-muted-foreground">Save to the existing order rec review workflow. This does not place an order.</p>

@@ -8,14 +8,18 @@ function validateBarcode(value) {
   return barcodeKey(value.trim());
 }
 
-function requireStoreAccess(user, site, permissionMap) {
+function requireOrderRecPermission(user, permissionMap, requiredPermission) {
   if (!user) throw Object.assign(new Error('Authentication required.'), { status: 401 });
-  for (const permission of ['orderRec', 'orderRec.scanToOrder']) {
+  for (const permission of ['orderRec', requiredPermission]) {
     const permId = permissionMap.get(permission);
     const override = user.customPermissionsArray?.find(p => p.permId === permId);
     const allowed = permId != null && (override?.value ?? user.role?.permissionsArray?.find(p => p.permId === permId)?.value);
     if (allowed !== true) throw Object.assign(new Error(`Access denied for ${permission}.`), { status: 403 });
   }
+}
+
+function requireStoreAccess(user, site, permissionMap, requiredPermission = 'orderRec.scanToOrder') {
+  requireOrderRecPermission(user, permissionMap, requiredPermission);
   if (typeof site !== 'string' || !site.trim()) {
     throw Object.assign(new Error('Site is required.'), { status: 400 });
   }
@@ -98,4 +102,11 @@ function buildScanCategories(rows, lines) {
   return [...categories.values()];
 }
 
-module.exports = { barcodeKey, validateBarcode, requireStoreAccess, scanItem, lookupScanItem, validateScanLines, buildScanCategories };
+function ensureVendorAssigned(orderRec, updates) {
+  if (orderRec.source === 'scanner' && !orderRec.vendor &&
+      (updates.orderPlaced || updates.delivered || ['Placed', 'Delivered', 'Invoice Received'].includes(updates.status))) {
+    throw Object.assign(new Error('Head office must assign a vendor before this order can be placed or received.'), { status: 409 });
+  }
+}
+
+module.exports = { barcodeKey, validateBarcode, requireOrderRecPermission, requireStoreAccess, scanItem, lookupScanItem, validateScanLines, buildScanCategories, ensureVendorAssigned };
