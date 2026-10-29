@@ -4,6 +4,7 @@ import { DatePicker } from '@/components/custom/datePicker'
 import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
 import type { Key, ReactElement, JSXElementConstructor, ReactNode, ReactPortal } from 'react'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 
 type Payable = {
   _id: string
@@ -26,15 +27,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/payouts')({
   loaderDeps: ({ search }) => ({ site: search.site, date: search.date }),
   loader: async ({ deps }) => {
     const dateIso = deps.date || format(new Date(), 'yyyy-MM-dd')
-    // fetch all payables for day
-    const qs = new URLSearchParams({
-      from: dateIso,
-      to: dateIso,
-    }).toString()
-    const resp = await fetch(`/api/payables?${qs}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-    })
-    const all: Payable[] = resp.ok ? await resp.json() : []
+    const all = await cashRecService.listPayouts<Payable[]>(deps.site || '', dateIso, dateIso).catch(() => [])
     // filter by site name (stationName) if provided
     const filtered = deps.site
       ? all.filter(p => p.location?.stationName === deps.site)

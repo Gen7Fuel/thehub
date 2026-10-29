@@ -3,6 +3,7 @@ const router = express.Router();
 const ProductCategory = require("../models/ProductCategory");
 const CycleCount = require('../models/CycleCount');
 const OrderRec = require('../models/OrderRec');
+const { logChange } = require('../middleware/changeLogger');
 
 // ------------------- GET all categories (optionally with search) -------------------
 router.get('/', async (req, res) => {
@@ -44,6 +45,17 @@ router.post('/', async (req, res) => {
     });
 
     const savedCategory = await newCategory.save();
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'product-category',
+      resourceId: savedCategory._id,
+      success: true,
+      statusCode: 201,
+      source: 'category.management',
+      resourceLabel: `${savedCategory.Number} — ${savedCategory.Name}`,
+      before: null,
+      after: savedCategory.toObject(),
+    });
     res.status(201).json(savedCategory);
   } catch (err) {
     if (err.code === 11000) {
@@ -61,6 +73,7 @@ router.put('/:id', async (req, res) => {
     const category = await ProductCategory.findById(req.params.id);
     if (!category) return res.status(404).json({ message: 'Category not found.' });
 
+    const before = category.toObject();
     const oldNumber = category.Number;
 
     if (Name !== undefined) category.Name = Name;
@@ -71,21 +84,42 @@ router.put('/:id', async (req, res) => {
     const updatedCategory = await category.save();
 
     // If Number has changed, propagate to CycleCount and OrderRec
-    if (Number !== undefined && Number !== oldNumber) {
+    let cycleCountResult;
+    let orderRecResult;
+    const numberChanged = Number !== undefined && Number !== oldNumber;
+    if (numberChanged) {
       // Update CycleCount.categoryNumber
-      await CycleCount.updateMany(
+      cycleCountResult = await CycleCount.updateMany(
         { categoryNumber: oldNumber },
         { $set: { categoryNumber: Number } }
       );
 
       // Update OrderRec.categories.number
-      await OrderRec.updateMany(
+      orderRecResult = await OrderRec.updateMany(
         { 'categories.number': oldNumber },
         { $set: { 'categories.$[elem].number': Number } },
         { arrayFilters: [{ 'elem.number': oldNumber }] }
       );
     }
 
+    const propagatedCount = (cycleCountResult?.modifiedCount || 0) + (orderRecResult?.modifiedCount || 0);
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'product-category',
+      resourceId: updatedCategory._id,
+      success: true,
+      statusCode: 200,
+      source: 'category.management',
+      message: numberChanged
+        ? `Product category ${updatedCategory.Name} updated; category number changed from ${oldNumber} to ${updatedCategory.Number} and propagated to ${propagatedCount} related records`
+        : undefined,
+      resourceLabel: `${updatedCategory.Number} — ${updatedCategory.Name}`,
+      before,
+      after: updatedCategory.toObject(),
+      bulk: numberChanged
+        ? { affectedCount: propagatedCount, truncated: false }
+        : undefined,
+    });
     res.json(updatedCategory);
   } catch (err) {
     if (err.code === 11000) {

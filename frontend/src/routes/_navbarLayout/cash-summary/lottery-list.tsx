@@ -485,6 +485,8 @@ import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
+import { isApiError } from '@/api/core/errors'
 
 type LotteryListSearch = {
   site?: string
@@ -525,40 +527,19 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery-list')
     if (!site || !date) return { lottery: null, totals: null, isManitoba: false, error: null, status: null }
 
     try {
-      const token = localStorage.getItem('token') || ''
       let isManitoba = false
 
       // 1) Fetch locations endpoint to safely determine the province
       try {
-        const locResp = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (locResp.ok) {
-          const loc = await locResp.json()
-          isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba'
-        }
+        const loc = await cashSummaryService.getLocationProfile<any>(site, 'cash-summary.lottery-list', 'accounting.cashSummary.lotteryList')
+        isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba'
       } catch (locErr) {
         console.error('Failed to resolve site location profile info', locErr)
         isManitoba = false
       }
 
       // 2) Fetch lottery entries + Bullock totals
-      const resp = await fetch(`/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          'X-Required-Permission': 'accounting.cashSummary.lotteryList',
-        },
-      })
-
-      if (resp.status === 403) {
-        return { lottery: null, totals: null, isManitoba, error: 'forbidden', status: 403 }
-      }
-
-      if (!resp.ok) {
-        return { lottery: null, totals: null, isManitoba, error: `HTTP ${resp.status}`, status: resp.status }
-      }
-
-      const data = await resp.json()
+      const data = await cashSummaryService.getLottery<any>(site, date, 'lottery-list')
       return {
         lottery: data?.lottery ?? null,
         totals: data?.totals ?? null,
@@ -567,6 +548,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery-list')
         status: 200,
       }
     } catch (e) {
+      if (isApiError(e) && e.status === 403) return { lottery: null, totals: null, isManitoba: false, error: 'forbidden', status: 403 }
       return { lottery: null, totals: null, isManitoba: false, error: 'network', status: null }
     }
   },

@@ -4,6 +4,7 @@ import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
 import { Button } from '@/components/ui/button'
 import type { Key, ReactElement, JSXElementConstructor, ReactNode, ReactPortal } from 'react'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 
 type PO = {
   _id: string
@@ -32,14 +33,7 @@ export const Route = createFileRoute('/_navbarLayout/cash-rec/receivables')({
   loaderDeps: ({ search }) => ({ site: search.site, date: search.date }),
   loader: async ({ deps }) => {
     const day = deps.date
-    const params: Record<string, string> = { startDate: day, endDate: day }
-    if (deps.site) params.stationName = deps.site
-    const qs = new URLSearchParams(params).toString()
-
-    const resp = await fetch(`/api/purchase-orders?${qs}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-    })
-    const rows: PO[] = resp.ok ? await resp.json() : []
+    const rows = await cashRecService.listReceivables<PO[]>(deps.site, day, day).catch(() => [])
 
     const totalAmount = rows.reduce((a, r) => a + (r.amount || 0), 0)
     const totalQuantity = rows.reduce((a, r) => a + (r.quantity || 0), 0)

@@ -1,8 +1,7 @@
 import { createFileRoute, useSearch } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
-import axios from 'axios'
-import { domain } from '@/lib/constants'
 import { Button } from '@/components/ui/button'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 
 type Search = { site?: string }
 
@@ -46,17 +45,7 @@ function RouteComponent() {
       formData.append('file', f)
       formData.append('site', site)
 
-      const response = await axios.post(
-        `${domain}/api/cash-rec/parse-kardpoll-excel`,
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-          },
-        },
-      )
-
-      const data = response.data
+      const data = await cashRecService.uploadKardpollExcel<{ report?: { date?: string; sales?: number; litresSold?: number }; saved: boolean; upserted?: boolean }>(formData, site)
       setResult({
         date: data.report?.date ?? '',
         totalSales: String(data.report?.sales ?? ''),
@@ -65,7 +54,7 @@ function RouteComponent() {
         upserted: data.upserted,
       })
     } catch (e: any) {
-      const msg = e?.response?.data?.error || 'Failed to upload file.'
+      const msg = e?.message || 'Failed to upload file.'
       setError(msg)
     } finally {
       setLoading(false)

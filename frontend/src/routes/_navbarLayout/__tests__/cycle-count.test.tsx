@@ -69,6 +69,12 @@ vi.mock('@/lib/constants', () => ({
   domain: 'http://localhost:5000',
 }))
 
+vi.mock('@/api/product-categories/product-categories.service', () => ({
+  productCategoriesService: {
+    getCycleCountVariance: vi.fn().mockResolvedValue({ varianceMap: {} }),
+  },
+}))
+
 vi.mock('@/components/custom/locationPicker', () => ({
   LocationPicker: ({ setStationName }: any) => (
     <button data-testid="location-picker" onClick={() => setStationName('TestSite')}>

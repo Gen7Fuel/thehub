@@ -735,6 +735,7 @@
 //   )
 // }
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
@@ -907,28 +908,15 @@ function RouteComponent() {
     if (!site || !pickerDate) return
     ;(async () => {
       try {
-        const locRes = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`)
-        const loc = await locRes.json()
+        const loc = await cashSummaryService.getLocationProfile<any>(site, 'cash-summary.form')
         const lottoSite = !!loc?.sellsLottery
         setShowCDCheckbox(!!loc?.chickenDelightSection)
         setSellsLottery(lottoSite)
 
         if (lottoSite) {
           const formattedDate = activeDateString
-          const lottoRes = await fetch(
-            `/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(formattedDate)}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-              }
-            }
-          )
-          if (lottoRes.ok) {
-            const lottoData = await lottoRes.json()
-            setHasSavedLottery(!!lottoData?.lottery)
-          } else {
-            setHasSavedLottery(false)
-          }
+          const lottoData = await cashSummaryService.getLottery<any>(site, formattedDate, 'form')
+          setHasSavedLottery(!!lottoData?.lottery)
         } else {
           setHasSavedLottery(false)
         }
@@ -945,15 +933,7 @@ function RouteComponent() {
       setError(null)
       try {
         const dateISO = pickerDate.toISOString()
-        const res = await fetch(`/api/cash-summary/by-date?site=${encodeURIComponent(site)}&date=${encodeURIComponent(dateISO)}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-            "X-Required-Permission": "accounting.cashSummary.form"
-          }
-        })
-        if (!res.ok) throw new Error('Failed to fetch shifts')
-        
-        const resData = await res.json()
+        const resData = await cashSummaryService.getFormShifts<any>(site, dateISO)
         const data: ShiftDoc[] = resData.shifts || (Array.isArray(resData) ? resData : [])
         const submittedStatus = !!resData.isSubmitted
 
@@ -1011,12 +991,8 @@ function RouteComponent() {
     if (isReportSubmitted) return
     const file = e.target.files?.[0]
     if (!file || !activeShiftId) return
-    const formData = new FormData()
-    formData.append('file', file)
     try {
-      const res = await fetch('/cdn/upload', { method: 'POST', body: formData })
-      if (!res.ok) throw new Error('Upload failed')
-      const data = await res.json()
+      const data = await cashSummaryService.uploadImage(file, site, activeDateString, 'pinpad')
       updateActiveFormField('pinpadPhoto', data.filename)
     } catch {
       alert('Failed to upload image')
@@ -1075,17 +1051,7 @@ function RouteComponent() {
     })
 
     try {
-      const res = await fetch('/api/cash-summary/batch', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          "X-Required-Permission": "accounting.cashSummary.form"
-        },
-        body: JSON.stringify({ items: payloadItems }),
-      })
-
-      if (!res.ok) throw new Error(await res.text())
+      await cashSummaryService.saveFormShifts(payloadItems, site, activeDateString)
       setSuccess('All shifts updated and marked as reviewed successfully!')
 
       const searchParams = { site, date: activeDateString }

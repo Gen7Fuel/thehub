@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
+import { cashRecService } from '@/api/cash-rec/cash-rec.service'
 
 type ParsedTtx = {
   balanceForward?: number
@@ -206,19 +207,7 @@ function RouteComponent() {
     const autoPickSite = async () => {
       if (!parsed?.accountName) return
       try {
-        let locations: { stationName: string; legalName: string }[] | null = null
-        // Try local proxy first
-        const localResp = await fetch('/api/locations', {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-        })
-        if (localResp.ok) {
-          locations = await localResp.json()
-        } else {
-          // Fallback to remote API
-          const remoteResp = await fetch('https://app.gen7fuel.com/api/locations')
-          if (remoteResp.ok) locations = await remoteResp.json()
-        }
-        if (!locations) return
+        const locations = await cashRecService.listLocationsForBankMatching<Array<{ stationName: string; legalName: string }>>()
 
         const normalize = (s: string) => s.trim().toLowerCase().replace(/'/g, '')
         const stripGen7 = (s: string) =>
@@ -285,7 +274,7 @@ function RouteComponent() {
     const gblCreditsFiltered = computeGblCreditsFiltered(parsed.gblCredits ?? [], selectedSite)
     const payload = {
       site: selectedSite,
-      date: parsed.statementDate,
+      date: parsed.statementDate!,
       balanceForward: parsed.balanceForward ?? 0,
       nightDeposit: parsed.nightDeposit ?? 0,
       transferTo: parsed.transferTo ?? 0,
@@ -303,16 +292,7 @@ function RouteComponent() {
       transferFrom: parsed.transferFrom ?? 0,
     }
     try {
-      const res = await fetch('/api/cash-rec/bank-statement', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`)
+      const data = await cashRecService.saveBankStatement<{ saved: boolean; upserted?: boolean }>(payload)
       // Prevent duplicate clicks by disabling and showing message
       alert(data.upserted ? 'Captured successfully.' : 'Already captured. Updated existing record.')
     } catch (e: any) {

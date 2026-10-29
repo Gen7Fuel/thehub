@@ -676,6 +676,8 @@ import { SitePicker } from '@/components/custom/sitePicker'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { LotteryComparisonTable } from '@/components/custom/LotteryComparisionTable'
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
+import { isApiError } from '@/api/core/errors'
 
 type LotterySearch = {
   site: string
@@ -717,56 +719,33 @@ export const Route = createFileRoute('/_navbarLayout/cash-summary/lottery')({
     if (!site || !date) return { sellsLottery: null, isManitoba: false, totals: null, rows: [], count: 0, status: null, error: null }
 
     try {
-      const token = localStorage.getItem('token') || ''
-
       // 1) Check if site sells lottery and look up province
       let sellsLottery: boolean | null = null
       let isManitoba = false // <-- Initialize the flag here
 
       try {
-        const locResp = await fetch(`/api/locations?stationName=${encodeURIComponent(site)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        })
-        if (locResp.ok) {
-          const loc = await locResp.json()
-          sellsLottery = Boolean(loc?.sellsLottery)
+        const loc = await cashSummaryService.getLocationProfile<any>(site, 'cash-summary.lottery', 'accounting.cashSummary.lottery')
+        sellsLottery = Boolean(loc?.sellsLottery)
 
-          // Check if the province from locationSchema is Manitoba
-          isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba'
+        // Check if the province from locationSchema is Manitoba
+        isManitoba = loc?.province?.trim().toLowerCase() === 'manitoba'
 
-          if (!sellsLottery) {
-            return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: 200, error: null }
-          }
+        if (!sellsLottery) {
+          return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: 200, error: null }
         }
       } catch {
         sellsLottery = null
       }
 
       // 2) Fetch lottery + Bullock totals
-      const resp = await fetch(
-        `/api/cash-summary/lottery?site=${encodeURIComponent(site)}&date=${encodeURIComponent(date)}`,
-        {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            'X-Required-Permission': 'accounting.cashSummary.lottery',
-          },
-        },
-      )
-
-      if (resp.status === 403) {
-        return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: 403, error: 'forbidden' }
-      }
-      if (!resp.ok) {
-        return { sellsLottery, isManitoba, totals: null, rows: [], count: 0, status: resp.status, error: `HTTP ${resp.status}` }
-      }
-
-      const data = await resp.json()
+      const data = await cashSummaryService.getLottery<any>(site, date, 'lottery')
       const totals = data?.totals ?? null
       const rows = Array.isArray(data?.rows) ? data.rows : []
       const count = Number((data?.totals?.count ?? rows.length) || 0)
 
       return { sellsLottery, isManitoba, totals, rows, count, status: 200, error: null }
-    } catch {
+    } catch (error) {
+      if (isApiError(error) && error.status === 403) return { sellsLottery: null, isManitoba: false, totals: null, rows: [], count: 0, status: 403, error: 'forbidden' }
       return { sellsLottery: null, isManitoba: false, totals: null, rows: [], count: 0, status: null, error: 'network' }
     }
   },
