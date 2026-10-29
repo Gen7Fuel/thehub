@@ -50,8 +50,18 @@ export const fuelStationTanksService = {
   updateTank<T = unknown>(id: string, input: unknown, tankLabel?: string) {
     return api.put<T>(`/tanks/${encodeURIComponent(id)}`, input, opts('fuelManagement.manage', 'fuel-management.manage.stations', 'update', 'fuel-station-tank', `Fuel tank update requested for ${tankLabel || id}`))
   },
-  manualUpdate<T = unknown>(id: string, input: unknown, tankLabel?: string) {
-    return api.patch<T>(`/manual-update/${encodeURIComponent(id)}`, input, opts('fuelManagement.volume.addPhysicalReading', 'fuel-management.volume', 'update', 'fuel-station-tank', `Manual fuel volume reading submitted for ${tankLabel || id}`))
+  manualUpdate<T = unknown>(
+    id: string,
+    input: unknown,
+    tankLabel?: string,
+    source = 'fuel-management.volume',
+    permission = 'fuelManagement.volume.addPhysicalReading',
+  ) {
+    return api.patch<T>(
+      `/manual-update/${encodeURIComponent(id)}`,
+      input,
+      opts(permission, source, 'update', 'fuel-station-tank', `Manual fuel volume reading submitted for ${tankLabel || id}`),
+    )
   },
   removeTank<T = unknown>(id: string, tankLabel?: string) {
     return api.remove<T>(`/tanks/${encodeURIComponent(id)}`, opts('fuelManagement.manage', 'fuel-management.manage.stations', 'delete', 'fuel-station-tank', `Fuel tank removal requested for ${tankLabel || id}`))

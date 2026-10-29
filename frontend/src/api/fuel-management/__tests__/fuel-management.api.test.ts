@@ -95,6 +95,37 @@ describe('Fuel Management API contracts', () => {
     ])
   })
 
+  it('reuses tank volume resources for the Fuel Dip Readings page', async () => {
+    await fuelStationTanksService.syncAllVolumes(
+      'fuel-dip-readings',
+      'Fuel dip readings loaded for Rankin',
+      'fuelDipReadings.addNewReadings',
+    )
+    await fuelStationTanksService.manualUpdate(
+      'tank-1',
+      { volume: 8000, manualDate: '2026-10-29', manualTime: '15:45' },
+      'Tank #1 (Regular) at Rankin',
+      'fuel-dip-readings',
+      'fuelDipReadings.addNewReadings',
+    )
+
+    expect(mocks.get.mock.calls[0]).toEqual([
+      '/fuel-station-tanks/sync-all-volumes',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Required-Permission': 'fuelDipReadings.addNewReadings',
+          'X-Action-Source': 'fuel-dip-readings',
+          'X-Action-Message': 'Fuel dip readings loaded for Rankin',
+        }),
+      }),
+    ])
+    expect(mocks.patch.mock.calls[0][2].headers).toEqual(expect.objectContaining({
+      'X-Required-Permission': 'fuelDipReadings.addNewReadings',
+      'X-Action-Source': 'fuel-dip-readings',
+      'X-Action-Message': 'Manual fuel volume reading submitted for Tank #1 (Regular) at Rankin',
+    }))
+  })
+
   it('keeps retain and order edits on the centralized fuel-orders resource', async () => {
     await fuelOrdersService.getRetainPoNumber('order-1', 'station-2', '2026-10-30')
     await fuelOrdersService.update('order-1', { currentStatus: 'Delivered' }, 'Status update', 'fuelManagement.workspace.updateOrderStatus')
@@ -176,6 +207,7 @@ describe('Fuel Management API contracts', () => {
       }
     }
     visit(routeRoot)
+    files.push(path.resolve(routeRoot, '../fuel-dip-readings.tsx'))
 
     for (const file of files) {
       const source = fs.readFileSync(file, 'utf8')

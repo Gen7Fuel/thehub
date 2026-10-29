@@ -29,6 +29,11 @@ describe('Fuel Management change logging contract', () => {
     }
   });
 
+  it('preserves the calling module source for shared manual tank readings', () => {
+    const source = read('fuelStationTankRoutes.js');
+    expect(source).toContain("req.headers['x-action-source'] || 'fuel-management.volume'");
+  });
+
   it('records bulk order IDs when a create-order request makes multiple orders', () => {
     const source = read('fuelOrderRoutes.js');
     expect(source).toContain('resourceIds: savedOrders.map');
