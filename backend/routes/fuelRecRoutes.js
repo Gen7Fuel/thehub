@@ -8,6 +8,9 @@ const { emailQueue } = require('../queues/emailQueue');
 const { pushNotification } = require("../services/notificationService");
 const { cdnUploadQueue } = require("../queues/cdnUploadQueue");
 const moment = require('moment-timezone');
+const { logChange } = require('../middleware/changeLogger');
+
+const requestSource = (req) => req.headers['x-action-source'] || 'fuel-rec';
 
 // JSON body parsing
 router.use(express.json({ limit: '1mb' }))
@@ -122,6 +125,7 @@ router.post('/capture', upload.single('file'), async (req, res) => {
 
   try {
     const BOLPhoto = await getBOLPhoto()
+    const before = await BOLPhoto.findOne({ site, date, bolNumber }).lean()
 
     // 1. Save or update DB record immediately
     const saved = await BOLPhoto.findOneAndUpdate(
@@ -147,6 +151,19 @@ router.post('/capture', upload.single('file'), async (req, res) => {
         backoff: { type: 'exponential', delay: 3000 },
       }
     )
+
+    await logChange(req, {
+      action: before ? 'update' : 'create',
+      resourceType: 'fuel-rec',
+      resourceId: saved._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Fuel BOL ${bolNumber} captured for ${site} on ${date}`,
+      before,
+      after: saved,
+    })
 
     // Return instant success response to user
     return res.status(200).json({ saved: true, photo: saved })
@@ -349,6 +366,18 @@ router.post('/request-again', async (req, res) => {
       type: 'system'
     });
 
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'fuel-rec-retake-request',
+      resourceStore: 'external',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Fuel BOL photo retake requested for ${location.stationName} on ${date}`,
+      changes: [{ operation: 'add', path: 'retakeRequest', after: { site: location.stationName, date } }],
+      changeSummary: { added: 1, removed: 0, replaced: 0, total: 1 },
+    });
+
     return res.status(200).json({ sent: true });
   } catch (e) {
     console.error('BOL Request Error:', e);
@@ -449,6 +478,7 @@ router.post('/:id/link-po', async (req, res) => {
       return res.status(400).json({ error: 'Fuel PO is already linked to this BOL' })
     }
 
+    const beforeOrder = order.toObject()
     order.bolNumbers = [...existingBolNumbers, String(bol.bolNumber).trim()]
     order.bolLinked = order.bolNumbers.length > 0
     order.bolNumber = undefined
@@ -473,6 +503,20 @@ router.post('/:id/link-po', async (req, res) => {
       },
       { new: true, lean: true }
     )
+
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'fuel-rec',
+      resourceId: updatedBol._id,
+      resourceIds: [updatedBol._id, populatedOrder._id],
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Fuel BOL ${bol.bolNumber} linked to PO ${populatedOrder.poNumber} for ${bol.site}`,
+      before: { bol, order: beforeOrder },
+      after: { bol: updatedBol, order: populatedOrder },
+    })
 
     return res.json({ linked: true, order: decorateOrderForBol(populatedOrder, bol.bolNumber), bol: updatedBol })
   } catch (e) {
@@ -499,6 +543,7 @@ router.post('/:id/unlink-po', async (req, res) => {
       _id: fuelOrderId,
       station: location._id,
     })
+    const beforeOrder = order ? order.toObject() : null
 
     if (order) {
       const currentBolNumber = String(bol.bolNumber).trim()
@@ -542,6 +587,20 @@ router.post('/:id/unlink-po', async (req, res) => {
       order = decorateOrderForBol(populated, bol.bolNumber)
       }
 
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'fuel-rec',
+      resourceId: updatedBol._id,
+      resourceIds: [updatedBol._id, ...(order?._id ? [order._id] : [])],
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Fuel BOL ${bol.bolNumber} unlinked from PO ${order?.poNumber || fuelOrderId} for ${bol.site}`,
+      before: { bol, order: beforeOrder },
+      after: { bol: updatedBol, order },
+    })
+
     return res.json({ unlinked: true, order, bol: updatedBol })
   } catch (e) {
     console.error('fuelRec.unlink-po error:', e)
@@ -558,6 +617,19 @@ router.delete('/:id', async (req, res) => {
     const BOLPhoto = await getBOLPhoto()
     const deleted = await BOLPhoto.findByIdAndDelete(id).lean()
     if (!deleted) return res.status(404).json({ error: 'Entry not found' })
+
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'fuel-rec',
+      resourceId: deleted._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Fuel BOL ${deleted.bolNumber || deleted._id} deleted for ${deleted.site} on ${deleted.date}`,
+      before: deleted,
+      after: null,
+    })
 
     return res.json({ deleted: true, id })
   } catch (e) {
@@ -577,6 +649,8 @@ router.post('/:id/comment', async (req, res) => {
     const user = (req.user && (req.user.name || req.user.email)) || 'Unknown'
 
     const BOLPhoto = await getBOLPhoto()
+    const before = await BOLPhoto.findById(id).lean()
+    if (!before) return res.status(404).json({ error: 'Entry not found' })
     const update = {
       $push: {
         comments: {
@@ -588,6 +662,18 @@ router.post('/:id/comment', async (req, res) => {
     }
     const updated = await BOLPhoto.findByIdAndUpdate(id, update, { new: true, lean: true })
     if (!updated) return res.status(404).json({ error: 'Entry not found' })
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'fuel-rec',
+      resourceId: updated._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Comment added to Fuel BOL ${updated.bolNumber || updated._id} for ${updated.site} on ${updated.date}`,
+      before,
+      after: updated,
+    })
     return res.json({ ok: true, comments: updated.comments })
   } catch (e) {
     console.error('fuelRec.comment error:', e)

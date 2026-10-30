@@ -10,6 +10,7 @@ import { useAuth } from '@/context/AuthContext'
 import { ClipboardCheck, Trash2, MessageSquareText, RefreshCcw, ExternalLink, Link2, ZoomIn, ZoomOut } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from 'sonner'
+import { fuelRecService, type FuelRecLocation } from '@/api/fuel-rec/fuel-rec.service'
 
 
 type BOLPhoto = {
@@ -87,15 +88,7 @@ export const Route = createFileRoute('/_navbarLayout/fuel-rec/list')({
     if (!site || !/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return { site, from, to, data: null as ListResponse | null }
     }
-    const res = await fetch(
-      `/api/fuel-rec/list?site=${encodeURIComponent(site)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      { headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } }
-    )
-    if (!res.ok) {
-      const msg = await res.text().catch(() => '')
-      throw new Error(msg || `HTTP ${res.status}`)
-    }
-    const data = (await res.json()) as ListResponse
+    const data = await fuelRecService.list<ListResponse>(site, from, to)
     return { site, from, to, data }
   },
   component: RouteComponent,
@@ -150,11 +143,8 @@ function RouteComponent() {
 
   const [locationNames, setLocationNames] = React.useState<Record<string, string>>({})
   React.useEffect(() => {
-    fetch('/api/locations', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-    })
-      .then((r) => r.json())
-      .then((data: Array<{ stationName: string; legalName?: string }>) => {
+    fuelRecService.listLocations()
+      .then((data: FuelRecLocation[]) => {
         const map: Record<string, string> = {}
         for (const loc of data) {
           if (loc.stationName === 'Silver Grizzly' && loc.legalName) map[loc.stationName] = loc.legalName
@@ -192,18 +182,7 @@ function RouteComponent() {
   const requestAgain = async (e: BOLPhoto) => {
     try {
       setPending((prev) => new Set(prev).add(e._id))
-      const res = await fetch('/api/fuel-rec/request-again', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ site: e.site, date: e.date }),
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '')
-        throw new Error(msg || `HTTP ${res.status}`)
-      }
+      await fuelRecService.requestAgain(e)
       alert(`Retake request sent for ${e.site} on ${e.date}.`)
     } catch (err) {
       alert(`Retake request failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -283,17 +262,7 @@ function RouteComponent() {
     if (!ok) return
     try {
       setPending((prev) => new Set(prev).add(e._id))
-      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(e._id)}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.fuelRec.delete',
-        },
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '')
-        throw new Error(msg || `HTTP ${res.status}`)
-      }
+      await fuelRecService.remove(e)
       setEntries((prev) => prev.filter((x) => x._id !== e._id))
     } catch (err) {
       alert(`Delete failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -309,16 +278,7 @@ function RouteComponent() {
   const postBolComment = async (e: BOLPhoto) => {
     try {
       setPending((prev) => new Set(prev).add(e._id))
-      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(e._id)}/comment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ text: 'BOL Posted' }),
-      })
-      if (!res.ok) throw new Error('Failed to post comment')
-      const result = await res.json()
+      const result = await fuelRecService.addComment<{ comments: BOLPhoto['comments'] }>(e, 'BOL Posted')
       setEntries((prev) => prev.map((x) => x._id === e._id ? { ...x, comments: result.comments } : x))
       toast.success('BOL Posted')
     } catch (err) {
@@ -335,19 +295,7 @@ function RouteComponent() {
   const loadLinkableOrders = async (e: BOLPhoto, daysBack: number) => {
     setLinkLoading(true)
     try {
-      const res = await fetch(
-        `/api/fuel-rec/${encodeURIComponent(e._id)}/linkable-pos?daysBack=${encodeURIComponent(String(daysBack))}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-        }
-      )
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '')
-        throw new Error(msg || `HTTP ${res.status}`)
-      }
-      const result = (await res.json()) as LinkablePoResponse
+      const result = await fuelRecService.getLinkablePos<LinkablePoResponse>(e, daysBack)
       setLinkableOrders(result.orders || [])
       setLinkedOrders(result.linkedOrders || (result.linkedOrder ? [result.linkedOrder] : []))
       setLinkRange({ from: result.from, to: result.to })
@@ -389,21 +337,7 @@ function RouteComponent() {
     if (!activeLinkEntry) return
     setLinkPendingOrderId(order._id)
     try {
-      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeLinkEntry._id)}/link-po`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({
-          fuelOrderId: order._id,
-        }),
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '')
-        throw new Error(msg || `HTTP ${res.status}`)
-      }
-      const result = await res.json()
+      const result = await fuelRecService.linkPo<{ order?: FuelOrderCandidate }>(activeLinkEntry, order)
       toast.success(`Linked BOL ${activeLinkEntry.bolNumber || ''} to PO ${order.poNumber}`)
       setLinkableOrders((prev) => prev.filter((x) => x._id !== order._id))
       const linked = result.order || order
@@ -437,18 +371,7 @@ function RouteComponent() {
     if (!activeLinkEntry) return
     setUnlinkPending(true)
     try {
-      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeLinkEntry._id)}/unlink-po`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ fuelOrderId: order._id }),
-      })
-      if (!res.ok) {
-        const msg = await res.text().catch(() => '')
-        throw new Error(msg || `HTTP ${res.status}`)
-      }
+      await fuelRecService.unlinkPo(activeLinkEntry, order)
       toast.success(`Unlinked PO ${order.poNumber}`)
       const nextPoNumbers = getBolPoNumbers(activeLinkEntry).filter((poNumber) => poNumber !== order.poNumber)
       setEntries((prev) => prev.map((x) => x._id === activeLinkEntry._id
@@ -488,18 +411,7 @@ function RouteComponent() {
     if (!commentText.trim() || !activeCommentEntry) return
     setCommentPending(true)
     try {
-      const res = await fetch(`/api/fuel-rec/${encodeURIComponent(activeCommentEntry._id)}/comment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-        body: JSON.stringify({ text: commentText }),
-      })
-
-      if (!res.ok) throw new Error('Failed to save')
-
-      const result = await res.json()
+      const result = await fuelRecService.addComment<{ comments: BOLPhoto['comments'] }>(activeCommentEntry, commentText)
       // Update the main table list
       setEntries(prev => prev.map(x => x._id === activeCommentEntry._id ? { ...x, comments: result.comments } : x))
       // Update the currently open modal data

@@ -2,8 +2,9 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search, Info } from 'lucide-react'
 import CreatableSelect from 'react-select/creatable'
-import axios from 'axios'
 import { useAuth } from '@/context/AuthContext'
+import { fuelSettingsService } from '@/api/fuel-settings/fuel-settings.service'
+import { isApiError } from '@/api/core/errors'
 
 export const Route = createFileRoute(
   '/_navbarLayout/fuel-settings/carrier-haulage',
@@ -92,18 +93,13 @@ export function RouteComponent() {
   const fetchHaulageData = async () => {
     try {
       setLoading(true)
-      const res = await axios.get('/api/fuel-settings/carrier-haulage', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.haulage'
-        }
-      })
-      setData(res.data)
+      const result = await fuelSettingsService.list<CarrierHaulageRow[]>('carrier-haulage')
+      setData(result)
       setEditedRows({})
       setDeletedRows({})
     } catch (err: any) {
       console.error(err)
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }
@@ -378,20 +374,13 @@ export function RouteComponent() {
   const handlePushNewEntriesToServer = async () => {
     if (newEntriesList.length === 0) return
     try {
-      const res = await axios.post('/api/fuel-settings/carrier-haulage/batch', { entries: newEntriesList }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.haulage.edit'
-        }
-      })
-      if (res.status === 200) {
-        alert("Successfully added new routes to the table.")
-        closeCreationWizard()
-        await fetchHaulageData()
-      }
+      await fuelSettingsService.createBatch('carrier-haulage', newEntriesList)
+      alert("Successfully added new routes to the table.")
+      closeCreationWizard()
+      await fetchHaulageData()
     } catch (err: any) {
       console.error(err)
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }
@@ -414,7 +403,11 @@ export function RouteComponent() {
           type: row['Type'],
           location: row['Location'],
           pickup: row['Pickup'],
-          isSplit: splitVal // <--- ADDED
+          isSplit: splitVal,
+          liveHaulage: row.Live_Haulage,
+          liveUpdatedAt: row.Live_Updated_At,
+          stagedHaulage: row.Stg_Haulage,
+          stagedUpdatedAt: row.Stg_Updated_At
         });
       } else if (editedRows[key] !== undefined) {
         updatesPayload.push({
@@ -429,26 +422,18 @@ export function RouteComponent() {
     }
 
     try {
-      const res = await axios.put('/api/fuel-settings/carrier-haulage/batch', {
+      await fuelSettingsService.updateBatch('carrier-haulage', {
         updates: updatesPayload,
         deletions: deletionsPayload,
         isImmediate: isImmediateAction
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.haulage.edit'
-        }
       });
-
-      if (res.status === 200) {
-        alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.");
-        setIsScheduleConfirmOpen(false);
-        setIsLiveConfirmOpen(false);
-        await fetchHaulageData();
-      }
+      alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.");
+      setIsScheduleConfirmOpen(false);
+      setIsLiveConfirmOpen(false);
+      await fetchHaulageData();
     } catch (err: any) {
       console.error(err);
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
