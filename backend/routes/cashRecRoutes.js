@@ -947,6 +947,20 @@ router.get('/entries', async (req, res) => {
       { shiftCount: { $sum: 1 } }
     )
 
+    // The CDN Cash column and reconciliation formulas include U.S. Cash.
+    // canadianCash already contains Canadian + U.S. cash (no conversion).
+    // Choose per shift so older records can fall back to reported cash,
+    // while Chicken Delight keeps its tender/tip-adjusted reported amount.
+    groupStage.report_canadian_cash = {
+      $sum: {
+        $cond: [
+          '$isChickenDelight',
+          { $ifNull: ['$report_canadian_cash', 0] },
+          { $ifNull: ['$canadianCash', '$report_canadian_cash', 0] },
+        ],
+      },
+    }
+
     const [agg] = await CashSummary.aggregate([
       { $match: { site, date: { $gte: start,$lte: end } } },
       { $group: { _id: null, ...groupStage } },

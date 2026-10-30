@@ -1,6 +1,6 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
@@ -53,6 +53,10 @@ vi.mock('@/components/custom/datePicker', () => ({
   ),
 }))
 
+vi.mock('@/components/custom/datePickerWithRange', () => ({
+  DatePickerWithRange: () => <div data-testid="date-range-picker" />,
+}))
+
 vi.mock('@/components/ui/button', () => ({
   Button: ({ children, onClick, disabled, title }: any) => (
     <button onClick={onClick} disabled={disabled} title={title}>
@@ -67,6 +71,7 @@ vi.mock('@/api/cash-rec/cash-rec.service', () => ({ cashRecService: mockCashRecS
 
 import { Route as BankRoute } from '../cash-rec/bank'
 import { Route as ReportRoute } from '../cash-rec/index'
+import { Route as EntriesRoute } from '../cash-rec/entries'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -79,6 +84,7 @@ const renderWithSuspense = (ui: React.ReactElement) =>
 
 const BankUpload = (BankRoute as any).component as React.ComponentType
 const CashRecReport = (ReportRoute as any).component as React.ComponentType
+const CashRecEntries = (EntriesRoute as any).component as React.ComponentType
 
 // jsdom's File does not implement Blob.prototype.text() — polyfill it for each file
 const makeFile = (content: string, name: string): File => {
@@ -140,6 +146,32 @@ const makeLoaderData = (overrides: any = {}) => ({
     balanceCheck: 0,
     ...overrides,
   },
+})
+
+describe('Cash Rec entries: CDN Cash', () => {
+  it.each([
+    { reported: 125, rawCombined: 125, expected: '125.00' },
+    // A day containing adjusted Chicken Delight shifts must use the API's
+    // effective cash total rather than the unadjusted combined raw total.
+    { reported: 205, rawCombined: 250, expected: '205.00' },
+    { reported: 0, rawCombined: 0, expected: '0.00' },
+  ])('displays the combined cash total $expected', async ({ reported, rawCombined, expected }) => {
+    const { data } = makeLoaderData()
+    data.cashSummary.totals = {
+      ...emptyTotals,
+      report_canadian_cash: reported,
+      canadianCash: rawCombined,
+    }
+    mockUseSearch.mockReturnValue({ site: 'Rankin', from: '2026-03-15' })
+    mockUseLoaderData.mockReturnValue({
+      site: 'Rankin', from: '2026-03-15', rows: [{ date: '2026-03-15', data }],
+    })
+    renderWithSuspense(<CashRecEntries />)
+    await waitFor(() => expect(screen.getByRole('columnheader', { name: 'CDN Cash' })).toBeInTheDocument(), { timeout: 5000 })
+    const column = screen.getAllByRole('columnheader').findIndex(header => header.textContent === 'CDN Cash')
+    const row = screen.getAllByRole('row').find(row => within(row).queryAllByRole('cell').length > 0)!
+    expect(within(row).getAllByRole('cell')[column]).toHaveTextContent(expected)
+  })
 })
 
 // Helper: simulate uploading a file via the hidden file input
