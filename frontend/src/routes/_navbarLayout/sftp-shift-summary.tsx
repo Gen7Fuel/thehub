@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { sftpService } from '@/api/sftp/sftp.service'
 
 export const Route = createFileRoute('/_navbarLayout/sftp-shift-summary')({
   component: ShiftSummaryRoute,
@@ -18,15 +19,7 @@ function ShiftSummaryRoute() {
     setError(null)
 
     try {
-      const response = await fetch('/api/sftp/shift-summary', {
-        signal,
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        },
-      })
-
-      if (!response.ok) throw new Error(`Request failed with HTTP ${response.status}`)
-      setData(await response.json())
+      setData(await sftpService.getShiftSummary(signal))
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
         setError(err instanceof Error ? err.message : 'Failed to load shift summary')
