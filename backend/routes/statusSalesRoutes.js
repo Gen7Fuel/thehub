@@ -3,6 +3,8 @@ const StatusCustomer = require('../models/StatusCustomer');
 const StatusSale = require('../models/StatusSale');
 const { emailQueue } = require('../queues/emailQueue');
 const router = express.Router();
+const { logChange } = require('../middleware/changeLogger');
+const requestSource = req => req.headers['x-action-source'] || 'status.form';
 
 // Create a status sale
 router.post('/', async (req, res) => {
@@ -15,6 +17,7 @@ router.post('/', async (req, res) => {
     }
 
     // Save or update the customer in the StatusCustomer model
+    const customerBefore = await StatusCustomer.findOne({ statusCardNumber }).lean();
     const customer = await StatusCustomer.findOneAndUpdate(
       { statusCardNumber },
       { name, phone },
@@ -33,6 +36,19 @@ router.post('/', async (req, res) => {
     });
 
     await statusSale.save();
+
+    await logChange(req, {
+      action: 'create', resourceType: 'status-sale', resourceId: statusSale._id,
+      resourceStore: 'mongodb', success: true, statusCode: 201, source: requestSource(req),
+      message: `Status sale created for ${stationName}, card ending ${String(statusCardNumber).slice(-4)}, ${amount} litres for $${total}`,
+      before: undefined, after: statusSale.toObject(),
+    });
+    await logChange(req, {
+      action: customerBefore ? 'update' : 'create', resourceType: 'status-customer', resourceId: customer._id,
+      resourceStore: 'mongodb', success: true, statusCode: 201, source: requestSource(req),
+      message: `Status customer ${name} ${customerBefore ? 'updated' : 'created'} for card ending ${String(statusCardNumber).slice(-4)}`,
+      before: customerBefore, after: customer.toObject(),
+    });
 
     // Send Email for testing
     try {

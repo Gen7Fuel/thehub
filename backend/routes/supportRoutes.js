@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const SupportTicket = require('../models/Support');
+const { logChange } = require('../middleware/changeLogger');
+const requestSource = req => req.headers['x-action-source'] || 'support';
 
 // POST /api/support/tickets - Create a new support ticket
 router.post('/tickets', async (req, res) => {
@@ -33,6 +35,13 @@ router.post('/tickets', async (req, res) => {
 
     await ticket.save();
     await ticket.populate('userId', 'firstName lastName email isSupport');
+
+    await logChange(req, {
+      action: 'create', resourceType: 'support-ticket', resourceId: ticket._id,
+      resourceStore: 'mongodb', success: true, statusCode: 201, source: requestSource(req),
+      message: `${priority} priority support ticket created for ${site.trim()}: ${text.trim().slice(0, 100)}`,
+      before: undefined, after: ticket.toObject(),
+    });
 
     const io = req.app.get('io');
     if (io) {
@@ -96,6 +105,8 @@ router.patch('/tickets/:id/status', async (req, res) => {
     if (!['open', 'resolved', 'closed'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Invalid status.' });
     }
+    const before = await SupportTicket.findById(req.params.id).lean();
+    if (!before) return res.status(404).json({ success: false, message: 'Ticket not found.' });
     const ticket = await SupportTicket.findByIdAndUpdate(
       req.params.id,
       { status },
@@ -104,6 +115,12 @@ router.patch('/tickets/:id/status', async (req, res) => {
     if (!ticket) {
       return res.status(404).json({ success: false, message: 'Ticket not found.' });
     }
+    await logChange(req, {
+      action: 'update', resourceType: 'support-ticket', resourceId: ticket._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200, source: requestSource(req),
+      message: `Support ticket for ${ticket.site} changed from ${before.status} to ${status}`,
+      before, after: ticket.toObject(),
+    });
     res.json({ success: true, data: ticket });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to update ticket status.', error: error.message });
@@ -124,6 +141,7 @@ router.post('/tickets/:id/messages', async (req, res) => {
     if (ticket.status === 'closed' || ticket.status === 'resolved') {
       return res.status(403).json({ success: false, message: 'Ticket is closed.' });
     }
+    const before = ticket.toObject();
     ticket.messages.push({
       sender: req.user.id,
       text: text.trim(),
@@ -131,6 +149,12 @@ router.post('/tickets/:id/messages', async (req, res) => {
     });
     await ticket.save();
     await ticket.populate('messages.sender', 'name email isSupport');
+    await logChange(req, {
+      action: 'update', resourceType: 'support-ticket', resourceId: ticket._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200, source: requestSource(req),
+      message: `Reply added to support ticket for ${ticket.site}`,
+      before, after: ticket.toObject(),
+    });
     res.json({ success: true, data: ticket });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to add message.', error: error.message });

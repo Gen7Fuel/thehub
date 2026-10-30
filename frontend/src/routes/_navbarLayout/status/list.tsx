@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { formatPhoneNumber } from '@/lib/utils';
 import { pdf } from '@react-pdf/renderer'
 import StatusSalesPDF from '@/components/custom/statusSalesForm';
-import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
+import { statusSalesService } from '@/api/status-sales/status-sales.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/status/list')({
   component: RouteComponent,
@@ -44,21 +45,14 @@ function RouteComponent() {
 
     try {
       // Add authorization header with bearer token
-      const response = await axios.get('/api/status-sales', {
-        params: {
-          startDate: new Date(date.setHours(0, 0, 0, 0)).toISOString(),
-          endDate: new Date(date.setHours(23, 59, 59, 999)).toISOString(),
-          stationName,
-        },
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "status",
-        },
-      });
-
-      setStatusSales(response.data);
+      const query = {
+        startDate: new Date(date.setHours(0, 0, 0, 0)).toISOString(),
+        endDate: new Date(date.setHours(23, 59, 59, 999)).toISOString(),
+        stationName,
+      };
+      setStatusSales(await statusSalesService.list<typeof statusSales>(query));
     } catch (error: any) {
-      if (error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         // Redirect to no-access page
         navigate({ to: '/no-access' });
       } else {

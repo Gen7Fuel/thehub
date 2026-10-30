@@ -5,6 +5,7 @@ import { DatePicker } from "@/components/custom/datePicker";
 import { useSite } from "@/context/SiteContext";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
+import { invoiceUploadService } from "@/api/invoice-upload/invoice-upload.service";
 import {
   Dialog,
   DialogContent,
@@ -152,23 +153,10 @@ function RouteComponent() {
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams();
-
-      if (site) params.append("siteName", site);
-      if (fromDate) params.append("fromDate", formatDateToString(fromDate));
-      if (toDate) params.append("toDate", formatDateToString(toDate));
-
-      const token = localStorage.getItem("token");
-
-      const res = await fetch(`/api/invoice-upload/list?${params.toString()}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-
-      const json = await res.json();
+      const from = fromDate ? formatDateToString(fromDate) : undefined;
+      const to = toDate ? formatDateToString(toDate) : undefined;
+      const query = { ...(site ? { siteName: site } : {}), ...(from ? { fromDate: from } : {}), ...(to ? { toDate: to } : {}) };
+      const json = await invoiceUploadService.list<{ success: boolean; data: InvoiceItem[]; error?: string }>(query, site || "all sites", from, to);
       if (json.success) {
         setInvoices(json.data);
       } else {
