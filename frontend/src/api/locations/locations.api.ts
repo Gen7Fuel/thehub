@@ -11,4 +11,7 @@ export const locationsApi = {
   async create(input: SiteInput, options: RequestOptions): Promise<Site> { return (await apiClient.post('/locations', input, requestConfig(options))).data },
   async update(id: string, input: Partial<SiteInput>, options: RequestOptions): Promise<Site> { return (await apiClient.put(`/locations/${id}`, input, requestConfig(options))).data.location },
   async assignUsers(id: string, stationName: string, userIds: string[], options: RequestOptions): Promise<void> { await apiClient.post(`/locations/${id}/assign-users`, { stationName, userIds }, requestConfig(options)) },
+  async checkManagerCode(location: string, code: string, options: RequestOptions): Promise<{ success: boolean; error?: string }> {
+    return (await apiClient.post('/locations/check-code', { location, code }, requestConfig(options))).data
+  },
 }

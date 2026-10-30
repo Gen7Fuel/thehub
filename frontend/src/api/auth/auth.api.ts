@@ -11,6 +11,12 @@ export const authApi = {
   async register<T = unknown>(input: { email: string; password: string; firstName: string; lastName: string; stationName: string }, options: RequestOptions): Promise<T> {
     return (await authClient.post('/register', input, requestConfig(options))).data
   },
+  async refreshToken<T = { token: string }>(userId: string, options: RequestOptions): Promise<T> {
+    return (await authClient.post('/refresh-token', { userId }, requestConfig(options))).data
+  },
+  async getMaintenanceStatus<T = unknown>(options: RequestOptions): Promise<T> {
+    return (await authClient.get('/maintenance-status', requestConfig(options))).data
+  },
   async logout(options: RequestOptions): Promise<void> {
     await apiClient.post('/auth/logout', {}, requestConfig(options))
   },

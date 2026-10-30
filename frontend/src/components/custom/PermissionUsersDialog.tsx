@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
+import { usersApi } from "@/api/users/users.service";
+import type { PermissionUser } from "@/api/users/users.api";
 import {
   Dialog,
   DialogContent,
@@ -10,15 +11,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-interface PermissionUser {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  roleName: string | null;
-  value: boolean;
-}
 
 export function PermissionUsersDialog({
   permId,
@@ -43,17 +35,11 @@ export function PermissionUsersDialog({
     let cancelled = false;
     setLoading(true);
 
-    axios
-      .get(`/api/users/by-permission/${permId}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "settings",
-        },
-      })
-      .then((response) => {
+    usersApi
+      .listByPermission(permId, permissionName)
+      .then((fetched) => {
         if (cancelled) return;
-        const fetched: PermissionUser[] = response.data || [];
-        setUsers(fetched);
+        setUsers(fetched || []);
         setChecked(
           Object.fromEntries(fetched.map((u) => [u._id, u.value]))
         );
@@ -91,16 +77,7 @@ export function PermissionUsersDialog({
 
     setSaving(true);
     try {
-      await axios.put(
-        `/api/users/by-permission/${permId}`,
-        { changes },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "settings",
-          },
-        }
-      );
+      await usersApi.updateByPermission(permId, permissionName, changes);
       alert("Users updated successfully!");
       onOpenChange(false);
     } catch (error) {

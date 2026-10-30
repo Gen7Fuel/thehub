@@ -62,6 +62,27 @@ describe('actionAccessLogger', () => {
     }))
   })
 
+  it('preserves an explicit logout action for session termination requests', async () => {
+    const res = response(200)
+    actionAccessLogger({ enqueueAccessLog })(request({
+      'X-Action-Type': 'logout',
+      'X-Action-Resource': 'user',
+      'X-Action-Source': 'navbar.session',
+      'X-Action-Message': 'User logout requested from the navigation bar',
+    }, {
+      method: 'POST',
+      originalUrl: '/api/auth/logout',
+    }), res, vi.fn())
+    res.emit('finish')
+    await Promise.resolve()
+
+    expect(enqueueAccessLog).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'logout',
+      source: 'navbar.session',
+      resourceType: 'user',
+    }))
+  })
+
   it('forwards successful read group IDs for queue-level deduplication', async () => {
     const res = response(200)
     actionAccessLogger({ enqueueAccessLog })(request({

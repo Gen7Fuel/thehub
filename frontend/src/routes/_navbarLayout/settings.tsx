@@ -1,7 +1,8 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { useState } from 'react'
-import axios from 'axios'
 import { cashRecService } from '@/api/cash-rec/cash-rec.service'
+import { dashboardService } from '@/api/dashboard/dashboard.service'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { useAuth } from "@/context/AuthContext";
 import { MasterDetailShell } from "@/components/custom/masterDetailShell";
 
@@ -35,14 +36,10 @@ function RouteComponent() {
     setCacheRefreshing(true);
     setCacheMessage('');
     try {
-      const res = await axios.post('/api/sql/refresh-dashboard-cache', null, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      setCacheMessage(res.data.message);
+      const result = await dashboardService.refreshCacheForSettings();
+      setCacheMessage(result.message);
     } catch (err: any) {
-      setCacheMessage(err.response?.data?.error || 'Cache refresh failed');
+      setCacheMessage(err.message || 'Cache refresh failed');
     } finally {
       setCacheRefreshing(false);
     }
@@ -54,14 +51,10 @@ function RouteComponent() {
     setSyncing(true);
     setSyncMessage('');
     try {
-      const res = await axios.post('/api/fuel-station-tanks/manual-daily-sync', null, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
-      setSyncMessage(res.data.message);
+      const result = await fuelStationTanksService.manualDailySync();
+      setSyncMessage(result.message);
     } catch (err: any) {
-      setSyncMessage(err.response?.data?.error || 'Manual sync failed');
+      setSyncMessage(err.message || 'Manual sync failed');
     } finally {
       setSyncing(false);
     }

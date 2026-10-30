@@ -8,22 +8,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import axios from "axios"
+import { productsService } from '@/api/products/products.service'
 
 interface Product {
     _id: string,
     code: string,
     description: string,
 }
-
 interface ProductPickerProps {
     setProduct: React.Dispatch<React.SetStateAction<string>>,
 }
-
 export function ProductPicker({ setProduct }: ProductPickerProps) {
-  const { data } = useQuery({
+  const { data = [] } = useQuery({
     queryKey: ['products'],
-    queryFn: fetchProducts
+    queryFn: () => productsService.listForStatus<Product[]>()
   })
 
   return (
@@ -49,13 +47,4 @@ export function ProductPicker({ setProduct }: ProductPickerProps) {
     </Select>
     </>
   )
-}
-
-const fetchProducts = async () => {
-  const response = await axios.get('/api/products', {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  return response.data
 }

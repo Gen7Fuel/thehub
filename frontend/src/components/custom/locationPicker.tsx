@@ -95,10 +95,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
-import { getCachedLocations, saveCachedLocations } from "@/lib/locationsCache";
+import { getCachedLocations, loadLocations } from "@/lib/locationsCache";
 
 interface Location {
   _id: string;
@@ -106,23 +105,21 @@ interface Location {
   csoCode: string;
   timezone: string;
 }
-
 interface LocationPickerProps {
   setStationName: React.Dispatch<React.SetStateAction<string>>;
   setTimezone?: React.Dispatch<React.SetStateAction<string>>;
   value: "stationName" | "csoCode";
   defaultValue?: string;
 }
-
 export function LocationPicker({
   setStationName,
   setTimezone,
   value,
   defaultValue,
 }: LocationPickerProps) {
-  const { data: locations } = useQuery({
+  const { data: locations = [] } = useQuery({
     queryKey: ["locations"],
-    queryFn: fetchLocations,
+    queryFn: () => loadLocations<Location>(),
     // Seeds the query with whatever was cached from a previous successful
     // fetch (see prefetchLocations() in __root.tsx) so the picker
     // has data on the very first render, regardless of whether this
@@ -154,7 +151,7 @@ export function LocationPicker({
   const allAllowedSites = permittedSites;
 
   // Filter available locations to allowed ones
-  const filteredLocations = locations?.filter((loc: Location) =>
+  const filteredLocations = locations.filter((loc: Location) =>
     allAllowedSites.includes(loc.stationName)
   );
 
@@ -203,33 +200,3 @@ export function LocationPicker({
     </Select>
   );
 }
-
-const fetchLocations = async () => {
-  try {
-    const response = await axios.get("/api/locations", {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem("token")}`,
-      },
-      // Bounds how long a reachable-but-not-actually-online connection (dead
-      // Wi-Fi router, captive portal) can hang this request before we give up
-      // and fall back to the cache below.
-      timeout: 5000,
-    });
-    saveCachedLocations(response.data);
-    return response.data;
-  } catch (err) {
-    // Offline (or request failed) — fall back to the last successful fetch,
-    // warmed as early as app boot (see prefetchLocations in __root.tsx), so
-    // the picker isn't empty just because this particular page load couldn't
-    // reach the server. Only treat this as a "successful" result when the
-    // cache actually has something in it — React Query marks whatever this
-    // function returns as fresh data for the global 5-minute staleTime, so
-    // returning an empty array here would look identical to a real success
-    // and block any retry (remount, reconnect, window refocus) until that
-    // window expires. Re-throwing on a genuinely empty cache instead lets
-    // React Query's normal retry/refetchOnReconnect behavior keep trying.
-    const cached = getCachedLocations();
-    if (cached.length > 0) return cached;
-    throw err;
-  }
-};

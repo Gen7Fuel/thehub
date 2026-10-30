@@ -13,12 +13,14 @@ import {
   InputOTPGroup,
   InputOTPHiddenSlot,
 } from "@/components/custom/input-otp-masked";
+import { locationsService } from "@/api/locations/locations.service";
 
 interface PasswordProtectionProps {
   isOpen: boolean;
   onSuccess: () => void;
   onCancel: () => void;
   userLocation: string; // new prop
+  source: string;
 }
 
 export function PasswordProtection({
@@ -26,6 +28,7 @@ export function PasswordProtection({
   onSuccess,
   onCancel,
   userLocation,
+  source,
 }: PasswordProtectionProps) {
   const [otp, setOtp] = useState("");
   const [error, setError] = useState("");
@@ -36,19 +39,10 @@ export function PasswordProtection({
     setLoading(true);
     setError("");
     
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
     try {
-      const res = await fetch("/api/locations/check-code", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ location: userLocation, code: otp }),
-      });
+      const data = await locationsService.verifyManagerCode(userLocation, otp, source);
 
-      const data = await res.json();
-
-      if (res.ok && data.success) {
+      if (data.success) {
         setOtp("");
         onSuccess();
       } else {

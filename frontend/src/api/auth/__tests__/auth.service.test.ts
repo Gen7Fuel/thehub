@@ -4,11 +4,12 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   post: vi.fn(),
   authPost: vi.fn(),
+  authGet: vi.fn(),
 }))
 
 vi.mock('@/api/core/clients', () => ({
   apiClient: mocks,
-  authClient: { post: mocks.authPost },
+  authClient: { post: mocks.authPost, get: mocks.authGet },
 }))
 
 import { authService } from '../auth.service'
@@ -18,6 +19,7 @@ describe('authService request metadata', () => {
     vi.clearAllMocks()
     mocks.post.mockResolvedValue({ data: { inStoreAccount: true, success: true } })
     mocks.authPost.mockResolvedValue({ data: { inStoreAccount: true, token: 'token', success: true } })
+    mocks.authGet.mockResolvedValue({ data: { active: false, maintenance: null } })
   })
 
   it('checks account type without requiring authentication', async () => {
@@ -68,6 +70,17 @@ describe('authService request metadata', () => {
     const [, body, config] = mocks.authPost.mock.calls[0]
     expect(body).toEqual({ email: 'user@example.com', password: 'secret-password' })
     expect(JSON.stringify(config.headers)).not.toContain('secret-password')
+    expect(config.headers['X-Action-Type']).toBe('login')
+  })
+
+  it('refreshes the auth-backend token without putting the user id in action metadata', async () => {
+    await authService.refreshToken('user-1')
+
+    const [, body, config] = mocks.authPost.mock.calls[0]
+    expect(body).toEqual({ userId: 'user-1' })
+    expect(config.authRequired).toBe(false)
+    expect(config.headers['X-Action-Source']).toBe('navbar.session')
+    expect(JSON.stringify(config.headers)).not.toContain('user-1')
   })
 
   it('annotates registration and does not put credentials in action metadata', async () => {
@@ -90,7 +103,7 @@ describe('authService request metadata', () => {
 
     expect(mocks.post).toHaveBeenCalledWith('/auth/logout', {}, expect.objectContaining({
       headers: expect.objectContaining({
-        'X-Action-Type': 'update',
+        'X-Action-Type': 'logout',
         'X-Action-Source': 'navbar.session',
         'X-Action-Resource': 'user',
         'X-Action-Message': 'User logout requested from the navigation bar',

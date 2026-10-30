@@ -27,6 +27,27 @@ export function getCachedLocations<T = any>(): T[] {
   }
 }
 
+// Canonical loader for all location pickers. It preserves the existing
+// offline cache and bounded-request behaviour; React Query deduplicates the
+// LocationPicker consumers that share its `locations` query key.
+export function loadLocations<T = unknown>(auth = true): Promise<T[]> {
+  const request = locationsApi.list({
+      auth,
+      signal: AbortSignal.timeout(5000),
+    })
+    .then((data) => {
+      saveCachedLocations(data)
+      return data as T[]
+    })
+    .catch((error) => {
+      const cached = getCachedLocations<T>()
+      if (cached.length > 0) return cached
+      throw error
+    })
+
+  return request
+}
+
 // Fire-and-forget: warms the cache as early as possible on every app load,
 // regardless of auth state. A failure here (offline, or a first-ever load
 // with nothing cached yet) is expected and silently ignored — readers just
@@ -39,11 +60,7 @@ export function getCachedLocations<T = any>(): T[] {
 export function prefetchLocations(): void {
   if (locationPrefetchInFlight) return
 
-  locationPrefetchInFlight = locationsApi.list({
-    auth: false,
-    signal: AbortSignal.timeout(5000),
-  })
-    .then((data) => saveCachedLocations(data))
+  locationPrefetchInFlight = loadLocations(false)
     .catch(() => {})
     .finally(() => {
       locationPrefetchInFlight = null

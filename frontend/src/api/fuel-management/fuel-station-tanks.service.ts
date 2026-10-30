@@ -6,6 +6,13 @@ const opts = (permission: string, source: string, action: 'read' | 'create' | 'u
   actionOptions(permission, source, action, resource, message)
 
 export const fuelStationTanksService = {
+  manualDailySync<T = { message: string }>() {
+    return api.post<T>(
+      '/manual-daily-sync',
+      null,
+      opts('settings', 'settings.system', 'update', 'fuel-data-sync', 'Manual daily fuel data sync requested from Settings'),
+    )
+  },
   listLocations<T = unknown>(source: string, message: string, permission = 'fuelManagement.workspace') {
     return api.get<T>('/all-locations', undefined, opts(permission, source, 'read', 'fuel-station', message))
   },

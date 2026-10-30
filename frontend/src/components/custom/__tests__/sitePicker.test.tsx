@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 
+const { mockListLocations } = vi.hoisted(() => ({ mockListLocations: vi.fn() }))
+
+vi.mock('@/api/locations/locations.api', () => ({
+  locationsApi: { list: mockListLocations },
+}))
+
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
 }))
@@ -18,6 +24,7 @@ import { SitePicker } from '../sitePicker'
 beforeEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
+  mockListLocations.mockReset()
 })
 
 // Regression coverage: SitePicker used to start with empty locations and
@@ -37,7 +44,7 @@ describe('SitePicker — offline cache seeding', () => {
     localStorage.setItem('cachedLocations', JSON.stringify([{ _id: '1', stationName: 'Rankin' }]))
     // A fetch that never resolves — simulates a hung request (dead
     // router/captive portal) rather than one that fails fast.
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    mockListLocations.mockReturnValue(new Promise(() => {}))
 
     render(<SitePicker />)
 
@@ -45,7 +52,7 @@ describe('SitePicker — offline cache seeding', () => {
   })
 
   it('shows the loading placeholder when there is no cache yet and the fetch is still pending', () => {
-    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})))
+    mockListLocations.mockReturnValue(new Promise(() => {}))
 
     render(<SitePicker />)
 
@@ -53,10 +60,7 @@ describe('SitePicker — offline cache seeding', () => {
   })
 
   it('updates the cache and clears the loading placeholder once the live fetch succeeds', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve([{ _id: '2', stationName: 'Sarnia' }]),
-    }))
+    mockListLocations.mockResolvedValue([{ _id: '2', stationName: 'Sarnia' }])
 
     render(<SitePicker />)
     expect(screen.getByText('Loading locations...')).toBeInTheDocument()
@@ -66,12 +70,11 @@ describe('SitePicker — offline cache seeding', () => {
   })
 
   it('bounds the fetch with an abort signal, so a hung connection eventually gives up', () => {
-    const fetchSpy = vi.fn(() => new Promise(() => {}))
-    vi.stubGlobal('fetch', fetchSpy)
+    mockListLocations.mockReturnValue(new Promise(() => {}))
 
     render(<SitePicker />)
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/locations', expect.objectContaining({
+    expect(mockListLocations).toHaveBeenCalledWith(expect.objectContaining({
       signal: expect.any(AbortSignal),
     }))
   })
