@@ -4,9 +4,10 @@ import { render, screen, waitFor } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockNavigate, mockUseSearch } = vi.hoisted(() => ({
+const { mockNavigate, mockUseSearch, mockGetInfoNetReport } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockUseSearch: vi.fn().mockReturnValue({ site: '', from: '2026-03-01', to: '2026-03-18' }),
+  mockGetInfoNetReport: vi.fn(),
 }))
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
@@ -27,6 +28,14 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 
 vi.mock('@/context/SiteContext', () => ({
   useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
+}))
+
+// The page now calls the shared service. Keep these tests focused on the page
+// while retaining the existing fetch contract assertions.
+vi.mock('@/api/cash-summary/cash-summary.service', () => ({
+  cashSummaryService: {
+    getInfoNetReport: mockGetInfoNetReport,
+  },
 }))
 
 vi.mock('@/components/custom/sitePicker', () => ({
@@ -102,6 +111,15 @@ describe('InfoNet Tax Report — infonet-report.tsx', () => {
     mockUseSearch.mockReturnValue({ site: '', from: '2026-03-01', to: '2026-03-18' })
     localStorage.setItem('token', 'test-token')
     global.fetch = makeOkFetch([])
+    mockGetInfoNetReport.mockImplementation(async (site: string, from: string, to: string) => {
+      const response = await fetch(
+        `/api/cash-summary/tax-exempt-report?site=${encodeURIComponent(site)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } },
+      )
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.error || data?.message || 'Request failed')
+      return data
+    })
   })
 
   it('renders the SitePicker', async () => {

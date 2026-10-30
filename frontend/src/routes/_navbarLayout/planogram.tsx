@@ -109,8 +109,11 @@ function RouteComponent() {
       setExisting({ exists: true, gtinCount: data.gtinCount })
       toast.success(`Planogram saved — ${data.gtinCount} GTINs for ${site}.`)
     } catch (err: any) {
-      const status = isApiError(err) ? err.status : undefined
-      const data = isApiError(err) ? err.details as any : undefined
+      // Api clients normally normalize errors to ApiError. The fallback keeps
+      // the page resilient for alternate clients/adapters that expose the
+      // conventional Axios response shape.
+      const status = isApiError(err) ? err.status : (err as any)?.response?.status
+      const data = isApiError(err) ? err.details as any : (err as any)?.response?.data
 
       if (status === 409 && data?.needsConfirmation) {
         setPendingConfirm({
