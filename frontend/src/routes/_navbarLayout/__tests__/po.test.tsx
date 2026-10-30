@@ -131,6 +131,13 @@ vi.mock('@/store', () => ({
 
 vi.mock('axios', () => ({
   default: {
+    create: () => ({
+      get: mockAxiosGet,
+      post: mockAxiosPost,
+      delete: mockAxiosDelete,
+      put: mockAxiosPut,
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
     get: mockAxiosGet,
     post: mockAxiosPost,
     delete: mockAxiosDelete,
@@ -349,7 +356,7 @@ describe('PO Form — index.tsx', () => {
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
-      if (url.includes('/api/locations')) return Promise.resolve({ data: [] })
+      if (url.includes('/locations')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: { unique: false } })
     })
 
@@ -369,7 +376,7 @@ describe('PO Form — index.tsx', () => {
     mockStore.poNumber = '12345'
     mockAxiosGet.mockImplementation((url: string) => {
       if (url.includes('ar-customers')) return Promise.resolve({ data: [] })
-      if (url.includes('/api/locations')) return Promise.resolve({ data: [] })
+      if (url.includes('/locations')) return Promise.resolve({ data: [] })
       return Promise.resolve({ data: { unique: true } })
     })
 
@@ -652,7 +659,7 @@ describe('PO Form — index.tsx', () => {
   it('hides the Register selector when the site has 0 or 1 registers configured', async () => {
     mockStore.receipt = null
     mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('/api/locations')) {
+      if (url.includes('/locations')) {
         return Promise.resolve({
           data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }] }],
         })
@@ -674,7 +681,7 @@ describe('PO Form — index.tsx', () => {
     mockStore.receipt = null
     mockStore.register = ''
     mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('/api/locations')) {
+      if (url.includes('/locations')) {
         return Promise.resolve({
           data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }, { number: '2' }] }],
         })
@@ -696,7 +703,7 @@ describe('PO Form — index.tsx', () => {
     mockStore.receipt = null
     mockStore.register = '2'
     mockAxiosGet.mockImplementation((url: string) => {
-      if (url.includes('/api/locations')) {
+      if (url.includes('/locations')) {
         return Promise.resolve({
           data: [{ _id: 'loc1', stationName: 'TestSite', registers: [{ number: '1' }, { number: '2' }] }],
         })
@@ -764,7 +771,7 @@ describe('PO List — list.tsx', () => {
       { timeout: 5000 }
     )
     expect(mockAxiosGet).toHaveBeenCalledWith(
-      expect.stringContaining('/api/purchase-orders'),
+      expect.stringContaining('/purchase-orders'),
       expect.any(Object)
     )
   })
@@ -810,7 +817,7 @@ describe('PO List — list.tsx', () => {
     renderWithSuspense(<POList />)
     await waitFor(() =>
       expect(mockAxiosGet).toHaveBeenCalledWith(
-        expect.stringContaining('/api/purchase-orders'),
+        expect.stringContaining('/purchase-orders'),
         expect.objectContaining({
           params: expect.objectContaining({
             startDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
@@ -849,7 +856,7 @@ describe('PO List — list.tsx', () => {
 
     await waitFor(() =>
       expect(mockAxiosPut).toHaveBeenCalledWith(
-        expect.stringContaining('/api/purchase-orders/order-1'),
+        expect.stringContaining('/purchase-orders/order-1'),
         { date: '2026-02-01' },
         expect.any(Object)
       )
@@ -1037,7 +1044,7 @@ describe('PO Signature — signature.tsx', () => {
 
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith(
-        expect.stringContaining('/api/purchase-orders'),
+        expect.stringContaining('/purchase-orders'),
         expect.objectContaining({ source: 'PO', stationName: 'Rankin', vehicleMakeModel: 'Ford F-150', licensePlate: '' }),
         expect.any(Object)
       )
@@ -1054,7 +1061,7 @@ describe('PO Signature — signature.tsx', () => {
 
     await waitFor(() =>
       expect(mockAxiosPost).toHaveBeenCalledWith(
-        expect.stringContaining('/api/purchase-orders'),
+        expect.stringContaining('/purchase-orders'),
         expect.objectContaining({ date: '2026-01-15' }),
         expect.any(Object)
       )

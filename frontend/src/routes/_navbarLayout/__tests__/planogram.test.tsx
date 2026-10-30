@@ -26,7 +26,13 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 })
 
 vi.mock('axios', () => ({
-  default: { post: mockAxiosPost, get: mockAxiosGet, isAxiosError: vi.fn(() => false) },
+  default: {
+    create: () => ({
+      post: mockAxiosPost, get: mockAxiosGet, put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
+    post: mockAxiosPost, get: mockAxiosGet, isAxiosError: vi.fn(() => false),
+  },
 }))
 
 vi.mock('sonner', () => ({

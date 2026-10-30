@@ -2,8 +2,9 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
 import { Edit2, Trash2, Zap, Calendar, X, PlusCircle, RotateCcw, AlertTriangle, FileText, Search } from 'lucide-react'
 import CreatableSelect from 'react-select/creatable'
-import axios from 'axios'
 import { useAuth } from '@/context/AuthContext'
+import { fuelSettingsService } from '@/api/fuel-settings/fuel-settings.service'
+import { isApiError } from '@/api/core/errors'
 
 export const Route = createFileRoute(
   '/_navbarLayout/fuel-settings/supplier-discounts',
@@ -90,18 +91,13 @@ export function RouteComponent() {
   const fetchDiscounts = async () => {
     try {
       setLoading(true)
-      const res = await axios.get('/api/fuel-settings/supplier-discounts', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.supplierDiscounts'
-        }
-      })
-      setData(res.data)
+      const result = await fuelSettingsService.list<SupplierDiscountRow[]>('supplier-discounts')
+      setData(result)
       setEditedRows({})
       setDeletedRows({})
     } catch (err: any) {
       console.error(err)
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }
@@ -292,23 +288,13 @@ export function RouteComponent() {
   const handlePushNewEntriesToServer = async () => {
     if (newEntriesList.length === 0) return
     try {
-      const res = await axios.post('/api/fuel-settings/supplier-discounts/batch', {
-        entries: newEntriesList
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.supplierDiscounts.edit'
-        }
-      })
-
-      if (res.status === 200) {
-        alert("Successfully added new entries to the table.");
-        closeCreationWizard()
-        await fetchDiscounts()
-      }
+      await fuelSettingsService.createBatch('supplier-discounts', newEntriesList)
+      alert("Successfully added new entries to the table.");
+      closeCreationWizard()
+      await fetchDiscounts()
     } catch (err: any) {
       console.error(err)
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }
@@ -327,7 +313,11 @@ export function RouteComponent() {
         deletionsPayload.push({
           supplierCode: row['Supplier Code'],
           supplierItem: row[' Supplier Item'],
-          inventoryItem: row['Inventory Item']
+          inventoryItem: row['Inventory Item'],
+          liveDiscounts: row.Live_Discounts,
+          liveUpdatedAt: row.Live_Updated_At,
+          stagedDiscounts: row.Stg_Discounts,
+          stagedUpdatedAt: row.Stg_Updated_At
         })
       } else if (editedRows[key] !== undefined) {
         updatesPayload.push({
@@ -340,26 +330,18 @@ export function RouteComponent() {
     }
 
     try {
-      const res = await axios.put('/api/fuel-settings/supplier-discounts/batch', {
+      await fuelSettingsService.updateBatch('supplier-discounts', {
         updates: updatesPayload,
         deletions: deletionsPayload,
         isImmediate: isImmediateAction
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.supplierDiscounts.edit'
-        }
       })
-
-      if (res.status === 200) {
-        alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.")
-        setIsScheduleConfirmOpen(false)
-        setIsLiveConfirmOpen(false)
-        await fetchDiscounts()
-      }
+      alert(isImmediateAction ? "Changes applied live right now!" : "Changes saved and scheduled successfully.")
+      setIsScheduleConfirmOpen(false)
+      setIsLiveConfirmOpen(false)
+      await fetchDiscounts()
     } catch (err: any) {
       console.error(err)
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }

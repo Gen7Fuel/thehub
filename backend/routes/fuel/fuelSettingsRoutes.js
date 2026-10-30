@@ -7,6 +7,58 @@ const {
   getFuelCarrierFCS,
   getFuelStationDiscounts
 } = require('../../services/sqlService');
+const { logChange } = require('../../middleware/changeLogger');
+
+const requestSource = (req) => req.headers['x-action-source'] || 'fuel-settings';
+const scheduledPeriod = (isImmediate, effectiveDate) => {
+  if (isImmediate) return 'immediately';
+  if (effectiveDate) return `for ${effectiveDate}`;
+  const date = new Date();
+  date.setUTCMonth(date.getUTCMonth() + 1, 1);
+  return `for 1st of ${date.toLocaleString('en-CA', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`;
+};
+const withoutBefore = ({ before, ...row }) => row;
+
+async function logFuelSettingsBatch(req, {
+  action,
+  resourceType,
+  label,
+  entries = [],
+  updates = [],
+  deletions = [],
+  isImmediate = true,
+  scheduleEffectiveDate,
+}) {
+  const changes = [
+    ...entries.map((row, index) => ({ operation: 'add', path: `rows[${index}]`, before: undefined, after: row })),
+    ...updates.map((row, index) => ({ operation: 'replace', path: `rows[${index}]`, before: row.before, after: withoutBefore(row) })),
+    ...deletions.map((row, index) => ({ operation: 'remove', path: `rows[${index}]`, before: row, after: undefined })),
+  ];
+  const timing = action === 'create' ? '' : ` ${scheduledPeriod(isImmediate, scheduleEffectiveDate)}`;
+  await logChange(req, {
+    action,
+    resourceType,
+    resourceStore: 'azure-sql',
+    success: true,
+    statusCode: 200,
+    source: requestSource(req),
+    message: `${label}${timing} — ${entries.length} created, ${updates.length} updated, ${deletions.length} deleted`,
+    changes,
+    changeSummary: {
+      added: entries.length,
+      removed: deletions.length,
+      replaced: updates.length,
+      total: changes.length,
+    },
+    changesTruncated: false,
+    bulk: {
+      total: changes.length,
+      created: entries.length,
+      updated: updates.length,
+      deleted: deletions.length,
+    },
+  });
+}
 
 
 // =========================================================================
@@ -68,6 +120,10 @@ router.post('/supplier-discounts/batch', async (req, res) => {
           `);
       }
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: 'create', resourceType: 'fuel-supplier-discount',
+        label: 'Supplier discount rows created', entries,
+      });
       return res.status(200).json({ message: "New rows synchronized across both tables successfully." });
     } catch (txError) {
       await transaction.rollback();
@@ -144,6 +200,11 @@ router.put('/supplier-discounts/batch', async (req, res) => {
         }
       }
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: deletions?.length && !updates?.length ? 'delete' : 'update',
+        resourceType: 'fuel-supplier-discount', label: 'Supplier discounts changed',
+        updates, deletions, isImmediate,
+      });
       return res.status(200).json({ message: "Batch operation metrics written successfully." });
     } catch (txError) {
       await transaction.rollback();
@@ -215,6 +276,10 @@ router.post('/carrier-fcs/batch', async (req, res) => {
       }
 
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: 'create', resourceType: 'fuel-carrier-fcs',
+        label: 'Carrier fuel surcharge rows created', entries,
+      });
       return res.status(200).json({ message: "Batch FCS rules loaded safely across mirrors." });
     } catch (txError) {
       await transaction.rollback();
@@ -288,6 +353,11 @@ router.put('/carrier-fcs/batch', async (req, res) => {
       }
 
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: deletions?.length && !updates?.length ? 'delete' : 'update',
+        resourceType: 'fuel-carrier-fcs', label: 'Carrier fuel surcharges changed',
+        updates, deletions, isImmediate,
+      });
       return res.status(200).json({ message: "FCS modifications batch committed cleanly." });
     } catch (txError) {
       await transaction.rollback();
@@ -366,6 +436,10 @@ router.post('/carrier-haulage/batch', async (req, res) => {
       }
 
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: 'create', resourceType: 'fuel-carrier-haulage',
+        label: 'Carrier haulage rows created', entries,
+      });
       return res.status(200).json({ message: "New haulage entries successfully generated across mirrors." });
     } catch (txError) {
       await transaction.rollback();
@@ -573,6 +647,11 @@ router.put('/carrier-haulage/batch', async (req, res) => {
       }
 
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: deletions?.length && !updates?.length ? 'delete' : 'update',
+        resourceType: 'fuel-carrier-haulage', label: 'Carrier haulage rates changed',
+        updates, deletions, isImmediate,
+      });
       return res.status(200).json({ message: "Haulage parameters modifications processed successfully." });
     } catch (txError) {
       await transaction.rollback();
@@ -648,6 +727,10 @@ router.post('/station-discounts/batch', async (req, res) => {
           `);
       }
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: 'create', resourceType: 'fuel-station-discount',
+        label: 'Station discount rows created', entries,
+      });
       return res.status(200).json({ message: "New station discount records written cleanly across tables." });
     } catch (txError) {
       await transaction.rollback();
@@ -766,6 +849,11 @@ router.put('/station-discounts/batch', async (req, res) => {
       }
 
       await transaction.commit();
+      await logFuelSettingsBatch(req, {
+        action: deletions?.length && !updates?.length ? 'delete' : 'update',
+        resourceType: 'fuel-station-discount', label: 'Station discounts changed',
+        updates, deletions, isImmediate, scheduleEffectiveDate,
+      });
       return res.status(200).json({ message: "Station batch structural state manipulation executed successfully." });
     } catch (txError) {
       await transaction.rollback();
@@ -779,7 +867,7 @@ router.put('/station-discounts/batch', async (req, res) => {
 
 // 4. PUT ROUTE - Update specific existing scheduled date directly
 router.put('/station-discounts/reschedule-single', async (req, res) => {
-  const { stationSk, location, province, type, fuelGrade, newScheduleDate } = req.body;
+  const { stationSk, location, province, type, fuelGrade, previousScheduleDate, newScheduleDate } = req.body;
   
   if (!newScheduleDate) {
     return res.status(400).json({ error: "A valid new schedule date parameter is required." });
@@ -806,6 +894,25 @@ router.put('/station-discounts/reschedule-single', async (req, res) => {
           AND ([Type] = @type OR ([Type] IS NULL AND @type IS NULL))
           AND ([Fuel_Grade] = @fuelGrade OR ([Fuel_Grade] IS NULL AND @fuelGrade IS NULL))
       `);
+
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'fuel-station-discount',
+      resourceStore: 'azure-sql',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Station discount for ${location} rescheduled for ${newScheduleDate}`,
+      changes: [{
+        operation: 'replace',
+        path: 'scheduleEffectiveFrom',
+        before: previousScheduleDate,
+        after: newScheduleDate,
+      }],
+      changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+      changesTruncated: false,
+      bulk: { total: 1, created: 0, updated: 1, deleted: 0 },
+    });
 
     return res.status(200).json({ message: "Staging pipeline execution date reassigned successfully." });
   } catch (error) {

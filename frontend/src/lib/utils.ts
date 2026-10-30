@@ -449,10 +449,12 @@ async function syncOneAction(action: any): Promise<void> {
 
   else if (action.type === "CREATE_PURCHASE_ORDER") {
     const { filename } = await uploadBase64Image(action.receipt, "receipt.jpg");
-    await axios.post(
-      "/api/purchase-orders",
+    // Keep feature API clients lazy: this shared utility is imported by most
+    // pages, while only PO offline replay needs the Purchase Orders client.
+    const { purchaseOrdersService } = await import("@/api/purchase-orders/purchase-orders.service");
+    await purchaseOrdersService.create(
       { ...action.payload, receipt: filename },
-      { headers: { ...authHeader, "X-Required-Permission": "po" } }
+      'po.offline-sync',
     );
     console.log("✅ Synced CREATE_PURCHASE_ORDER for", action.payload?.customerName);
   }
@@ -468,21 +470,13 @@ async function syncOneAction(action: any): Promise<void> {
       imageFilenames.push(filename);
     }
 
-    const locationsRes = await axios.get("/api/locations", { headers: authHeader });
-    const selectedLocation = (locationsRes.data || []).find(
-      (loc: any) => loc.stationName === action.payload.location
-    );
-    if (!selectedLocation) {
-      // Not an axios error, so isPermanentFailure() treats this as
-      // permanent — retrying can't fix a location name that doesn't exist.
-      throw new Error(`Location "${action.payload.location}" not found`);
-    }
-
-    await axios.post(
-      "/api/payables",
-      { ...action.payload, location: selectedLocation._id, images: imageFilenames },
-      { headers: { ...authHeader, "X-Required-Permission": "payables" } }
-    );
+    // Payables is another optional offline action. Loading it only here avoids
+    // pulling its Locations/API client into every consumer of lib/utils.
+    const { payablesService } = await import("@/api/payables/payables.service");
+    await payablesService.resolveLocationAndCreate({
+      ...action.payload,
+      images: imageFilenames,
+    });
     console.log("✅ Synced CREATE_PAYABLE for", action.payload?.vendorName);
   }
 

@@ -5,6 +5,9 @@ const User = require('../models/User');
 const { emailQueue } = require("../queues/emailQueue");
 const NotificationTemplate = require('../models/notification/notificationTemplate');
 const { pushNotification } = require('../services/notificationService');
+const { logChange } = require('../middleware/changeLogger');
+
+const requestSource = (req) => req.headers['x-action-source'] || 'notifications';
 
 // get all unread notifications for user from ther last time they logged in untill now
 router.get('/unread-summary', async (req, res) => {
@@ -195,6 +198,19 @@ router.post('/', async (req, res) => {
       type: 'manual'
     });
 
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'notification',
+      resourceId: notification?._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: requestSource(req),
+      message: `Notification "${subject || 'Untitled'}" sent to ${allIds.length} recipient${allIds.length === 1 ? '' : 's'}`,
+      before: null,
+      after: notification,
+    });
+
     res.status(201).json({ message: "Notification queued", notification });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -229,9 +245,11 @@ router.post('/template', async (req, res) => {
     }
 
     let template;
+    let before = null;
 
     if (_id) {
       // Update existing
+      before = await NotificationTemplate.findById(_id).lean();
       template = await NotificationTemplate.findByIdAndUpdate(
         _id,
         { name, slug, description, fields, contentLayout, type },
@@ -254,6 +272,19 @@ router.post('/template', async (req, res) => {
       });
       await template.save();
     }
+
+    await logChange(req, {
+      action: _id ? 'update' : 'create',
+      resourceType: 'notification-template',
+      resourceId: template._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: requestSource(req),
+      message: `Notification template ${template.name} ${_id ? 'updated' : 'created'}`,
+      before,
+      after: template,
+    });
 
     res.status(201).json(template);
   } catch (err) {
@@ -288,6 +319,19 @@ router.delete('/template/:id', async (req, res) => {
 
     const deletedTemplate = await NotificationTemplate.findByIdAndDelete(id);
     if (!deletedTemplate) return res.status(404).json({ message: "Template not found" });
+
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'notification-template',
+      resourceId: deletedTemplate._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: requestSource(req),
+      message: `Notification template ${deletedTemplate.name} deleted`,
+      before: deletedTemplate,
+      after: null,
+    });
 
     res.json({ message: "Template deleted successfully" });
   } catch (err) {

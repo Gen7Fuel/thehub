@@ -2,27 +2,22 @@ import { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { Button } from "@/components/ui/button";
 import { Edit3, Trash2, Code } from 'lucide-react';
-import axios from 'axios';
+import { notificationsService } from '@/api/notifications/notifications.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/notification/template/list')({
   component: TemplateList,
 });
 
 function TemplateList() {
-  const [templates, setTemplates] = useState([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
 
   const fetchTemplates = async () => {
     try {
-      const res = await axios.get('/api/notification/template', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Required-Permission': 'notification.template'
-        }
-      });
-      setTemplates(res.data);
+      const result = await notificationsService.listTemplates<any[]>();
+      setTemplates(result);
     } catch (err) {
       console.error("Fetch error", err);
     } finally {
@@ -36,12 +31,8 @@ function TemplateList() {
     if (!window.confirm("Are you sure you want to delete this template?")) return;
 
     try {
-      await axios.delete(`/api/notification/template/${id}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'X-Required-Permission': 'notification.template'
-        }
-      });
+      const template = templates.find((item: any) => item._id === id) as any;
+      await notificationsService.deleteTemplate(id, template?.name);
 
       // If successful, update the local state
       setTemplates(templates.filter((t: any) => t._id !== id));
@@ -50,9 +41,9 @@ function TemplateList() {
       console.error("Full Error Object:", err); // ADD THIS: Check your browser console
 
       // Check if we have a response from the server
-      if (err.response) {
-        const status = err.response.status;
-        const errorMessage = err.response.data?.message || "Server Error";
+      if (isApiError(err)) {
+        const status = err.status;
+        const errorMessage = (err.details as { message?: string } | undefined)?.message || err.message || "Server Error";
 
         if (status === 400) {
           alert(errorMessage); // This will now show your "linked to existing notifications" message

@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { X, Mail, Layout, Info, Send, ArrowLeft, UserPlus, Users } from 'lucide-react';
-import axios from 'axios';
 import { useAuth } from '@/context/AuthContext';
 import { Link } from '@tanstack/react-router';
+import { notificationsService } from '@/api/notifications/notifications.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/notification/create')({
   component: NotificationCreate,
@@ -16,7 +17,6 @@ export const Route = createFileRoute('/_navbarLayout/notification/create')({
 
 function NotificationCreate() {
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
   const { user } = useAuth(); // Assuming useAuth hook provides user permissions
 
   // Permissions Check
@@ -30,7 +30,7 @@ function NotificationCreate() {
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
   const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
   // Data State
-  const [templates, setTemplates] = useState([]);
+  const [templates, setTemplates] = useState<any[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -57,16 +57,15 @@ function NotificationCreate() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [tRes, uRes, gRes] = await Promise.all([
-          axios.get('/api/notification/template', { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "notification.create" } }),
-          axios.get('/api/users/populate-roles', { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "notification.create" } }),
-          axios.get('/api/user-groups', { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "notification.create" } })
+        const [templateData, userData, groupData] = await Promise.all([
+          notificationsService.listTemplates<any[]>('Notification templates loaded while composing a notification', 'notification.create'),
+          notificationsService.listRecipients<any[]>(),
+          notificationsService.listGroups<any[]>(),
         ]);
-        const customOnly = tRes.data.filter((t: any) => t.type === 'custom');
+        const customOnly = templateData.filter((t: any) => t.type === 'custom');
         setTemplates(customOnly);
-        // setTemplates(tRes.data);
-        setAllUsers(uRes.data);
-        setGroups(gRes.data);
+        setAllUsers(userData);
+        setGroups(groupData);
       } catch (err) {
         console.error("Initialization error", err);
       }
@@ -126,13 +125,13 @@ function NotificationCreate() {
     }
     setLoading(true);
     try {
-      await axios.post('/api/notification', {
+      await notificationsService.send({
         templateId: selectedTemplate._id,
         recipientIds: selectedToIds,
         bccUserIds: selectedBccIds,
         subject,
         fieldValues
-      }, { headers: { Authorization: `Bearer ${token}` } });
+      });
       alert("Sent!");
       navigate({ to: '/notification' });
     } catch (err) { alert("Error sending"); } finally { setLoading(false); }
@@ -155,18 +154,11 @@ function NotificationCreate() {
     try {
       const payload = editingGroup?._id ? { ...groupForm, id: editingGroup._id } : groupForm;
 
-      await axios.post('/api/user-groups', payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "notification.create"
-        }
-      });
+      await notificationsService.saveGroup(payload);
 
       // 1. Fetch the fresh list from server
-      const gRes = await axios.get('/api/user-groups', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setGroups(gRes.data);
+      const groupData = await notificationsService.listGroups<any[]>();
+      setGroups(groupData);
 
       // 2. IMPORTANT: Reset these to go back to the List View
       setEditingGroup(null);
@@ -175,7 +167,8 @@ function NotificationCreate() {
       alert("Group saved successfully!");
     } catch (err: any) {
       // Handle the duplicate key error gracefully for the user
-      if (err.response?.data?.message?.includes("E11000")) {
+      const details = isApiError(err) ? err.details as { message?: string } | undefined : undefined;
+      if (details?.message?.includes("E11000") || err?.message?.includes("E11000")) {
         alert("A group with this name already exists. Please choose a unique name.");
       } else {
         alert("Failed to save group");
@@ -188,7 +181,8 @@ function NotificationCreate() {
   const handleDeleteGroup = async (id: string) => {
     if (!window.confirm("Delete this group? Users will not be deleted, only the group association.")) return;
     try {
-      await axios.delete(`/api/user-groups/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const group = groups.find(g => g._id === id);
+      await notificationsService.deleteGroup(id, group?.name);
       setGroups(groups.filter(g => g._id !== id));
     } catch (err) {
       alert("Error deleting group");

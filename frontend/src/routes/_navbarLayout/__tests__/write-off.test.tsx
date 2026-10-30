@@ -54,6 +54,10 @@ vi.mock('@/components/custom/datePicker', () => ({
 
 vi.mock('axios', () => ({
   default: {
+    create: () => ({
+      get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn().mockResolvedValue({ data: {} }), put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
     get: vi.fn().mockResolvedValue({ data: [] }),
     post: vi.fn().mockResolvedValue({ data: { lists: ['WO-RANKIN-001'] } }),
   },

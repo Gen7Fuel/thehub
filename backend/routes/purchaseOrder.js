@@ -10,6 +10,9 @@ const { pushNotification } = require("../services/notificationService");
 const { emailQueue } = require('../queues/emailQueue');
 const { getPermissionMap } = require('../utils/permissionStore');
 const { enforcesPoUniqueness } = require('../constants/poSites');
+const { logChange } = require('../middleware/changeLogger');
+
+const requestSource = (req) => req.headers['x-action-source'] || 'po';
 
 const escapeHtml = (s = '') =>
   String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -83,6 +86,7 @@ router.post("/", async (req, res) => {
     register,
   } = req.body;
 
+  let fleetChange;
   try {
     // Fleet upsert + change-notification (owned by backend so comparison happens before update)
     if (fleetCardNumber) {
@@ -101,14 +105,22 @@ router.post("/", async (req, res) => {
           ? fieldMap.filter(f => normalize(f.submitted) !== normalize(f.stored))
           : [];
 
+        let savedFleet;
         if (existingFleet) {
-          await Fleet.findOneAndUpdate(
+          savedFleet = await Fleet.findOneAndUpdate(
             { fleetCardNumber },
-            { customerName, driverName, vehicleMakeModel, numberPlate: licensePlate }
+            { customerName, driverName, vehicleMakeModel, numberPlate: licensePlate },
+            { new: true }
           );
         } else {
-          await Fleet.create({ fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate: licensePlate });
+          savedFleet = await Fleet.create({ fleetCardNumber, customerName, driverName, vehicleMakeModel, numberPlate: licensePlate });
         }
+        fleetChange = {
+          action: existingFleet ? 'update' : 'create',
+          before: existingFleet,
+          after: savedFleet.toObject(),
+          resourceId: savedFleet._id,
+        };
 
         if (changes.length > 0) {
           const changesHtml = changes.map(f =>
@@ -192,6 +204,21 @@ router.post("/", async (req, res) => {
     });
 
     const savedOrder = await newOrder.save();
+    await logChange(req, {
+      action: 'create', resourceType: 'purchase-order', resourceId: savedOrder._id,
+      resourceStore: 'mongodb', success: true, statusCode: 201, source: requestSource(req),
+      resourceLabel: savedOrder.poNumber ? `PO #${savedOrder.poNumber}` : savedOrder.customerName,
+      before: undefined, after: savedOrder.toObject(),
+    });
+    if (fleetChange) {
+      await logChange(req, {
+        action: fleetChange.action, resourceType: 'fleet-card', resourceId: fleetChange.resourceId,
+        resourceStore: 'mongodb', success: true, statusCode: 201, source: requestSource(req),
+        resourceLabel: fleetCardNumber, before: fleetChange.before, after: fleetChange.after,
+        correlationId: String(savedOrder._id),
+        diffOptions: { redactedPaths: ['fleetCardNumber'] },
+      });
+    }
     res.status(201).json(savedOrder);
   } catch (err) {
     if (err && err.code === 11000 && err.keyPattern && (err.keyPattern.poNumber || err.keyPattern.stationName)) {
@@ -259,8 +286,7 @@ router.put("/:id", express.json(), async (req, res) => {
     // stationName and poNumber are both editable, so the unique-index marker has to be
     // recomputed against the doc's post-update state — reading through to the current doc
     // for whichever of the two the request didn't supply.
-    const current = await Transaction.findOne({ _id: id, deletedAt: null })
-      .select('source stationName poNumber').lean()
+    const current = await Transaction.findOne({ _id: id, deletedAt: null }).lean()
 
     if (!current) {
       return res.status(404).json({ message: "Purchase order not found." })
@@ -286,6 +312,13 @@ router.put("/:id", express.json(), async (req, res) => {
     if (!updatedOrder) {
       return res.status(404).json({ message: "Purchase order not found." })
     }
+
+    await logChange(req, {
+      action: 'update', resourceType: 'purchase-order', resourceId: updatedOrder._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200, source: requestSource(req),
+      resourceLabel: updatedOrder.poNumber ? `PO #${updatedOrder.poNumber}` : updatedOrder.customerName,
+      before: current, after: updatedOrder.toObject(),
+    });
 
     if (updates.requestReceipt === true) {
       Location.findOne({ site: updatedOrder.site ?? updatedOrder.stationName }, 'email stationName').lean()
@@ -645,6 +678,10 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params
     if (!id) return res.status(400).json({ message: 'ID is required' })
 
+    const before = await Transaction.findOne({ _id: id, source: 'PO', deletedAt: null }).lean()
+    if (!before) {
+      return res.status(404).json({ message: 'Purchase order not found.' })
+    }
     const deleted = await Transaction.findOneAndUpdate(
       { _id: id, source: 'PO', deletedAt: null },
       { $set: { deletedAt: new Date(), deletedBy: req.user._id } },
@@ -653,6 +690,12 @@ router.delete('/:id', async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ message: 'Purchase order not found.' })
     }
+    await logChange(req, {
+      action: 'delete', resourceType: 'purchase-order', resourceId: deleted._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200, source: requestSource(req),
+      resourceLabel: deleted.poNumber ? `PO #${deleted.poNumber}` : deleted.customerName,
+      before, after: deleted.toObject(),
+    });
     return res.status(200).json({ deleted: true, id })
   } catch (err) {
     console.error('DELETE /api/purchase-orders/:id failed:', err)

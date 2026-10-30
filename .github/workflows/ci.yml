@@ -20,7 +20,9 @@ jobs:
         run: |
           cd frontend
           npm install
-          npm test -- --run
+          # The route suite is transform-heavy; bounding workers prevents
+          # GitHub's shared runner from starving jsdom tests into 5s timeouts.
+          npm test -- --run --maxWorkers=1
 
       - name: Run backend tests
         run: |

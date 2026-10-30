@@ -5,9 +5,11 @@ const Payable = require('../models/Payables');
 const Location = require('../models/Location');
 const Safesheet = require('../models/Safesheet');
 const PayableVendorTag = require('../models/PayableVendorTag');
-const { logAction } = require('../middleware/actionLogger');
+const { logChange } = require('../middleware/changeLogger');
 const { getPermissionMap } = require('../utils/permissionStore');
 const { pushNotification } = require('../services/notificationService');
+
+const requestSource = (req) => req.headers['x-action-source'] || 'payables';
 
 // Helper: check if a user has effective access to a permId
 function hasEffectiveAccess(user, role, permId) {
@@ -98,6 +100,7 @@ router.put('/vendor-tags', async (req, res) => {
       return res.status(400).json({ error: 'vendorName, sageVendorId and sageVendorName are required' });
     }
     const nameKey = PayableVendorTag.normalizeName(name);
+    const before = await PayableVendorTag.findOne({ nameKey }).lean();
     const tag = await PayableVendorTag.findOneAndUpdate(
       { nameKey },
       {
@@ -106,6 +109,13 @@ router.put('/vendor-tags', async (req, res) => {
       },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     ).lean();
+    await logChange(req, {
+      action: before ? 'update' : 'create', resourceType: 'payable-vendor-tag',
+      resourceId: tag._id, resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req),
+      message: `Payable vendor ${tag.vendorName} tagged as Sage vendor ${tag.sageVendorName}`,
+      before, after: tag,
+    });
     res.json({ nameKey: tag.nameKey, vendorName: tag.vendorName, sageVendorId: tag.sageVendorId, sageVendorName: tag.sageVendorName });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -118,6 +128,7 @@ router.put('/:id/sage-bill', async (req, res) => {
   try {
     const key = typeof req.body?.key === 'string' ? req.body.key.trim() : '';
     if (!key) return res.status(400).json({ error: 'key is required' });
+    const before = await Payable.findById(req.params.id).lean();
     const payable = await Payable.findOneAndUpdate(
       { _id: req.params.id, 'sageBill.key': { $exists: false } },
       { $set: { sageBill: { key, createdAt: new Date() } } },
@@ -127,6 +138,13 @@ router.put('/:id/sage-bill', async (req, res) => {
       const exists = await Payable.exists({ _id: req.params.id });
       return res.status(exists ? 409 : 404).json({ error: exists ? 'An Intacct entry is already linked to this payable' : 'Payable not found' });
     }
+    await logChange(req, {
+      action: 'update', resourceType: 'payable', resourceId: payable._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req),
+      message: `Sage bill ${key} linked to payable for ${payable.vendorName}`,
+      before, after: payable,
+    });
     res.json({ sageBill: payable.sageBill });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -213,19 +231,17 @@ router.post('/', async (req, res) => {
     
     // Audit log (success)
     try {
-      await logAction(req, {
+      await logChange(req, {
         action: 'create',
         resourceType: 'payable',
         resourceId: populatedPayable._id,
         success: true,
         statusCode: 201,
-        message: `Payable created: ${populatedPayable.vendorName}`,
-        after: {
-          vendorName: populatedPayable.vendorName,
-          amount: populatedPayable.amount,
-          paymentMethod: populatedPayable.paymentMethod,
-          location: populatedPayable.location?._id?.toString() || populatedPayable.location?.toString(),
-        },
+        resourceStore: 'mongodb',
+        source: requestSource(req),
+        message: `Payable created for ${populatedPayable.vendorName} — $${Number(populatedPayable.amount || 0).toFixed(2)} on ${populatedPayable.date}`,
+        before: null,
+        after: populatedPayable,
       });
     } catch (e) {
       // do not block response
@@ -234,10 +250,8 @@ router.post('/', async (req, res) => {
     res.status(201).json(populatedPayable);
   } catch (error) {
     if (error.name === 'ValidationError') {
-      try { await logAction(req, { action: 'create', resourceType: 'payable', success: false, statusCode: 400, message: error.message }); } catch (_) {}
       return res.status(400).json({ error: error.message });
     }
-    try { await logAction(req, { action: 'create', resourceType: 'payable', success: false, statusCode: 500, message: error.message }); } catch (_) {}
     res.status(500).json({ error: error.message });
   }
 });
@@ -286,25 +300,17 @@ router.put('/:id', async (req, res) => {
     }
     // Audit log (success)
     try {
-      await logAction(req, {
+      await logChange(req, {
         action: 'update',
         resourceType: 'payable',
         resourceId: payable._id,
         success: true,
         statusCode: 200,
-        message: `Payable updated: ${payable.vendorName}`,
-        before: before ? {
-          vendorName: before.vendorName,
-          amount: before.amount,
-          paymentMethod: before.paymentMethod,
-          location: before.location?.toString(),
-        } : undefined,
-        after: {
-          vendorName: payable.vendorName,
-          amount: payable.amount,
-          paymentMethod: payable.paymentMethod,
-          location: payable.location?._id?.toString() || payable.location?.toString(),
-        },
+        resourceStore: 'mongodb',
+        source: requestSource(req),
+        message: `Payable updated for ${payable.vendorName} — $${Number(payable.amount || 0).toFixed(2)} on ${payable.date}`,
+        before,
+        after: payable,
       });
     } catch (e) {}
 
@@ -335,10 +341,8 @@ router.put('/:id', async (req, res) => {
     res.json(payable);
   } catch (error) {
     if (error.name === 'ValidationError') {
-      try { await logAction(req, { action: 'update', resourceType: 'payable', resourceId: req.params.id, success: false, statusCode: 400, message: error.message }); } catch (_) {}
       return res.status(400).json({ error: error.message });
     }
-    try { await logAction(req, { action: 'update', resourceType: 'payable', resourceId: req.params.id, success: false, statusCode: 500, message: error.message }); } catch (_) {}
     res.status(500).json({ error: error.message });
   }
 });
@@ -361,16 +365,7 @@ router.delete('/:id', async (req, res) => {
         { $pull: { entries: { payableId: payable._id } } }
       );
     } catch (cascadeErr) {
-      try {
-        await logAction(req, {
-          action: 'delete',
-          resourceType: 'payable',
-          resourceId: payable._id,
-          success: false,
-          statusCode: 500,
-          message: `Payable delete aborted: failed to remove linked safesheet entry (payableId=${payable._id}): ${cascadeErr?.message || cascadeErr}`,
-        });
-      } catch (_) {}
+      // AccessLog captures this failed request; no durable change occurred.
       return res.status(500).json({ error: 'Failed to remove linked safesheet entry; payable was not deleted.' });
     }
     // cascadeSheet === null just means no linked entry exists (paymentMethod wasn't 'safe',
@@ -380,38 +375,22 @@ router.delete('/:id', async (req, res) => {
 
     // Audit log (success)
     try {
-      await logAction(req, {
+      await logChange(req, {
         action: 'delete',
         resourceType: 'payable',
         resourceId: payable._id,
         success: true,
         statusCode: 200,
-        message: `Payable deleted: ${payable.vendorName}`,
-        before: {
-          vendorName: payable.vendorName,
-          amount: payable.amount,
-          paymentMethod: payable.paymentMethod,
-          location: payable.location?.toString(),
-        },
+        resourceStore: 'mongodb',
+        source: requestSource(req),
+        message: `Payable deleted for ${payable.vendorName} — $${Number(payable.amount || 0).toFixed(2)} on ${payable.date}`,
+        before: payable,
+        after: null,
       });
     } catch (e) {}
 
-    if (cascadeSheet) {
-      try {
-        await logAction(req, {
-          action: 'delete',
-          resourceType: 'safesheet',
-          resourceId: cascadeSheet._id,
-          success: true,
-          statusCode: 200,
-          message: `Safesheet entry cascade-deleted (linked to payable ${payable._id}, vendor: ${payable.vendorName})`,
-        });
-      } catch (e) {}
-    }
-
     res.json({ message: 'Payable deleted successfully', deletedPayable: payable });
   } catch (error) {
-    try { await logAction(req, { action: 'delete', resourceType: 'payable', resourceId: req.params.id, success: false, statusCode: 500, message: error.message }); } catch (_) {}
     res.status(500).json({ error: error.message });
   }
 });

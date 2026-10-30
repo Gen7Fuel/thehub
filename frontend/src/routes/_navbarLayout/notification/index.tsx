@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ChevronLeft, Inbox, Bell, PlusCircle, LayoutTemplate, Send, Info } from 'lucide-react';
 import { Button } from "@/components/ui/button";
-import axios from 'axios';
 import { getSocket } from '@/lib/websocket';
 import { useAuth } from '@/context/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { notificationsService } from '@/api/notifications/notifications.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/notification/')({
   component: NotificationPage,
@@ -26,19 +27,14 @@ function NotificationPage() {
   const fetchList = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const endpoint = view === 'inbox' ? '/api/notification' : '/api/notification/sent';
-      const res = await axios.get(endpoint, {
-        headers: {
-          Authorization: `Bearer ${token || ''}`,
-          'X-Required-Permission': 'notification'
-        }
-      });
-      setNotifications(res.data);
+      const result = view === 'inbox'
+        ? await notificationsService.listInbox<any[]>()
+        : await notificationsService.listSent<any[]>();
+      setNotifications(result);
     } catch (err: any) {
       console.error("Error fetching list", err);
       // FIX: Check the error response status here
-      if (err.response && err.response.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' });
       }
     } finally {
@@ -72,17 +68,14 @@ function NotificationPage() {
   // Handle Selection & Fetch Detail
   useEffect(() => {
     if (selectedId) {
-      const token = localStorage.getItem('token');
       const currentNotif = notifications.find(n => n._id === selectedId);
 
       // Fix: Only trigger 'notificationRead' if we are in INBOX and item is unread
       const wasUnread = view === 'inbox' && currentNotif && !currentNotif.isRead;
 
-      axios.get(`/api/notification/${selectedId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => {
-          setSelectedNotif(res.data);
+      notificationsService.get<any>(selectedId, currentNotif?.subject)
+        .then(result => {
+          setSelectedNotif(result);
           if (wasUnread) {
             setNotifications(prev =>
               prev.map(n => n._id === selectedId ? { ...n, isRead: true } : n)

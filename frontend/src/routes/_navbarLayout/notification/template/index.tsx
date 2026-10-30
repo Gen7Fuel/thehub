@@ -7,9 +7,8 @@ import { Info, Eye, Plus, Trash2, HelpCircle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useNavigate } from '@tanstack/react-router';
-import axios from 'axios';
-// import { useSearch, useLoaderData } from '@tanstack/react-router';
 import { useEffect } from 'react';
+import { notificationsService } from '@/api/notifications/notifications.service';
 
 // Define the search params type
 type TemplateSearch = {
@@ -49,15 +48,9 @@ function TemplateBuilder() {
 
       setLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`/api/notification/template/${editId}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-Required-Permission': 'notification.template'
-          }
-        });
+        const result = await notificationsService.getTemplate<typeof formData>(editId);
         // Populate the form with existing data
-        setFormData(res.data);
+        setFormData(result);
       } catch (err) {
         console.error("Error fetching template:", err);
         alert("Could not load template data.");
@@ -102,26 +95,15 @@ function TemplateBuilder() {
     setSaving(true);
 
     try {
-      const token = localStorage.getItem('token');
-
       // The backend uses POST for both, but checks for the existence of _id
-      await axios.post(
-        '/api/notification/template',
-        formData, // This now includes _id if in edit mode
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'X-Required-Permission': 'notification.template'
-          }
-        }
-      );
+      await notificationsService.saveTemplate(formData);
 
       alert(editId ? "Template Updated Successfully!" : "Template Created Successfully!");
       navigate({ to: '/notification/template/list' });
 
     } catch (err: any) {
       console.error("Save Error:", err);
-      alert(err.response?.data?.message || "Failed to save template.");
+      alert(err?.message || "Failed to save template.");
     } finally {
       setSaving(false);
     }

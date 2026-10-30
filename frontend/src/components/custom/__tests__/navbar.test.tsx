@@ -34,7 +34,13 @@ vi.mock('@/lib/utils', async (importOriginal) => ({
 }))
 
 vi.mock('axios', () => ({
-  default: { get: mockAxiosGet, post: mockAxiosPost },
+  default: {
+    create: () => ({
+      get: mockAxiosGet, post: mockAxiosPost, put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
+    get: mockAxiosGet, post: mockAxiosPost,
+  },
 }))
 
 import Navbar from '../navbar'

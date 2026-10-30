@@ -53,6 +53,10 @@ vi.mock('@/context/SiteContext', () => ({
 
 vi.mock('axios', () => ({
   default: {
+    create: () => ({
+      get: vi.fn().mockResolvedValue({ data: {} }), post: mockAxiosPost, put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
     post: mockAxiosPost,
     isAxiosError: vi.fn(() => false),
   },
