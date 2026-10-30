@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
+import { supportService } from '@/api/support/support.service'
 
 export const Route = createFileRoute('/_navbarLayout/support/list')({
   component: RouteComponent,
@@ -97,12 +98,5 @@ function RouteComponent() {
 }
 
 async function fetchTickets(): Promise<TicketItem[]> {
-  const res = await fetch('/api/support/tickets', {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-      'X-Required-Permission': 'support',
-    },
-  })
-  const data = await res.json()
-  return data.data?.tickets ?? []
+  return supportService.list<TicketItem[]>()
 }

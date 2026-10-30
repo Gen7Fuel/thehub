@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { invoiceUploadService } from "@/api/invoice-upload/invoice-upload.service";
 import {
   Camera,
   X,
@@ -87,12 +88,7 @@ function RouteComponent() {
     const fetchVendors = async () => {
       try {
         setIsLoadingVendors(true);
-        const token = localStorage.getItem("token");
-        const response = await fetch("/api/invoice-upload/vendors", {
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const json = await response.json();
+        const json = await invoiceUploadService.vendors<{ success: boolean; vendors: VendorData[] }>();
         if (json.success && Array.isArray(json.vendors)) {
           setVendors(json.vendors);
         }
@@ -111,12 +107,7 @@ function RouteComponent() {
       if (!id) return;
       try {
         setIsFetchingInvoice(true);
-        const token = localStorage.getItem("token");
-        const res = await fetch(`/api/invoice-upload/${id}`, {
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        });
-
-        const json = await res.json();
+        const json = await invoiceUploadService.get<{ success: boolean; data: any; error?: string }>(id);
         if (json.success && json.data) {
           const inv = json.data;
           const initialCode = inv.vendorCode || "";
@@ -255,23 +246,7 @@ function RouteComponent() {
         invoiceImages, // Pass array containing both existing filenames and newly added base64 images
       };
 
-      const token = localStorage.getItem("token");
-
-      // Target the PUT endpoint using the document ID from params
-      const response = await fetch(`/api/invoice-upload/${id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await response.json();
-
-      if (!response.ok) {
-        throw new Error(json.error || `Server Error ${response.status}`);
-      }
+      const json = await invoiceUploadService.update<typeof payload, { success: boolean; message?: string }>(id, payload);
 
       if (json.success) {
         alert(json.message || "Invoice updated and resubmitted successfully.");

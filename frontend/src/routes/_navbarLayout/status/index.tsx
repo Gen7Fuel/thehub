@@ -4,8 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { InputOTP, InputOTPSlot, InputOTPGroup, InputOTPSeparator } from '@/components/ui/input-otp';
 import { ProductPicker } from '@/components/custom/productPicker';
-import axios from "axios"
 import { useAuth } from "@/context/AuthContext";
+import { statusSalesService } from '@/api/status-sales/status-sales.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/status/')({
   component: RouteComponent,
@@ -42,25 +43,12 @@ function RouteComponent() {
     };
 
     try {
-      const response = await axios.post('/api/status-sales', payload, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "status"
-        }
-      });
-
-      if (response.status === 200 || response.status === 201) {
-        const data = response.data;
-        console.log('Status sale created successfully:', data);
-        alert('Status sale created successfully!');
-        navigate({ to: '/status/list' })
-      } else {
-        const errorData = response.data;
-        console.error('Error creating status sale:', errorData);
-        alert(`Error: ${errorData.error || 'Failed to create status sale'}`);
-      }
+      const data = await statusSalesService.create<typeof payload, { statusSale: unknown }>(payload);
+      console.log('Status sale created successfully:', data);
+      alert('Status sale created successfully!');
+      navigate({ to: '/status/list' })
     } catch (error: any) {
-      if (error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' });
       } else {
         console.error('Error creating status sale:', error);
@@ -76,15 +64,8 @@ function RouteComponent() {
     if (statusCard.length === 10) {
       try {
         // Add authorization header with bearer token
-        const response = await axios.get(`/api/status-sales/${statusCard}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "status",
-          },
-        });
-
-        if (response.status === 200) {
-          const userData = response.data;
+        const userData = await statusSalesService.customer<{ name?: string; phone?: string }>(statusCard);
+        if (userData) {
           setName(userData.name || '');
           setPhone(userData.phone || '');
         } else {
@@ -92,7 +73,7 @@ function RouteComponent() {
           setPhone('');
         }
       } catch (err: any) {
-        if (err.response?.status === 403) {
+        if (isApiError(err) && err.status === 403) {
           // Redirect to no-access page
           navigate({ to: "/no-access" });
         } else {

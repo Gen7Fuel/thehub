@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { getSupportSocket, disconnectSupportSocket } from '@/lib/websocket'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
+import { supportService } from '@/api/support/support.service'
+import { isApiError } from '@/api/core/errors'
 
 export const Route = createFileRoute('/_navbarLayout/support/$id')({
   component: RouteComponent,
@@ -42,20 +44,9 @@ function RouteComponent() {
     const fetchTicket = async () => {
       setLoading(true)
       try {
-        const res = await fetch(`/api/support/tickets/${id}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'Content-Type': 'application/json',
-            'X-Required-Permission': 'support',
-          },
-        })
-        if (res.status === 403) {
-          navigate({ to: '/no-access' })
-          return
-        }
-        const data = await res.json()
-        if (data.success) setTicket(data.data)
-      } catch {
+        setTicket(await supportService.get(id))
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' })
         setTicket(null)
       } finally {
         setLoading(false)

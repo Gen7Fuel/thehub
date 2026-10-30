@@ -33,6 +33,7 @@ import {
   Loader2,
   AlertTriangle,
 } from "lucide-react";
+import { invoiceUploadService } from "@/api/invoice-upload/invoice-upload.service";
 
 export const Route = createFileRoute("/_navbarLayout/upload-invoice/")({
   component: RouteComponent,
@@ -81,12 +82,7 @@ function RouteComponent() {
     const fetchVendors = async () => {
       try {
         setIsLoadingVendors(true);
-        const token = localStorage.getItem("token");
-        const response = await fetch("/api/invoice-upload/vendors", {
-          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const json = await response.json();
+        const json = await invoiceUploadService.vendors<{ success: boolean; vendors: VendorData[] }>();
         if (json.success && Array.isArray(json.vendors)) {
           setVendors(json.vendors);
         }
@@ -217,21 +213,7 @@ function RouteComponent() {
         invoiceImages,
       };
 
-      const token = localStorage.getItem("token");
-      const response = await fetch("/api/invoice-upload/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      const json = await response.json();
-
-      if (!response.ok) {
-        throw new Error(json.error || `Server Error ${response.status}`);
-      }
+      const json = await invoiceUploadService.create<typeof payload, { success: boolean; message: string }>(payload);
 
       if (json.success) {
         alert(`${json.message}`);

@@ -1,4 +1,6 @@
 const SupportTicket = require('../models/Support');
+const { randomUUID } = require('crypto');
+const { logChange } = require('../middleware/changeLogger');
 
 function setupTicketSocket(socket, namespace, isSupport) {
   socket.on('send-message', async ({ conversationId, text }) => {
@@ -29,8 +31,22 @@ function setupTicketSocket(socket, namespace, isSupport) {
         createdAt: new Date(),
       };
 
+      const before = ticket.toObject();
       ticket.messages.push(newMessage);
       await ticket.save();
+
+      await logChange({
+        user: socket.user,
+        headers: socket.request?.headers || {},
+        socket: { remoteAddress: socket.handshake?.address },
+        requestId: randomUUID(),
+      }, {
+        action: 'update', resourceType: 'support-ticket', resourceId: ticket._id,
+        resourceStore: 'mongodb', success: true, statusCode: 200, source: 'support.detail',
+        method: 'SOCKET', path: 'support:send-message',
+        message: `Reply added to support ticket for ${ticket.site}`,
+        before, after: ticket.toObject(),
+      });
 
       await ticket.populate('messages.sender', 'firstName lastName email isSupport');
       const lastMsg = ticket.messages[ticket.messages.length - 1];
