@@ -5,6 +5,8 @@ const { csoInvoiceQueue } = require("../queues/csoInvoiceQueue");
 const { invoiceProcessingQueue } = require("../queues/invoiceImageUploadQueue");
 const CsoInvoice = require("../models/CsoInvoice");
 const Location = require("../models/Location");
+const { logChange } = require("../middleware/changeLogger");
+const requestSource = req => req.headers["x-action-source"] || "upload-invoice";
 
 // GET /api/invoice-upload/vendors
 router.get("/vendors", async (req, res) => {
@@ -462,6 +464,13 @@ router.post("/submit", async (req, res) => {
 
     await newInvoice.save();
 
+    await logChange(req, {
+      action: "create", resourceType: "invoice-upload", resourceId: newInvoice._id,
+      resourceStore: "mongodb", success: true, statusCode: 200, source: requestSource(req),
+      message: `Invoice ${docNumber} from ${vendorName} submitted for ${siteName} on ${dateStringOnly}`,
+      before: undefined, after: newInvoice.toObject(),
+    });
+
     // 🚀 Dispatch CDN Upload & Blur Processing Queue
     await invoiceProcessingQueue.add(
       `process-images-${newInvoice._id}-${Date.now()}`,
@@ -683,6 +692,7 @@ router.put("/:id", async (req, res) => {
         error: "Invoice not found.",
       });
     }
+    const before = existingInvoice.toObject();
 
     // Resolve location
     const targetLocation = await Location.findOne({ stationName: siteName });
@@ -713,6 +723,13 @@ router.put("/:id", async (req, res) => {
     existingInvoice.status = "pending_api_upload";
 
     await existingInvoice.save();
+
+    await logChange(req, {
+      action: "update", resourceType: "invoice-upload", resourceId: existingInvoice._id,
+      resourceStore: "mongodb", success: true, statusCode: 200, source: requestSource(req),
+      message: `Invoice ${docNumber} from ${vendorName} updated for ${siteName} on ${dateStringOnly}`,
+      before, after: existingInvoice.toObject(),
+    });
 
     // 🚀 Dispatch CDN Upload & Blur Processing Queue
     await invoiceProcessingQueue.add(

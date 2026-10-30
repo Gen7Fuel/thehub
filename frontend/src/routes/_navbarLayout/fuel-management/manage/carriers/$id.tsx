@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Save, Loader2, Plus, Search, X, Warehouse } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
-import axios from 'axios'
+import { fuelCarriersService } from '@/api/fuel-management/fuel-carriers.service'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/carriers/$id')({
@@ -43,12 +44,7 @@ function EditCarrierComponent() {
   // 1. Fetch ALL available racks for the multi-select
   const { data: allRacks = [] } = useQuery({
     queryKey: ['fuel-racks'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-racks', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
-    }
+    queryFn: () => fuelRacksService.list<any[]>('fuel-management.manage.carriers', 'Fuel racks viewed while editing a carrier'),
   })
 
   useEffect(() => {
@@ -58,11 +54,7 @@ function EditCarrierComponent() {
       setFormData({ carrierName: '', carrierId: '', associatedRacks: [], contactName: '', contact: '' });
 
       try {
-        const res = await axios.get(`/api/fuel-carriers/${id}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        });
-
-        setFormData(res.data);
+        setFormData(await fuelCarriersService.get<any>(id));
       } catch (err) {
         console.error(err);
         alert("Error loading carrier");
@@ -97,9 +89,7 @@ function EditCarrierComponent() {
         ...formData,
         associatedRacks: formData.associatedRacks.map((r: any) => typeof r === 'string' ? r : r._id)
       }
-      await axios.put(`/api/fuel-carriers/${id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      await fuelCarriersService.update(id, payload, formData.carrierName)
       await queryClient.invalidateQueries({ queryKey: ['fuel-carriers'] })
       alert("Carrier updated successfully!")
     } catch (err: any) {

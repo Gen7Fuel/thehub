@@ -5,9 +5,10 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { DatePicker } from '@/components/custom/datePicker'
-// import { uploadBase64Image } from '@/lib/utils'
 import { compressImage } from '@/lib/compressImage'
 import { Loader2, Camera, CheckCircle2, RotateCcw } from 'lucide-react'
+import { fuelRecService } from '@/api/fuel-rec/fuel-rec.service'
+import { isApiError } from '@/api/core/errors'
 
 type Search = { site: string; date: string }
 
@@ -43,18 +44,6 @@ function RouteComponent() {
     return new Date(y, (m || 1) - 1, d || 1)
   }, [date])
 
-  // // Convert Native File to Base64 to keep your existing upload utility compatible
-  // const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const file = e.target.files?.[0]
-  //   if (!file) return
-
-  //   const reader = new FileReader()
-  //   reader.onloadend = () => {
-  //     setPhoto(reader.result as string)
-  //   }
-  //   reader.readAsDataURL(file)
-  // }
-
   const handleCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -73,40 +62,6 @@ function RouteComponent() {
     cameraInputRef.current?.click()
   }
 
-  // const save = async () => {
-  //   if (!photo || !site || !date || saving || !bolNumber.trim()) return
-  //   setSaving(true)
-  //   try {
-  //     // Maintaining your exact naming convention
-  //     const { filename } = await uploadBase64Image(photo, `fuel-rec-${site}-${date}.jpg`)
-
-  //     const res = await fetch('/api/fuel-rec/capture', {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  //         'X-Required-Permission': 'accounting.fuelRec.bol',
-  //       },
-  //       body: JSON.stringify({
-  //         site,
-  //         date,
-  //         photo: filename,
-  //         bolNumber: bolNumber.trim()
-  //       }),
-  //     })
-  //     if (res.status === 403) {
-  //       // Redirect to no-access page
-  //       navigate({ to: "/no-access" });
-  //       return;
-  //     }
-  //     if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
-
-  //     navigate({ to: '/fuel-rec/list', search: { site } })
-  //   } catch (e: any) {
-  //     alert(`Save failed: ${e?.message || e}`)
-  //     setSaving(false)
-  //   }
-  // }
   const save = async () => {
     if (!compressedBlob || !site || !date || saving || !bolNumber.trim()) return
     setSaving(true)
@@ -120,25 +75,19 @@ function RouteComponent() {
       formData.append('date', date)
       formData.append('bolNumber', bolNumber.trim())
 
-      const res = await fetch('/api/fuel-rec/capture', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'accounting.fuelRec.bol',
-        },
-        body: formData, // Sending multipart/form-data (no base64 overhead)
+      await fuelRecService.capture(formData, {
+        site,
+        date,
+        bolNumber: bolNumber.trim(),
       })
 
-      if (res.status === 403) {
+      navigate({ to: '/fuel-rec/list', search: { site } })
+    } catch (e: unknown) {
+      if (isApiError(e) && e.status === 403) {
         navigate({ to: "/no-access" })
         return
       }
-
-      if (!res.ok) throw new Error(await res.text().catch(() => `HTTP ${res.status}`))
-
-      navigate({ to: '/fuel-rec/list', search: { site } })
-    } catch (e: any) {
-      alert(`Save failed: ${e?.message || e}`)
+      alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`)
       setSaving(false)
     }
   }

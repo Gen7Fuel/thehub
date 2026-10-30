@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Search, UserCheck, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/suppliers')({
   component: SupplierListLayout,
@@ -16,12 +16,7 @@ function SupplierListLayout() {
 
   const { data: suppliers = [], isLoading } = useQuery({
     queryKey: ['fuel-suppliers'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-suppliers', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
-    }
+    queryFn: () => fuelSuppliersService.list<any[]>(),
   })
 
   const filteredSuppliers = useMemo(() => {

@@ -10,13 +10,14 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { useFormStore } from '@/store'
-import axios from 'axios'
 import { DatePicker } from '@/components/custom/datePicker';
 import { LocationPicker } from '@/components/custom/locationPicker';
-import { domain } from '@/lib/constants'
 import { Camera, ExternalLink } from 'lucide-react'
 import { getCachedArCustomers, saveCachedArCustomers } from '@/lib/arCustomersCache'
 import { getCachedLocations, saveCachedLocations } from '@/lib/locationsCache'
+import { purchaseOrdersService } from '@/api/purchase-orders/purchase-orders.service'
+import { purchaseOrderSupportService } from '@/api/purchase-orders/purchase-orders-support.service'
+import { isApiError } from '@/api/core/errors'
 
 interface Product {
   _id: string
@@ -59,14 +60,7 @@ const CLASSIC_PO_NUMBER_SITES = ['Wavers West', 'Wavers East']
 
 async function loader() {
   try {
-    // add authorization header with bearer token
-    const token = localStorage.getItem('token')
-    const response = await axios.get(`${domain}/api/products`, {
-      headers: {
-        Authorization: `Bearer ${token}`
-      }
-    })
-    const products: Product[] = response.data
+    const products = await purchaseOrderSupportService.listProducts<Product[]>()
     localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify(products))
 
     return { products }
@@ -87,13 +81,9 @@ async function loader() {
 // read, not a duplicate network fetch, whichever component's query settles first.
 const fetchLocationsForRegisters = async (): Promise<LocationWithRegisters[]> => {
   try {
-    const token = localStorage.getItem('token')
-    const response = await axios.get(`${domain}/api/locations`, {
-      headers: { Authorization: `Bearer ${token}` },
-      timeout: 5000,
-    })
-    saveCachedLocations(response.data)
-    return response.data
+    const locations = await purchaseOrderSupportService.listLocations() as LocationWithRegisters[]
+    saveCachedLocations(locations)
+    return locations
   } catch (err) {
     const cached = getCachedLocations<LocationWithRegisters>()
     if (cached.length > 0) return cached
@@ -180,7 +170,7 @@ function RouteComponent() {
   })
 
   const currentSiteRegisters = useMemo(
-    () => locationsForRegisters?.find((l) => l.stationName === stationName)?.registers ?? [],
+    () => (Array.isArray(locationsForRegisters) ? locationsForRegisters : []).find((l) => l.stationName === stationName)?.registers ?? [],
     [locationsForRegisters, stationName]
   )
   const showRegisterSelector = currentSiteRegisters.length >= 2
@@ -215,12 +205,7 @@ function RouteComponent() {
   const handleBlur = async () => {
     if (!showingFleetCardInput) return // only for fleet cards
 
-    const token = localStorage.getItem('token')
-    const response = await axios.get(`${domain}/api/fleet/getByCardNumber/${fleetCardNumber}`, {
-      headers: { Authorization: `Bearer ${token}` },
-      params: { stationName },
-    })
-    const data = response.data
+    const data = await purchaseOrderSupportService.getFleetCard<any>(fleetCardNumber, stationName)
 
     if (data.message) {
       setCustomerName('')
@@ -250,15 +235,12 @@ function RouteComponent() {
   }, [selectedSite, user?.location, setStationName, fuelType, setFuelType, data.products]);
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
     Promise.resolve(
-      axios.get(`${domain}/api/ar-customers`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-    ).then((res) => {
-      if (Array.isArray(res?.data)) {
-        setArCustomers(res.data)
-        saveCachedArCustomers(res.data)
+      purchaseOrderSupportService.listCustomers()
+    ).then((customers) => {
+      if (Array.isArray(customers)) {
+        setArCustomers(customers)
+        saveCachedArCustomers(customers)
       }
     }).catch(() => {
       // Offline (or request failed) — the arCustomers state is already
@@ -268,15 +250,11 @@ function RouteComponent() {
 
   useEffect(() => {
     if (!stationName) { setQuickSelectCustomers([]); return }
-    const token = localStorage.getItem('token')
     const cacheKey = `${QUICK_SELECT_CACHE_PREFIX}${stationName}`
-    axios.get(`${domain}/api/ar-customers/quick-select`, {
-      params: { stationName },
-      headers: { Authorization: `Bearer ${token}` },
-    }).then((res) => {
-      if (Array.isArray(res?.data)) {
-        setQuickSelectCustomers(res.data)
-        localStorage.setItem(cacheKey, JSON.stringify(res.data))
+    purchaseOrderSupportService.listQuickCustomers(stationName).then((customers) => {
+      if (Array.isArray(customers)) {
+        setQuickSelectCustomers(customers)
+        localStorage.setItem(cacheKey, JSON.stringify(customers))
       }
     }).catch(() => {
       // Offline (or request failed) — fall back to this station's last
@@ -446,16 +424,13 @@ function RouteComponent() {
           setSelectedQuickCustomerId(null)
           if (value.length === 16) {
             try {
-              const token = localStorage.getItem('token')
-              const res = await axios.get(`${domain}/api/fleet/verify/${value}`, {
-                headers: { Authorization: `Bearer ${token}` },
-              })
-              setCardStatus(res.data.reason || res.data.status || 'not_found')
+              const result = await purchaseOrderSupportService.verifyFleetCard<any>(value)
+              setCardStatus(result.reason || result.status || 'not_found')
             } catch (e) {
               // No response at all means we couldn't reach the server (offline) —
               // don't permanently block the form; the backend upserts/validates
               // the fleet card again when this PO is created/synced.
-              setCardStatus(axios.isAxiosError(e) && !e.response ? 'offline' : 'not_found')
+              setCardStatus(isApiError(e) && e.status === undefined ? 'offline' : 'not_found')
             }
           } else {
             setCardStatus(null)
@@ -582,14 +557,8 @@ function RouteComponent() {
                       setPoNumber(padded)
                       if (!stationName || !padded) return
                       try {
-                        const res = await axios.get('/api/purchase-orders/unique', {
-                          params: { stationName, poNumber: padded },
-                          headers: {
-                            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-                            'X-Required-Permission': 'po',
-                          },
-                        })
-                        if (res.data && res.data.unique === false) {
+                        const result = await purchaseOrdersService.checkUnique(stationName, padded)
+                        if (result.unique === false) {
                           setPoError('This PO number has already been used for this site.')
                         } else {
                           setPoError('')
@@ -597,10 +566,10 @@ function RouteComponent() {
                       } catch (e: any) {
                         // No response at all means we're offline — can't validate uniqueness
                         // right now, so don't block; the backend still enforces it on submit/sync.
-                        if (axios.isAxiosError(e) && !e.response) {
+                        if (isApiError(e) && e.status === undefined) {
                           setPoError('')
                         } else {
-                          setPoError(e?.response?.data?.message || 'Could not validate PO number uniqueness')
+                          setPoError(e?.message || 'Could not validate PO number uniqueness')
                         }
                       }
                     }}

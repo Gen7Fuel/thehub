@@ -11,7 +11,6 @@ import { DatePicker } from "@/components/custom/datePicker"
 import { useNavigate } from '@tanstack/react-router'
 import { getSocket } from "@/lib/websocket"
 import { getOrderRecStatusColor } from "@/lib/utils"
-import { useAuth } from "@/context/AuthContext";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +18,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Info } from "lucide-react"
+import { orderRecService } from '@/api/order-rec/order-rec.service'
+import { vendorsService } from '@/api/vendors/vendors.service'
+import { locationsApi } from '@/api/locations/locations.api'
+import type { RequestOptions } from '@/api/core/types'
+import { isApiError } from '@/api/core/errors'
 
 
 const socket = getSocket();
@@ -40,7 +44,6 @@ type Vendor = {
 function RouteComponent() {
   const [orderRecs, setOrderRecs] = useState<any[]>([])
   const navigate = useNavigate()
-  const { user } = useAuth()
   // const [vendors, setVendors] = useState<any[]>([])
   const [stores, setStores] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,25 +117,8 @@ function RouteComponent() {
 
   const handleComment = async (id: string, text: string) => {
     try {
-      const res = await fetch(`/api/order-rec/${id}/comments`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
-          "X-Required-Permission": "orderRec.workflow"
-        },
-        body: JSON.stringify({
-          text,
-          author: user?.initials,
-        }),
-      })
-      if (res.status == 403) {
-        navigate({ to: "/no-access" })
-        return;
-      }
-
-      if (!res.ok) throw new Error("Failed to add comment")
-      const updated = await res.json()
+      const order = orderRecs.find(rec => rec._id === id) || id
+      const updated = await orderRecService.addComment<any>(order, { text }, 'order-rec.workflow')
       setOrderRecs((prev) => prev.map((rec) => (rec._id === id ? updated : rec)))
     } catch (err) {
       console.error("Error saving comment:", err)
@@ -165,36 +151,16 @@ function RouteComponent() {
     }
 
     try {
-      const res = await fetch(`/api/order-rec/${orderIdToUpdate}/status`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
-          "X-Required-Permission": "orderRec.workflow"
-        },
-        body: JSON.stringify({
+      const currentOrder = orderRecs.find(order => order._id === orderIdToUpdate) || orderIdToUpdate
+      const updated = await orderRecService.updateStatus<any>(currentOrder, {
           status: newStatus,
           ...(isInvoiceReceivedUpdate
             ? { invoiceId: invoiceId.trim(), invoiceDate: invoiceDateString }
             : {}),
-        }),
       });
-
-      if (res.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
-      if (!res.ok) throw new Error("Failed to update status");
-
-      const updated = await res.json();
       setOrderRecs(prev => prev.map(r => r._id === updated._id ? updated : r));
 
-      const vendorsRes = await fetch("/api/vendors", {
-        headers: { Authorization: `Bearer ${localStorage.getItem(`token`)}` },
-      });
-
-      if (vendorsRes.ok) {
-        const vendorsData: Vendor[] = await vendorsRes.json();
+      const vendorsData = await vendorsService.list<Vendor[]>('order-rec.workflow', undefined, 'Vendors refreshed after Order Rec status update', 'orderRec.workflow');
         const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
           const key = `${v.name.trim().toLowerCase()}::${v.location}`;
           if (!acc[key]) acc[key] = [];
@@ -202,7 +168,6 @@ function RouteComponent() {
           return acc;
         }, {});
         setUniqueVendors(grouped);
-      }
 
       setUpdateStatusOrderId(null);
       setInvoiceId("");
@@ -346,19 +311,11 @@ function RouteComponent() {
 
       buildWeeks();
 
-      const [vendorsRes, storesRes] = await Promise.all([
-        fetch("/api/vendors", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
-        fetch("/api/locations", { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }),
+      const locationOptions: RequestOptions = { permission: 'orderRec.workflow', actionContext: { action: 'read', source: 'order-rec.workflow', resourceType: 'location', message: 'Locations loaded for Order Rec workflow' } }
+      const [vendorsData, storesData] = await Promise.all([
+        vendorsService.list<Vendor[]>('order-rec.workflow', undefined, 'Vendors loaded for Order Rec workflow', 'orderRec.workflow'),
+        locationsApi.list(locationOptions),
       ]);
-
-      if ([vendorsRes, storesRes].some(r => r.status === 403)) {
-        navigate({ to: "/no-access" });
-        return;
-      }
-
-      if (vendorsRes.ok && storesRes.ok) {
-        const vendorsData = await vendorsRes.json();
-        const storesData = await storesRes.json();
 
         const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {
           const key = `${v.name.trim().toLowerCase()}::${v.location}`;
@@ -370,7 +327,6 @@ function RouteComponent() {
 
         setUniqueVendors(grouped);
         setStores(storesData);
-      }
     };
     fetchMetadata();
   }, []); // Empty dependency array: Only runs on page load
@@ -381,23 +337,10 @@ function RouteComponent() {
       setLoading(true);
 
       try {
-        const res = await fetch(`/api/order-rec/workflow?week=${selectedWeek}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "orderRec.workflow"
-          }
-        });
-
-        if (res.status === 403) {
-          navigate({ to: "/no-access" });
-          return;
-        }
-
-        if (res.ok) {
-          const data = await res.json();
-          setOrderRecs(data);
-        }
+        const data = await orderRecService.workflow<any[]>(selectedWeek);
+        setOrderRecs(data);
       } catch (err) {
+        if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' })
         console.error("Error fetching week data:", err);
       } finally {
         setLoading(false);

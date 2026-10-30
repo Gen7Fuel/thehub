@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useSite } from '@/context/SiteContext'
 import { SitePicker } from '@/components/custom/sitePicker' // Adjust imports to your project
 import { DatePickerWithRange } from '@/components/custom/datePickerWithRange'
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service'
 // import { useAuth } from "@/context/AuthContext";
 
 
@@ -87,25 +88,7 @@ function RouteComponent() {
       setError(null)
 
       try {
-        const query = new URLSearchParams({
-          site,
-          from,
-          to
-        }).toString()
-
-        const res = await fetch(`/api/cash-summary/tax-exempt-report?${query}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-            'Content-Type': 'application/json'
-          },
-        })
-
-        if (!res.ok) {
-          const errData = await res.json()
-          throw new Error(errData.error || 'Failed to fetch report data')
-        }
-
-        const json = await res.json()
+        const json = await cashSummaryService.getInfoNetReport<typeof data>(site, from, to)
         setData(json)
       } catch (err: any) {
         setError(err.message)

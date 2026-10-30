@@ -165,6 +165,7 @@ import { Camera, Eye } from 'lucide-react'; // Added icons
 import { useSite } from "@/context/SiteContext";
 import { getCachedVendorTags, saveCachedVendorTags, suggestVendorTags } from '@/lib/payableVendorTagsCache'
 import type { VendorTagOption } from '@/lib/payableVendorTagsCache'
+import { payablesService } from '@/api/payables/payables.service'
 
 export const Route = createFileRoute('/_navbarLayout/payables/')({
   component: RouteComponent,
@@ -206,11 +207,9 @@ function RouteComponent() {
   const vendorBoxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
     const site = selectedSite || user?.location
-    if (!token || !site) return
-    fetch(`/api/payables/vendor-options?location=${encodeURIComponent(site)}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+    if (!site) return
+    payablesService.listVendorOptions<VendorTagOption[]>(site)
       .then((tags: unknown) => {
         if (!Array.isArray(tags)) return
         setVendorTags(tags as VendorTagOption[])

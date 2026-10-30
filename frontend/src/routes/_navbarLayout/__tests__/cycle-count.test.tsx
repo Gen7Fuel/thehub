@@ -58,6 +58,11 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 
 vi.mock('axios', () => ({
   default: {
+    create: () => ({
+      get: vi.fn().mockResolvedValue({ data: {} }), post: vi.fn().mockResolvedValue({ data: {} }),
+      put: vi.fn().mockResolvedValue({ data: {} }), delete: vi.fn().mockResolvedValue({ data: {} }),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
     get: vi.fn().mockResolvedValue({ data: {} }),
     post: vi.fn().mockResolvedValue({ data: {} }),
     put: vi.fn().mockResolvedValue({ data: {} }),

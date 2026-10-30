@@ -9,7 +9,6 @@ import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
 import { format } from 'date-fns'
 import { domain } from '@/lib/constants'
 import { Eye, ChevronLeft, ChevronRight, ExternalLink, CalendarIcon, Camera, Loader2, AlertTriangle } from 'lucide-react'
-import axios from "axios"
 import { useAuth } from "@/context/AuthContext"
 import { useSite } from "@/context/SiteContext";
 import { FileDown } from 'lucide-react'
@@ -18,6 +17,8 @@ import { pdf } from '@react-pdf/renderer'
 import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { getPendingActions, deletePendingAction } from '@/lib/orderRecIndexedDB'
+import { payablesService } from '@/api/payables/payables.service'
+import { isApiError } from '@/api/core/errors'
 
 interface Payable {
   _id: string
@@ -105,15 +106,10 @@ function RouteComponent() {
     try {
       const { filename } = await uploadBase64Image(invoicePreview, 'invoice.jpg')
       const updatedImages = [...invoiceTargetPayable.images, filename]
-      await axios.put(
-        `${domain}/api/payables/${invoiceTargetPayable._id}`,
+      await payablesService.update(
+        invoiceTargetPayable,
         { images: updatedImages, requestInvoice: false },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'payables',
-          },
-        }
+        'Requested invoice uploaded',
       )
       setPayables(prev =>
         prev.map(p => p._id === invoiceTargetPayable._id ? { ...p, images: updatedImages, requestInvoice: false } : p)
@@ -122,8 +118,8 @@ function RouteComponent() {
       setInvoicePreview('')
       setInvoiceTargetPayable(null)
     } catch (error: any) {
-      if (error.response?.status === 403) navigate({ to: '/no-access' })
-      alert(error.response?.data?.message || error.message || 'Upload failed')
+      if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' })
+      alert(error.message || 'Upload failed')
     } finally {
       setUploadingInvoice(false)
     }
@@ -136,21 +132,17 @@ function RouteComponent() {
 
   const updatePayableDate = async (payableId: string, newDate: Date) => {
     try {
-      const token = localStorage.getItem('token')
       const dateStr = format(newDate, 'yyyy-MM-dd')
       const payload = { date: dateStr }
-      await axios.put(`${domain}/api/payables/${payableId}`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'X-Required-Permission': 'payables',
-        },
-      })
+      const payable = payables.find(item => item._id === payableId)
+      if (!payable) return
+      await payablesService.update(payable, payload, `Payable date changed to ${dateStr}`)
       setPayables(prev =>
         prev.map(p => p._id === payableId ? { ...p, date: dateStr } : p)
       )
       setDateEditOpenId(null)
     } catch (error: any) {
-      if (error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: '/no-access' })
         return
       }
@@ -202,16 +194,7 @@ function RouteComponent() {
 
     setLoading(true)
     try {
-      // Get location ID from location name
-
-      // add authorization header with bearer token
-      const token = localStorage.getItem('token')
-      const locationsResponse = await axios.get(`${domain}/api/locations`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      })
-      const locations = locationsResponse.data
+      const locations = await payablesService.listLocations()
       const selectedLocation = locations.find((loc: any) => loc.stationName === location)
 
       if (!selectedLocation) {
@@ -224,25 +207,12 @@ function RouteComponent() {
       //   location: selectedLocation._id,
       //   date: toUTC(date.from).toISOString().split('T')[0]
       // })
-      const queryParams = new URLSearchParams({
-        location: selectedLocation._id,
-        from: format(date.from, 'yyyy-MM-dd'),
-        to: format(date.to, 'yyyy-MM-dd'),
-      })
-
-
-      console.log('Fetching payables with params:', queryParams.toString())
-
-      // add authorization header with bearer token
-      const response = await axios.get(`${domain}/api/payables?${queryParams}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "payables"
-        }
-      })
-      const data = response.data
-
-      console.log('API response:', data)
+      const from = format(date.from, 'yyyy-MM-dd')
+      const to = format(date.to, 'yyyy-MM-dd')
+      const data = await payablesService.list<Payable[]>(
+        { location: selectedLocation._id, from, to },
+        { site: location, from, to },
+      )
 
       if (Array.isArray(data)) {
         setPayables(data)
@@ -251,7 +221,7 @@ function RouteComponent() {
         setPayables([])
       }
     } catch (error: any) {
-      if (error.response?.status === 403) {
+      if (isApiError(error) && error.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }
@@ -344,35 +314,6 @@ function RouteComponent() {
     await deletePendingAction(key)
     refreshPendingPayables()
   }
-
-  // const deletePayable = async (id: string) => {
-  //   if (!confirm('Are you sure you want to delete this payable?')) return;
-
-  //   try {
-  //     const token = localStorage.getItem('token');
-  //     const response = await axios.delete(`${domain}/api/payables/${id}`, {
-  //       headers: {
-  //         Authorization: `Bearer ${token}`,
-  //         "X-Required-Permission": "payables",
-  //       },
-  //     });
-
-  //     if (response.status === 200) {
-  //       setPayables(payables.filter(p => p._id !== id));
-  //     } else {
-  //       alert('Error deleting payable');
-  //     }
-  //   } catch (error: any) {
-  //     if (error.response?.status === 403) {
-  //       navigate({ to: "/no-access" });
-  //       return;
-  //     }
-
-  //     console.error("Error deleting payable:", error);
-  //     alert('Error deleting payable');
-  //   }
-  // };
-
 
   const viewImages = (images: string[]) => {
     if (images.length === 0) {

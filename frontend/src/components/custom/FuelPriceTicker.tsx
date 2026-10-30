@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import axios from 'axios';
+import { fuelPricingService } from '@/api/fuel-pricing/fuel-pricing.service';
 import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
 
@@ -53,10 +53,7 @@ export default function FuelPriceTicker() {
 
   const fetchTickerData = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      const { data } = await axios.get('/api/fuel-pricing/prices-ticker', {
-        headers: { Authorization: `Bearer ${token || ''}` }
-      });
+      const data = await fuelPricingService.getTicker<TickerStationRecord[]>();
       setAllTickerData(data || []);
     } catch (err) {
       console.error("Failed fetching pricing ticker:", err);

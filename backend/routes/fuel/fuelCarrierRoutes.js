@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const FuelCarrier = require('../../models/fuel/FuelCarrier');
 const FuelRack = require('../../models/fuel/FuelRack');
+const { logChange } = require('../../middleware/changeLogger');
 
 // @route   GET /api/fuel-carriers
 // @desc    Get all carriers
@@ -41,6 +42,11 @@ router.post('/', async (req, res) => {
 
   try {
     const savedCarrier = await newCarrier.save();
+    await logChange(req, {
+      action: 'create', resourceType: 'fuel-carrier', resourceId: savedCarrier._id,
+      resourceLabel: savedCarrier.carrierName, before: null, after: savedCarrier.toObject(),
+      success: true, statusCode: 201, source: 'fuel-management.manage.carriers',
+    });
     res.status(201).json(savedCarrier);
   } catch (err) {
     if (err.code === 11000) {
@@ -54,12 +60,19 @@ router.post('/', async (req, res) => {
 // @desc    Update a carrier
 router.put('/:id', async (req, res) => {
   try {
+    const before = await FuelCarrier.findById(req.params.id).lean();
+    if (!before) return res.status(404).json({ message: 'Carrier not found' });
     // We expect associatedRacks to be an array of IDs in req.body
     const updatedCarrier = await FuelCarrier.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true }
     ).populate('associatedRacks');
+    await logChange(req, {
+      action: 'update', resourceType: 'fuel-carrier', resourceId: updatedCarrier._id,
+      resourceLabel: updatedCarrier.carrierName, before, after: updatedCarrier.toObject(),
+      success: true, statusCode: 200, source: 'fuel-management.manage.carriers',
+    });
     
     res.json(updatedCarrier);
   } catch (err) {
@@ -78,6 +91,11 @@ router.delete('/:id', async (req, res) => {
     }
 
     await FuelCarrier.findByIdAndDelete(req.params.id);
+    await logChange(req, {
+      action: 'delete', resourceType: 'fuel-carrier', resourceId: carrier._id,
+      resourceLabel: carrier.carrierName, before: carrier.toObject(), after: null,
+      success: true, statusCode: 200, source: 'fuel-management.manage.carriers',
+    });
     res.json({ message: 'Carrier deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

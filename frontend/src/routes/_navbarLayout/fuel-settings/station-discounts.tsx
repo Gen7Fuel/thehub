@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
-import axios from 'axios'
 import CreatableSelect from 'react-select/creatable'
 import {
   PlusCircle, Zap, Calendar as CalendarIcon, AlertTriangle,
@@ -9,6 +8,8 @@ import {
 import { useAuth } from '@/context/AuthContext'
 import { DatePicker } from '@/components/custom/datePicker'
 import { format, addDays, isToday } from 'date-fns'
+import { fuelSettingsService } from '@/api/fuel-settings/fuel-settings.service'
+import { isApiError } from '@/api/core/errors'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-settings/station-discounts')({
   component: RouteComponent,
@@ -73,18 +74,13 @@ function RouteComponent() {
   const fetchStationDiscounts = async () => {
     try {
       setLoading(true)
-      const res = await axios.get('/api/fuel-settings/station-discounts', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.stationDiscounts'
-        }
-      })
-      setData(res.data)
+      const result = await fuelSettingsService.list<StationDiscountRow[]>('station-discounts')
+      setData(result)
       setEditedRows({})
       setDeletedRows({})
     } catch (err: any) {
       console.error(err)
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' })
         return
       }
@@ -230,21 +226,13 @@ function RouteComponent() {
     if (newEntriesList.length === 0) return;
 
     try {
-      const res = await axios.post('/api/fuel-settings/station-discounts/batch', { entries: newEntriesList }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.stationDiscounts.edit'
-        }
-      });
-
-      if (res.status === 200) {
-        alert("The new discounts have been added successfully.");
-        closeCreationWizard();
-        await fetchStationDiscounts();
-      }
+      await fuelSettingsService.createBatch('station-discounts', newEntriesList);
+      alert("The new discounts have been added successfully.");
+      closeCreationWizard();
+      await fetchStationDiscounts();
     } catch (err: any) {
       console.error(err);
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: '/no-access' });
         return;
       }
@@ -288,31 +276,30 @@ function RouteComponent() {
       }
 
       if (deletedRows[key]) {
-        deletionsPayload.push(dataFootprint)
+        deletionsPayload.push({
+          ...dataFootprint,
+          liveDiscounts: row.Live_Discounts,
+          liveUpdatedAt: row.Live_Updated_At,
+          stagedDiscounts: row.Stg_Discounts,
+          stagedUpdatedAt: row.Stg_Updated_At,
+          scheduleEffectiveFrom: row.Schedule_Effective_From,
+        })
       } else if (editedRows[key] !== undefined) {
         updatesPayload.push({ ...dataFootprint, discounts: editedRows[key] })
       }
     }
 
     try {
-      const res = await axios.put('/api/fuel-settings/station-discounts/batch', {
+      await fuelSettingsService.updateBatch('station-discounts', {
         updates: updatesPayload,
         deletions: deletionsPayload,
         isImmediate: isImmediateAction,
         scheduleEffectiveDate: isImmediateAction ? null : format(scheduledEffectiveDate!, "yyyy-MM-dd")
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.stationDiscounts.edit'
-        }
       })
-
-      if (res.status === 200) {
-        alert("Your changes have been saved successfully.")
-        setIsScheduleConfirmOpen(false)
-        setIsLiveConfirmOpen(false)
-        await fetchStationDiscounts()
-      }
+      alert("Your changes have been saved successfully.")
+      setIsScheduleConfirmOpen(false)
+      setIsLiveConfirmOpen(false)
+      await fetchStationDiscounts()
     } catch (err) {
       alert("We couldn't save your updates. Please check your network and try again.")
     }
@@ -335,24 +322,17 @@ function RouteComponent() {
     try {
       const formattedDate = format(rescheduleDate, "yyyy-MM-dd");
 
-      const res = await axios.put('/api/fuel-settings/station-discounts/reschedule-single', {
+      await fuelSettingsService.rescheduleStationDiscount({
         stationSk: activeDialogRow.Station_SK,
         location: activeDialogRow.Location,
         province: activeDialogRow.Province,
         type: activeDialogRow.Type,
         fuelGrade: activeDialogRow.Fuel_Grade,
+        previousScheduleDate: activeDialogRow.Schedule_Effective_From,
         newScheduleDate: formattedDate
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'fuelSettings.stationDiscounts.edit'
-        }
       });
-
-      if (res.status === 200) {
-        await fetchStationDiscounts();
-        handleCloseEditDialog();
-      }
+      await fetchStationDiscounts();
+      handleCloseEditDialog();
     } catch (err) {
       console.error("Error patching single schedule rule layout:", err);
       alert("Failed to change the schedule date. Please try again.");

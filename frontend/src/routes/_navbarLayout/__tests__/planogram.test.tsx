@@ -26,7 +26,32 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
 })
 
 vi.mock('axios', () => ({
-  default: { post: mockAxiosPost, get: mockAxiosGet, isAxiosError: vi.fn(() => false) },
+  default: {
+    create: () => ({
+      post: mockAxiosPost, get: mockAxiosGet, put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
+    post: mockAxiosPost, get: mockAxiosGet, isAxiosError: vi.fn(() => false),
+  },
+}))
+
+// The page uses the shared planogram service. Adapt the existing Axios-style
+// mocks so the assertions continue to verify the endpoint and request headers.
+vi.mock('@/api/planogram/planogram.service', () => ({
+  planogramService: {
+    get: (site: string) =>
+      mockAxiosGet(`/api/planogram?site=${encodeURIComponent(site)}`, {
+        headers: { 'X-Required-Permission': 'planogram.view' },
+      }).then((response: any) => response.data),
+    upload: (site: string, file: File, confirm = false) => {
+      const form = new FormData()
+      form.append('file', file)
+      const query = `/api/planogram?site=${encodeURIComponent(site)}${confirm ? '&confirm=true' : ''}`
+      return mockAxiosPost(query, form, {
+        headers: { 'X-Required-Permission': 'planogram.upload' },
+      }).then((response: any) => response.data)
+    },
+  },
 }))
 
 vi.mock('sonner', () => ({

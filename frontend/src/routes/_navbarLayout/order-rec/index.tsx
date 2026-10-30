@@ -1,15 +1,16 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
 import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Upload, FileText, X } from 'lucide-react'
-import axios from 'axios'
 import { Toaster, toast } from 'sonner'
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { VendorPicker } from '@/components/custom/vendorPicker'
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
+import { orderRecService } from '@/api/order-rec/order-rec.service'
+import { isApiError } from '@/api/core/errors'
 import {
   isValidOrderRecCSV,
   parseOrderRecCSV,
@@ -99,7 +100,6 @@ function RouteComponent() {
   const [site, setSite] = useState<string>(selectedSite || user?.location || '')
   const [vendor, setVendor] = useState<string>('')
   const [includeStationSupplies, setIncludeStationSupplies] = useState(false);
-  const navigate = useNavigate()
   // Inside RouteComponent:
   useEffect(() => {
     setVendor(''); // Clear vendor whenever site changes
@@ -221,35 +221,20 @@ function RouteComponent() {
       //   : parseOrderRecCSV(csvContent);
       const filteredCategories = categories.filter(cat => cat.items.length > 0);
 
-      const response = await axios.post(
-        '/api/order-rec',
-        {
+      await orderRecService.create({
           categories: filteredCategories,
           site,
           vendor,
           email: user?.email,
           includeStationSupplies
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "orderRec.upload"
-          }
-        }
-      );
-
-      // Handle 403 explicitly
-      if (response.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+        }, 'order-rec.create');
 
       toast.success('File uploaded and order recommendation submitted!');
       toast.dismiss(UNREADABLE_CARTON_TOAST);
       setUploadedFile(null);
       setIsProcessing(false);
     } catch (err: any) {
-      if (axios.isAxiosError(err) && err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         window.location.href = "/no-access";
         return;
       }

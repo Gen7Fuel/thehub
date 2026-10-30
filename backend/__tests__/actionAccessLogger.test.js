@@ -62,6 +62,35 @@ describe('actionAccessLogger', () => {
     }))
   })
 
+  it('forwards successful read group IDs for queue-level deduplication', async () => {
+    const res = response(200)
+    actionAccessLogger({ enqueueAccessLog })(request({
+      ...actionHeaders,
+      'X-Action-Group-Id': 'fuel-management.workspace.2026-10-29.abc123',
+    }), res, vi.fn())
+    res.emit('finish')
+    await Promise.resolve()
+
+    expect(enqueueAccessLog).toHaveBeenCalledWith(expect.objectContaining({
+      accessGroupId: 'fuel-management.workspace.2026-10-29.abc123',
+    }))
+  })
+
+  it.each([401, 403, 500])('never groups failed access attempts with status %s', async (statusCode) => {
+    const res = response(statusCode)
+    actionAccessLogger({ enqueueAccessLog })(request({
+      ...actionHeaders,
+      'X-Action-Group-Id': 'fuel-management.workspace.2026-10-29.abc123',
+    }), res, vi.fn())
+    res.emit('finish')
+    await Promise.resolve()
+
+    expect(enqueueAccessLog).toHaveBeenCalledWith(expect.objectContaining({
+      statusCode,
+      accessGroupId: undefined,
+    }))
+  })
+
   it('uses the client address resolved by Express instead of parsing a spoofable header', async () => {
     const res = response(200)
     actionAccessLogger({ enqueueAccessLog })(request({

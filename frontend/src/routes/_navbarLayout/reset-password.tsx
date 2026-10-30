@@ -8,8 +8,8 @@ import {
   InputOTPGroup,
   InputOTPHiddenSlot,
 } from "@/components/custom/input-otp-masked";
-import axios from "axios"
 import { useAuth } from "@/context/AuthContext" // Assuming your context path
+import { authService } from '@/api/auth/auth.service'
 
 export const Route = createFileRoute('/_navbarLayout/reset-password')({
   component: RouteComponent,
@@ -28,8 +28,8 @@ function RouteComponent() {
   useEffect(() => {
     const checkType = async () => {
       try {
-        const res = await axios.post("/api/auth/identify", { email: user?.email });
-        setIsStoreAccount(res.data.inStoreAccount);
+        const res = await authService.identifyAccount(user?.email || '');
+        setIsStoreAccount(res.inStoreAccount);
       } catch (err) {
         setIsStoreAccount(true); // Default fallback for security
       }
@@ -45,16 +45,11 @@ function RouteComponent() {
     setError(null);
 
     try {
-      await axios.post("/api/auth/change-password-self", {
-        currentPassword,
-        newPassword
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, "X-Required-Permission": "passwordReset" }
-      });
+      await authService.changePasswordSelf(currentPassword, newPassword);
       alert("Password updated successfully!");
       // The socket will trigger force-logout, so we don't need to navigate
-    } catch (err: any) {
-      setError(err.response?.data?.error || "Failed to update credentials");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to update credentials");
     } finally {
       setLoading(false);
     }

@@ -12,7 +12,8 @@ import { Trash2, Camera, Loader2, Calendar, AlertTriangle, Search, X } from 'luc
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { getStartAndEndOfToday, uploadBase64Image } from '@/lib/utils'
-import axios from "axios"
+import { purchaseOrdersService } from '@/api/purchase-orders/purchase-orders.service'
+import { isApiError } from '@/api/core/errors'
 import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { formatFleetCardNumber } from '@/lib/utils';
@@ -83,24 +84,17 @@ function RouteComponent() {
 
     try {
       // add authorization header with bearer token
-      const response = await axios.get(
-        `/api/purchase-orders`, {
-          params: {
+      const data = await purchaseOrdersService.list<any[]>(
+          {
             startDate: toYmd(date.from),
             endDate: toYmd(date.to),
             stationName
-          },
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "po"
           }
-        }
       );
-      const data = response.data;
       console.log('Fetched purchase orders:', data);
       setPurchaseOrders(data);
     } catch (error: any) {
-      if (error.response?.status === 403) {
+      if ((isApiError(error) && error.status === 403) || (error as any)?.response?.status === 403) {
           // Redirect to no-access page
         navigate({ to: "/no-access" });
       }
@@ -262,16 +256,11 @@ function RouteComponent() {
     if (!ok) return
     try {
       setPendingDelete(prev => new Set(prev).add(order._id))
-      await axios.delete(`/api/purchase-orders/${order._id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'po.delete',
-        },
-      })
+      await purchaseOrdersService.remove(order)
       setPurchaseOrders(prev => prev.filter((o: any) => o._id !== order._id))
     } catch (error: any) {
-      if (error.response?.status === 403) navigate({ to: '/no-access' })
-      const msg = error.response?.data?.message || error.message || 'Delete failed'
+      if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' })
+      const msg = error.message || 'Delete failed'
       alert(msg)
     } finally {
       setPendingDelete(prev => {
@@ -312,15 +301,10 @@ function RouteComponent() {
     setUploadingReceipt(true)
     try {
       const { filename } = await uploadBase64Image(receiptPreview, 'receipt.jpg')
-      await axios.put(
-        `/api/purchase-orders/${receiptTargetOrder._id}`,
+      await purchaseOrdersService.update(
+        receiptTargetOrder,
         { receipt: filename, requestReceipt: false },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'po',
-          },
-        }
+        'Receipt uploaded',
       )
       setPurchaseOrders(prev =>
         prev.map(o => (o as any)._id === receiptTargetOrder._id ? { ...o, receipt: filename, requestReceipt: false } : o)
@@ -329,8 +313,8 @@ function RouteComponent() {
       setReceiptPreview('')
       setReceiptTargetOrder(null)
     } catch (error: any) {
-      if (error.response?.status === 403) navigate({ to: '/no-access' })
-      alert(error.response?.data?.message || error.message || 'Upload failed')
+      if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' })
+      alert(error.message || 'Upload failed')
     } finally {
       setUploadingReceipt(false)
     }
@@ -350,17 +334,11 @@ function RouteComponent() {
   const saveNewDate = async () => {
     if (!selectedOrder || !newDate) return
     try {
-      const res = await axios.put(
-        `/api/purchase-orders/${selectedOrder._id}`,
+      const updated = await purchaseOrdersService.update<any, any>(
+        selectedOrder,
         { date: newDate },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "po",
-          },
-        }
+        `Purchase Order date changed to ${newDate}`,
       )
-      const updated = res.data
       setPurchaseOrders(prev => prev.map(o => (o as any)._id === selectedOrder._id ? { ...o, date: updated.date, dateStr: updated.dateStr } : o))
 
       setChangeDateOpen(false)
@@ -368,7 +346,7 @@ function RouteComponent() {
       setNewDate('')
     } catch (error: any) {
       console.error('Failed to update date:', error)
-      if (error.response?.status === 403) navigate({ to: "/no-access" })
+      if (isApiError(error) && error.status === 403) navigate({ to: "/no-access" })
     }
   }
 

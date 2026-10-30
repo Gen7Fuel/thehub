@@ -421,38 +421,32 @@ export function camelCaseToCapitalized(text: String) {
 // syncPendingActions()'s loop below — kept as its own function so the loop
 // body stays readable.
 async function syncOneAction(action: any): Promise<void> {
-  const authHeader = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-
   if (action.type === "TOGGLE_ITEM") {
-    await axios.put(
-      `/api/order-rec/${action.orderId}/item/${action.catIdx}/${action.itemIdx}`,
-      { completed: action.completed, isChanged: action.isChanged },
-      { headers: authHeader }
-    );
-    const res = await axios.get(`/api/order-rec/${action.orderId}`, { headers: authHeader });
-    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    const { orderRecService } = await import("@/api/order-rec/order-rec.service");
+    await orderRecService.updateItem(action.orderId, action.catIdx, action.itemIdx, { completed: action.completed, isChanged: action.isChanged });
+    const refreshed = await orderRecService.get<any>(action.orderId, 'order-rec.offline-sync');
+    const latest = { ...refreshed, id: refreshed._id, _id: refreshed._id };
     await saveOrderRec(latest);
     console.log("✅ Synced and refreshed TOGGLE_ITEM order record:", latest.id);
   }
 
   else if (action.type === "UPDATE_ORDER_REC") {
     const orderId = action.id;
-    const res = await axios.put(
-      `/api/order-rec/${orderId}`,
-      { categories: action.payload.categories },
-      { headers: authHeader }
-    );
-    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    const { orderRecService } = await import("@/api/order-rec/order-rec.service");
+    const updated = await orderRecService.update<any, any>(orderId, { categories: action.payload.categories }, 'order-rec.offline-sync', 'Queued Order Rec changes synchronized');
+    const latest = { ...updated, id: updated._id, _id: updated._id };
     await saveOrderRec(latest);
     console.log("✅ Synced and refreshed UPDATE_ORDER_REC order record:", latest.id);
   }
 
   else if (action.type === "CREATE_PURCHASE_ORDER") {
     const { filename } = await uploadBase64Image(action.receipt, "receipt.jpg");
-    await axios.post(
-      "/api/purchase-orders",
+    // Keep feature API clients lazy: this shared utility is imported by most
+    // pages, while only PO offline replay needs the Purchase Orders client.
+    const { purchaseOrdersService } = await import("@/api/purchase-orders/purchase-orders.service");
+    await purchaseOrdersService.create(
       { ...action.payload, receipt: filename },
-      { headers: { ...authHeader, "X-Required-Permission": "po" } }
+      'po.offline-sync',
     );
     console.log("✅ Synced CREATE_PURCHASE_ORDER for", action.payload?.customerName);
   }
@@ -468,43 +462,29 @@ async function syncOneAction(action: any): Promise<void> {
       imageFilenames.push(filename);
     }
 
-    const locationsRes = await axios.get("/api/locations", { headers: authHeader });
-    const selectedLocation = (locationsRes.data || []).find(
-      (loc: any) => loc.stationName === action.payload.location
-    );
-    if (!selectedLocation) {
-      // Not an axios error, so isPermanentFailure() treats this as
-      // permanent — retrying can't fix a location name that doesn't exist.
-      throw new Error(`Location "${action.payload.location}" not found`);
-    }
-
-    await axios.post(
-      "/api/payables",
-      { ...action.payload, location: selectedLocation._id, images: imageFilenames },
-      { headers: { ...authHeader, "X-Required-Permission": "payables" } }
-    );
+    // Payables is another optional offline action. Loading it only here avoids
+    // pulling its Locations/API client into every consumer of lib/utils.
+    const { payablesService } = await import("@/api/payables/payables.service");
+    await payablesService.resolveLocationAndCreate({
+      ...action.payload,
+      images: imageFilenames,
+    });
     console.log("✅ Synced CREATE_PAYABLE for", action.payload?.vendorName);
   }
 
   else if (action.type === "SAVE_EXTRA_NOTE") {
-    const res = await axios.patch(
-      `/api/order-rec/${action.orderId}`,
-      { extraItemsNote: action.note },
-      { headers: authHeader }
-    );
-    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    const { orderRecService } = await import("@/api/order-rec/order-rec.service");
+    const updated = await orderRecService.updateNote<any>(action.orderId, action.note, 'order-rec.offline-sync');
+    const latest = { ...updated, id: updated._id, _id: updated._id };
     await saveOrderRec(latest);
     console.log("✅ Synced and refreshed SAVE_EXTRA_NOTE order record:", latest.id);
   }
 
   else if (action.type === "ADD_ORDER_REC_COMMENT") {
     // A message written offline (e.g. a scanned item that isn't on the order rec).
-    const res = await axios.post(
-      `/api/order-rec/${action.orderId}/comments`,
-      { text: action.text, photos: [] },
-      { headers: authHeader }
-    );
-    const latest = { ...res.data, id: res.data._id, _id: res.data._id };
+    const { orderRecService } = await import("@/api/order-rec/order-rec.service");
+    const updated = await orderRecService.addComment<any>(action.orderId, { text: action.text, photos: [] }, 'order-rec.offline-sync');
+    const latest = { ...updated, id: updated._id, _id: updated._id };
     await saveOrderRec(latest);
     console.log("✅ Synced ADD_ORDER_REC_COMMENT for order record:", latest.id);
   }

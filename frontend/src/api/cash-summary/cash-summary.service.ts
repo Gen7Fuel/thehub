@@ -64,6 +64,15 @@ export const cashSummaryService = {
   getOverShort<T = unknown>(site: string, from: string, to: string) {
     return cashSummaryApi.getOverShort<T>({ site, from, to }, read(permissions.overShort, 'cash-summary.over-short', 'cash-over-short', `Cash over/short report viewed for ${site} from ${from} to ${to}`))
   },
+  getDashboardOverShort<T = unknown>(site: string) {
+    return cashSummaryApi.getOverShort<T>({ site }, read('dashboard', 'dashboard.accounting', 'cash-over-short', `Cash over/short dashboard viewed for ${site}`))
+  },
+  getDashboardPayablesComparison<T = unknown>(site: string) {
+    return cashSummaryApi.getPayablesComparison<T>({ site }, read('dashboard', 'dashboard.accounting', 'payables-comparison', `Payables comparison dashboard viewed for ${site}`))
+  },
+  getInfoNetReport<T = unknown>(site: string, from: string, to: string) {
+    return cashSummaryApi.getTaxExemptReport<T>({ site, from, to }, read('accounting.infonetReport', 'infonet-report', 'infonet-tax-report', `InfoNet tax report viewed for ${site} from ${from} to ${to}`))
+  },
   getSafesheetBalances<T = unknown>(site: string, from: string, to: string) {
     return safesheetsApi.getDailyBalances<T>(site, from, to, read(permissions.overShort, 'cash-summary.over-short', 'safesheet-balance', `Safesheet daily balances used for Cash Summary over/short report for ${site} from ${from} to ${to}`))
   },

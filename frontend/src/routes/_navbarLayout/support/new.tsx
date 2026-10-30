@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/context/AuthContext'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { supportService } from '@/api/support/support.service'
 
 export const Route = createFileRoute('/_navbarLayout/support/new')({
   component: RouteComponent,
@@ -31,23 +32,8 @@ function RouteComponent() {
     setError(null)
 
     try {
-      const res = await fetch('/api/support/tickets', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'X-Required-Permission': 'support',
-        },
-        body: JSON.stringify({ text: text.trim(), priority, site }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.message || 'Failed to submit ticket.')
-      }
-
-      const data = await res.json()
-      navigate({ to: '/support/$id', params: { id: data.data._id } })
+      const ticket = await supportService.create<{ text: string; priority: string; site: string }, { _id: string }>({ text: text.trim(), priority, site })
+      navigate({ to: '/support/$id', params: { id: ticket._id } })
     } catch (err: any) {
       setError(err?.message || 'Failed to submit ticket.')
     } finally {

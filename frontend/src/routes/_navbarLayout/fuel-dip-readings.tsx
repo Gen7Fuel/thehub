@@ -1,9 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router'
-import axios from 'axios'
 import { Loader2, Save, Fuel } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { SitePicker } from '@/components/custom/sitePicker'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-dip-readings')({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -28,18 +28,15 @@ function FuelDipReadings() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
 
-  const token = () => localStorage.getItem('token') || ''
-
   const fetchTanks = async () => {
     setLoading(true)
     try {
-      const response = await axios.get('/api/fuel-station-tanks/sync-all-volumes', {
-        headers: {
-          Authorization: `Bearer ${token()}`,
-          'X-Required-Permission': 'fuelDipReadings.addNewReadings',
-        },
-      })
-      setTanks(response.data)
+      const siteLabel = site || 'the site picker'
+      setTanks(await fuelStationTanksService.syncAllVolumes<Tank[]>(
+        'fuel-dip-readings',
+        `Fuel dip readings loaded for ${siteLabel}`,
+        'fuelDipReadings.addNewReadings',
+      ))
     } catch {
       toast.error('Unable to load tank readings')
     } finally {
@@ -70,16 +67,17 @@ function FuelDipReadings() {
     setSaving(tank._id)
     const now = new Date()
     try {
-      await axios.patch(`/api/fuel-station-tanks/manual-update/${tank._id}`, {
-        volume,
-        manualDate: now.toISOString().slice(0, 10),
-        manualTime: now.toTimeString().slice(0, 5),
-      }, {
-        headers: {
-          Authorization: `Bearer ${token()}`,
-          'X-Required-Permission': 'fuelDipReadings.addNewReadings',
+      await fuelStationTanksService.manualUpdate(
+        tank._id,
+        {
+          volume,
+          manualDate: now.toISOString().slice(0, 10),
+          manualTime: now.toTimeString().slice(0, 5),
         },
-      })
+        `Tank #${tank.tankNo} (${tank.grade}) at ${tank.stationName}`,
+        'fuel-dip-readings',
+        'fuelDipReadings.addNewReadings',
+      )
       toast.success(`Tank #${tank.tankNo} reading saved`)
       setVolumes((current) => ({ ...current, [tank._id]: '' }))
       await fetchTanks()

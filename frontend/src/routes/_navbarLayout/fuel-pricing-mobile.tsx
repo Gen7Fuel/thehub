@@ -59,7 +59,11 @@ function FuelPricingMobilePanel() {
     }
   };
 
-  const pricingState = useFuelPricing({ user, selectedSite });
+  const pricingState = useFuelPricing({
+    user,
+    selectedSite,
+    source: 'fuel-pricing.mobile',
+  });
 
   const {
     prices,

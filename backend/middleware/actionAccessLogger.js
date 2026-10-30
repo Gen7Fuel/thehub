@@ -93,6 +93,7 @@ module.exports = function actionAccessLogger(options = {}) {
       const suppliedSource = readHeader(req, 'X-Action-Source', 100);
       const suppliedResourceType = readHeader(req, 'X-Action-Resource', 80);
       const suppliedMessage = readHeader(req, 'X-Action-Message', 500);
+      const suppliedGroupId = readHeader(req, 'X-Action-Group-Id', 160);
 
       const action = suppliedAction && ACTIONS.has(suppliedAction)
         ? suppliedAction
@@ -125,6 +126,11 @@ module.exports = function actionAccessLogger(options = {}) {
           ip: getClientIp(req),
           userAgent: req.headers['user-agent'],
           requestId: req.requestId,
+          // Group only successful reads. Authentication, authorization, and
+          // server failures must always remain individually visible.
+          accessGroupId: action === 'read' && statusCode < 400 && suppliedGroupId
+            ? suppliedGroupId
+            : undefined,
         };
 
         enqueue(payload).catch((error) => {

@@ -6,7 +6,9 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Save, Warehouse, Loader2, Search, Plus, X, Truck, CreditCard, ShieldCheck } from 'lucide-react'
-import axios from 'axios'
+import { fuelCarriersService } from '@/api/fuel-management/fuel-carriers.service'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
+import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/racks/$id')({
@@ -28,21 +30,18 @@ function EditRackComponent() {
   // 1. Fetch Suppliers and Carriers for associations
   const { data: allSuppliers = [] } = useQuery({
     queryKey: ['fuel-suppliers'],
-    queryFn: async () => (await axios.get('/api/fuel-suppliers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data
+    queryFn: () => fuelSuppliersService.list<any[]>(undefined, 'fuel-management.manage.racks', 'Fuel suppliers viewed while editing a rack')
   })
 
   const { data: allCarriers = [] } = useQuery({
     queryKey: ['fuel-carriers'],
-    queryFn: async () => (await axios.get('/api/fuel-carriers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data
+    queryFn: () => fuelCarriersService.list<any[]>('fuel-management.manage.racks', 'Fuel carriers viewed while editing a rack')
   })
 
   useEffect(() => {
     const fetchRack = async () => {
       try {
-        const res = await axios.get(`/api/fuel-racks/${id}`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        })
-        setFormData(res.data)
+        setFormData(await fuelRacksService.get<any>(id))
       } catch (err) { console.error(err) } finally { setIsLoading(false) }
     }
     fetchRack()
@@ -98,9 +97,7 @@ function EditRackComponent() {
         defaultSupplier: formData.defaultSupplier?._id || formData.defaultSupplier,
         associatedCarriers: formData.associatedCarriers.map((c: any) => typeof c === 'string' ? c : c._id)
       }
-      await axios.put(`/api/fuel-racks/${id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      await fuelRacksService.update(id, payload, formData.rackName)
       queryClient.invalidateQueries({ queryKey: ['fuel-racks'] })
       alert("Rack updated successfully")
     } catch (err) { alert("Update failed") } finally { setIsSaving(false) }

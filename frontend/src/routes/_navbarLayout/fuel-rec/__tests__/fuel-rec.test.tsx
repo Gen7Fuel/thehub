@@ -676,7 +676,18 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
 // ─── Hoisted mutable state ─────────────────────────────────────────────────────
 
-const { mockNavigate, mockUseSearch, mockUseLoaderData, mockUseAuth, mockUploadBase64Image } =
+const {
+  mockNavigate,
+  mockUseSearch,
+  mockUseLoaderData,
+  mockUseAuth,
+  mockUploadBase64Image,
+  mockFuelRecCapture,
+  mockFuelRecListLocations,
+  mockFuelRecRemove,
+  mockFuelRecAddComment,
+  mockFuelRecRequestAgain,
+} =
   vi.hoisted(() => ({
     mockNavigate: vi.fn(),
     mockUseSearch: vi.fn().mockReturnValue({ site: 'Rankin', date: '2026-03-13' }),
@@ -693,6 +704,11 @@ const { mockNavigate, mockUseSearch, mockUseLoaderData, mockUseAuth, mockUploadB
       },
     }),
     mockUploadBase64Image: vi.fn().mockResolvedValue({ filename: 'uuid-test.jpg' }),
+    mockFuelRecCapture: vi.fn().mockResolvedValue({}),
+    mockFuelRecListLocations: vi.fn().mockResolvedValue([]),
+    mockFuelRecRemove: vi.fn().mockResolvedValue({}),
+    mockFuelRecAddComment: vi.fn().mockResolvedValue({ comments: [] }),
+    mockFuelRecRequestAgain: vi.fn().mockResolvedValue({}),
   }))
 
 // ─── Module mocks ──────────────────────────────────────────────────────────────
@@ -720,6 +736,19 @@ vi.mock('@/context/SiteContext', () => ({
 
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
+}))
+
+vi.mock('@/api/fuel-rec/fuel-rec.service', () => ({
+  fuelRecService: {
+    capture: mockFuelRecCapture,
+    listLocations: mockFuelRecListLocations,
+    remove: mockFuelRecRemove,
+    addComment: mockFuelRecAddComment,
+    requestAgain: mockFuelRecRequestAgain,
+    getLinkablePos: vi.fn().mockResolvedValue({ orders: [] }),
+    linkPo: vi.fn().mockResolvedValue({}),
+    unlinkPo: vi.fn().mockResolvedValue({}),
+  },
 }))
 
 vi.mock('@/components/custom/sitePicker', () => ({
@@ -1232,7 +1261,6 @@ describe('BOL List — fuel-rec/list.tsx', () => {
 
   it('removes entry from table after successful delete', async () => {
     vi.stubGlobal('confirm', vi.fn().mockReturnValue(true))
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, text: () => Promise.resolve('') })
 
     renderWithSuspense(<BolList />)
     const deleteButtons = await waitFor(
@@ -1241,12 +1269,7 @@ describe('BOL List — fuel-rec/list.tsx', () => {
     )
     fireEvent.click(deleteButtons[0])
 
-    await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('entry-1'),
-        expect.objectContaining({ method: 'DELETE' })
-      )
-    )
+    await waitFor(() => expect(mockFuelRecRemove).toHaveBeenCalledWith(sampleEntries[0]))
     await waitFor(() => expect(screen.queryByText('BOL-001')).not.toBeInTheDocument())
   })
 
@@ -1258,10 +1281,7 @@ describe('BOL List — fuel-rec/list.tsx', () => {
       { timeout: 5000 }
     )
     fireEvent.click(deleteButtons[0])
-    expect(global.fetch).not.toHaveBeenCalledWith(
-      expect.stringContaining('fuel-rec/entry-1'),
-      expect.anything()
-    )
+    expect(mockFuelRecRemove).not.toHaveBeenCalled()
   })
 
   it('opens the comments dialog when comment button is clicked', async () => {
@@ -1291,11 +1311,7 @@ describe('BOL List — fuel-rec/list.tsx', () => {
       { text: 'Needs retake', createdAt: '2026-03-12T10:00:00Z', user: 'admin' },
       { text: 'New comment text', createdAt: '2026-03-13T10:00:00Z', user: 'admin' },
     ]
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: () => Promise.resolve({ comments: updatedComments }),
-    })
+    mockFuelRecAddComment.mockResolvedValueOnce({ comments: updatedComments })
 
     renderWithSuspense(<BolList />)
     const commentButtons = await waitFor(
@@ -1313,17 +1329,11 @@ describe('BOL List — fuel-rec/list.tsx', () => {
     fireEvent.click(addBtn)
 
     await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.stringContaining('entry-1/comment'),
-        expect.objectContaining({ method: 'POST' })
-      )
+      expect(mockFuelRecAddComment).toHaveBeenCalledWith(sampleEntries[0], 'New comment text')
     )
   })
 
   it('sends request-again API call when Request Again button is clicked', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true, status: 200, text: () => Promise.resolve(''),
-    })
     vi.stubGlobal('alert', vi.fn())
 
     renderWithSuspense(<BolList />)
@@ -1333,11 +1343,6 @@ describe('BOL List — fuel-rec/list.tsx', () => {
     )
     fireEvent.click(requestAgainButtons[0])
 
-    await waitFor(() =>
-      expect(global.fetch).toHaveBeenCalledWith(
-        '/api/fuel-rec/request-again',
-        expect.objectContaining({ method: 'POST' })
-      )
-    )
+    await waitFor(() => expect(mockFuelRecRequestAgain).toHaveBeenCalledWith(sampleEntries[0]))
   })
 })

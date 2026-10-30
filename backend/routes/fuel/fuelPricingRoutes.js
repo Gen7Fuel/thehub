@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const { logChange } = require("../../middleware/changeLogger");
 const Location = require("../../models/Location");
 const moment = require("moment-timezone");
 const User = require("../../models/User"); // Ensure correct path to your User model
@@ -20,6 +21,26 @@ const { GRADE_MAP } = require("../../services/pricingCoreService");
 // Import your custom model layer functions to keep routes lean
 const currentPriceModel = require("../../pg/models/fuelCurrentPrice");
 const logsModel = require("../../pg/models/fuelPriceLog");
+
+const fuelPriceAuditColumns = [
+  "id",
+  "site",
+  "grade",
+  "price",
+  "is_scheduled",
+  "scheduled_date_time",
+  "scheduled_price",
+  "updated_at",
+];
+
+const getFuelPriceAuditRows = (db, locationId) =>
+  db("fuel_current_price")
+    .where({ site: locationId })
+    .select(fuelPriceAuditColumns)
+    .orderBy("grade", "asc");
+
+const requestSource = (req, fallback) =>
+  req.headers["x-action-source"] || fallback;
 
 // Reverse map for incoming database rows (e.g., 'Regular' -> 'REG')
 const REVERSE_GRADE_MAP = Object.fromEntries(
@@ -963,17 +984,31 @@ router.put("/verify-price-receipt", async (req, res) => {
   }
 
   try {
+    const pendingRowsQuery = () =>
+      db("fuel_price_logs")
+        .where({ site: locationId })
+        .andWhere((builder) => {
+          if (hasInfonet) {
+            builder.whereNull("image_url").orWhereNull("infonet_image_url");
+          } else {
+            builder.whereNull("image_url");
+          }
+        })
+        .where("created_at", ">=", db.raw("NOW() - INTERVAL '6 hours'"));
+
+    const beforeRows = await pendingRowsQuery().clone().select(
+      "id",
+      "site",
+      "grade",
+      "price",
+      "image_url",
+      "infonet_image_url",
+      "received_by",
+      "updated_at",
+    );
+
     // 3. Update targeted log records
-    const updatedRows = await db("fuel_price_logs")
-      .where({ site: locationId })
-      .andWhere((builder) => {
-        if (hasInfonet) {
-          builder.whereNull("image_url").orWhereNull("infonet_image_url");
-        } else {
-          builder.whereNull("image_url");
-        }
-      })
-      .where("created_at", ">=", db.raw("NOW() - INTERVAL '6 hours'"))
+    const updatedRows = await pendingRowsQuery()
       .update({
         image_url: filename,
         infonet_image_url: hasInfonet ? infonetFilename : null,
@@ -981,12 +1016,50 @@ router.put("/verify-price-receipt", async (req, res) => {
         updated_at: db.raw("CURRENT_TIMESTAMP"),
       });
 
+    const affectedIds = beforeRows.map((row) => row.id);
+    const afterRows = affectedIds.length
+      ? await db("fuel_price_logs")
+          .whereIn("id", affectedIds)
+          .select(
+            "id",
+            "site",
+            "grade",
+            "price",
+            "image_url",
+            "infonet_image_url",
+            "received_by",
+            "updated_at",
+          )
+          .orderBy("id", "asc")
+      : [];
+
     console.log(
       `⛽ Safe Audit Update Complete. Site: ${locationId} (Has InfoNet: ${hasInfonet}) | Rows Filled: ${updatedRows} within 6hr window.`
     );
 
     // 🚀 Real-time broadcast to unlock all manager and main accounts on other devices
     const locationDoc = await Location.findById(locationId);
+    const targetStationName =
+      locationDoc?.stationName || locationDoc?.site || locationId;
+
+    if (updatedRows > 0) {
+      await logChange(req, {
+        action: "update",
+        resourceType: "fuel-price-log",
+        resourceId: affectedIds[0],
+        resourceIds: affectedIds,
+        resourceStore: "postgresql",
+        success: true,
+        statusCode: 200,
+        source: requestSource(req, "fuel-pricing.verification"),
+        message: `Fuel price receipts verified for ${targetStationName} across ${updatedRows} price log row${updatedRows === 1 ? "" : "s"}`,
+        before: beforeRows,
+        after: afterRows,
+        bulk: { affectedCount: updatedRows, truncated: false },
+        diffOptions: { ignoredPaths: ["updated_at"] },
+      });
+    }
+
     if (locationDoc) {
       const criticalEmails = [
         locationDoc.email,
@@ -1081,8 +1154,6 @@ router.put("/verify-price-receipt", async (req, res) => {
       // -----------------------------------------------------------------------
       // ✉️ EMAIL NOTIFICATION: Notify admin/managers with attachments
       // -----------------------------------------------------------------------
-      const targetStationName = locationDoc.stationName || locationId;
-
       const getStoreAndPermanentCCs = (station) => {
         const ccs = ["kporter@gen7fuel.com", "daksh@gen7fuel.com"];
 
@@ -1279,6 +1350,9 @@ router.post("/upsert-retail", async (req, res) => {
     // Determine target location timezone
     const targetTimezone = locationDoc.timezone || "America/Toronto";
     const io = req.app.get("io");
+    const beforeRows = await getFuelPriceAuditRows(db, locationId);
+    const auditStationName =
+      stationName || locationDoc.stationName || locationDoc.site || locationId;
 
     // -------------------------------------------------------------------------
     // STORE HOURS UTILITY: Find target execution moment if closed
@@ -1402,6 +1476,26 @@ router.post("/upsert-retail", async (req, res) => {
         ? `Station is currently closed. Price updates automatically scheduled for store opening at ${formattedTime}.`
         : `Price adjustments scheduled successfully across grades. Execution set for ${formattedTime}.`;
 
+      const afterRows = await getFuelPriceAuditRows(db, locationId);
+      await logChange(req, {
+        action: "update",
+        resourceType: "fuel-price",
+        resourceId: afterRows[0]?.id,
+        resourceIds: afterRows.map((row) => row.id),
+        resourceStore: "postgresql",
+        success: true,
+        statusCode: 200,
+        source: requestSource(req, "fuel-pricing.desktop"),
+        message: `Fuel prices for ${auditStationName} ${isAutoDeferred ? "automatically deferred" : "scheduled"} for ${formattedTime}`,
+        before: beforeRows,
+        after: afterRows,
+        bulk: {
+          affectedCount: Object.values(prices).filter((value) => value != null).length,
+          truncated: false,
+        },
+        diffOptions: { ignoredPaths: ["updated_at"] },
+      });
+
       return res.status(200).json({
         success: true,
         message: scheduleMessage,
@@ -1421,6 +1515,26 @@ router.post("/upsert-retail", async (req, res) => {
       postedByUserIdStr,
       userEmail,
       appIo: io,
+    });
+
+    const afterRows = await getFuelPriceAuditRows(db, locationId);
+    await logChange(req, {
+      action: "update",
+      resourceType: "fuel-price",
+      resourceId: afterRows[0]?.id,
+      resourceIds: afterRows.map((row) => row.id),
+      resourceStore: "postgresql",
+      success: true,
+      statusCode: 200,
+      source: requestSource(req, "fuel-pricing.desktop"),
+      message: `Live fuel prices published for ${auditStationName} across ${executionResults.databaseWritesExecutedCount} grade${executionResults.databaseWritesExecutedCount === 1 ? "" : "s"}`,
+      before: beforeRows,
+      after: afterRows,
+      bulk: {
+        affectedCount: executionResults.databaseWritesExecutedCount,
+        truncated: false,
+      },
+      diffOptions: { ignoredPaths: ["updated_at"] },
     });
 
     return res.status(200).json({
@@ -1572,11 +1686,37 @@ router.delete("/cancel-schedule/:locationId", async (req, res) => {
   }
 
   try {
+    const locationDoc = await Location.findById(locationId).lean();
+    const beforeRows = (await getFuelPriceAuditRows(db, locationId)).filter(
+      (row) => row.is_scheduled,
+    );
     await db("fuel_current_price").where({ site: locationId }).update({
       is_scheduled: false,
       scheduled_date_time: null,
       scheduled_price: null,
     });
+
+    if (beforeRows.length > 0) {
+      const scheduledIds = new Set(beforeRows.map((row) => String(row.id)));
+      const afterRows = (await getFuelPriceAuditRows(db, locationId)).filter(
+        (row) => scheduledIds.has(String(row.id)),
+      );
+      await logChange(req, {
+        action: "delete",
+        resourceType: "fuel-price-schedule",
+        resourceId: beforeRows[0]?.id,
+        resourceIds: beforeRows.map((row) => row.id),
+        resourceStore: "postgresql",
+        success: true,
+        statusCode: 200,
+        source: requestSource(req, "fuel-pricing.desktop"),
+        message: `Scheduled fuel price update cancelled for ${locationDoc?.stationName || locationDoc?.site || locationId}`,
+        before: beforeRows,
+        after: afterRows,
+        bulk: { affectedCount: beforeRows.length, truncated: false },
+        diffOptions: { ignoredPaths: ["updated_at"] },
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -1614,13 +1754,17 @@ router.put("/edit-schedule-prices", async (req, res) => {
         .json({ message: "Target location context not found." });
     }
     const targetTimezone = locationDoc.timezone || "America/Toronto";
-    const stationName = locationDoc.name || "Station";
+    const stationName =
+      locationDoc.stationName || locationDoc.site || "Station";
 
     // 2. Fetch current database row state to ensure an active schedule even exists
-    const existingRows = await db("fuel_current_price").where({
-      site: locationId,
-      is_scheduled: true,
-    });
+    const existingRows = await db("fuel_current_price")
+      .where({
+        site: locationId,
+        is_scheduled: true,
+      })
+      .select(fuelPriceAuditColumns)
+      .orderBy("grade", "asc");
 
     if (!existingRows || existingRows.length === 0) {
       return res
@@ -1704,6 +1848,23 @@ router.put("/edit-schedule-prices", async (req, res) => {
         },
       );
     }
+
+    const afterRows = await getFuelPriceAuditRows(db, locationId);
+    await logChange(req, {
+      action: "update",
+      resourceType: "fuel-price-schedule",
+      resourceId: afterRows[0]?.id,
+      resourceIds: afterRows.map((row) => row.id),
+      resourceStore: "postgresql",
+      success: true,
+      statusCode: 200,
+      source: requestSource(req, "fuel-pricing.desktop"),
+      message: `Scheduled fuel prices updated for ${stationName}${isTimeChanged ? ` with execution moved to ${incomingTargetTime.format("YYYY-MM-DD hh:mm A z")}` : " with the existing execution time preserved"}`,
+      before: existingRows,
+      after: afterRows.filter((row) => row.is_scheduled),
+      bulk: { affectedCount: existingRows.length, truncated: false },
+      diffOptions: { ignoredPaths: ["updated_at"] },
+    });
 
     return res.status(200).json({
       success: true,

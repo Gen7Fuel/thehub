@@ -154,8 +154,9 @@ import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { SitePicker } from '@/components/custom/sitePicker';
 import { ChevronRight, Package } from 'lucide-react';
-import axios from 'axios';
 import { DatePicker } from '@/components/custom/datePicker';
+import { writeOffService } from '@/api/write-off/write-off.service';
+import { isApiError } from '@/api/core/errors';
 
 // 1. Define the Search Interface to fix the TypeScript 'type' error
 interface WriteOffSearch {
@@ -180,16 +181,10 @@ export const Route = createFileRoute('/_navbarLayout/write-off/requests')({
     if (!site) return { data: [], accessDenied: false };
 
     try {
-      const res = await axios.get(`/api/write-off/list`, {
-        params: { site, listType: type, from, to },
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "writeOff.requests"
-        }
-      });
-      return { data: res.data, accessDenied: false };
+      const data = await writeOffService.list<any[]>(site, type || 'WO', from, to);
+      return { data, accessDenied: false };
     } catch (err: any) {
-      return { data: [], accessDenied: err.response?.status === 403 };
+      return { data: [], accessDenied: (isApiError(err) ? err.status : err.response?.status) === 403 };
     }
   }
 });

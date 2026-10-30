@@ -3,7 +3,7 @@ import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
 import { Search, Fuel, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/locations')({
   component: LocationListLayout,
@@ -16,12 +16,7 @@ function LocationListLayout() {
   // 1. Ensure the key is 'locations-list' to match the detail page's invalidation call
   const { data: locations = [], isLoading } = useQuery({
     queryKey: ['locations-list'],
-    queryFn: async () => {
-      const res = await axios.get('/api/fuel-station-tanks/stations', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      return res.data
-    },
+    queryFn: () => fuelStationTanksService.listManagedStations<any[]>(),
     // Adding this ensures the list stays fresh when you navigate back and forth
     staleTime: 0
   })

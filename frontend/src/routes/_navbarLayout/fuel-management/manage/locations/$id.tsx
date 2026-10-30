@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // Added CheckCircle2 import
 import { Save, Loader2, Plus, Trash2, MapPin, Hash, Car, Truck, Zap, BookText } from 'lucide-react'
-import axios from 'axios'
+import { fuelCarriersService } from '@/api/fuel-management/fuel-carriers.service'
+import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { useQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { toast } from "sonner"
@@ -40,21 +42,19 @@ function LocationFuelComponent() {
 
   const { data: racks = [] } = useQuery({ 
     queryKey: ['fuel-racks'], 
-    queryFn: async () => (await axios.get('/api/fuel-racks', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data 
+    queryFn: () => fuelRacksService.list<any[]>('fuel-management.manage.stations', 'Fuel racks viewed while editing a station')
   })
   const { data: carriers = [] } = useQuery({ 
     queryKey: ['fuel-carriers'], 
-    queryFn: async () => (await axios.get('/api/fuel-carriers', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })).data 
+    queryFn: () => fuelCarriersService.list<any[]>('fuel-management.manage.stations', 'Fuel carriers viewed while editing a station')
   })
 
   const fetchData = async () => {
     setLoading(true)
     try {
-      const res = await axios.get(`/api/fuel-station-tanks/location/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
-      setLocationData(res.data.location)
-      setTanks(res.data.tanks)
+      const data = await fuelStationTanksService.getLocation<any>(id)
+      setLocationData(data.location)
+      setTanks(data.tanks)
     } catch (err) {
       console.error(err)
       toast.error("Failed to load station data")
@@ -80,9 +80,7 @@ function LocationFuelComponent() {
     }
 
     try {
-      await axios.put(`/api/fuel-station-tanks/location/${id}`, payload, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      await fuelStationTanksService.updateLocation(id, payload, locationData?.stationName)
 
       // 3. Fix for Sidebar: Invalidate the locations list query
       // Replace 'all-locations' with whatever queryKey you used in your Sidebar
@@ -103,14 +101,14 @@ function LocationFuelComponent() {
     // Find the highest current tank number, default to 0 if no tanks exist
     const maxTankNo = tanks.length > 0 ? Math.max(...tanks.map(t => t.tankNo || 0)) : 0;
     try {
-      await axios.post('/api/fuel-station-tanks/tanks', {
+      await fuelStationTanksService.createTank({
         stationId: id,
         tankNo: maxTankNo + 1, // Always one higher than the current max
         grade: 'Regular',
         tankCapacity: 25000,
         maxVolumeCapacity: 23750, // 95% default
         minVolumeCapacity: 5000
-      }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } })
+      }, locationData?.stationName)
       fetchData()
     } catch (err) { alert("Error adding tank") }
   }
@@ -262,10 +260,7 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
 
     try {
       setIsSaving(true);
-      await axios.put(`/api/fuel-station-tanks/tanks/${tank._id}`,
-        { ...editData, tankNo: newId },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      );
+      await fuelStationTanksService.updateTank(tank._id, { ...editData, tankNo: newId }, `Tank #${tank.tankNo}`);
 
       setIsDialogOpen(false);
       onUpdate(); // This triggers the re-fetch and the Grid Sort in the parent
@@ -293,9 +288,7 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
   const saveTank = async () => {
     setIsSaving(true)
     try {
-      await axios.put(`/api/fuel-station-tanks/tanks/${tank._id}`, editData, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      await fuelStationTanksService.updateTank(tank._id, editData, `Tank #${tank.tankNo}`)
 
       // Refresh the parent data
       onUpdate()
@@ -317,9 +310,7 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
   const handleDelete = async () => {
     if (!confirm(`Are you sure you want to remove Tank #${tank.tankNo}?`)) return
     try {
-      await axios.delete(`/api/fuel-station-tanks/tanks/${tank._id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      })
+      await fuelStationTanksService.removeTank(tank._id, `Tank #${tank.tankNo}`)
       onUpdate()
     } catch (err) { alert("Failed to delete tank.") }
   }

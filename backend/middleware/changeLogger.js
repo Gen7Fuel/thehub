@@ -35,6 +35,7 @@ async function logChange(req, {
   resourceLabel,
   bulk,
   diffOptions,
+  actor: actorOverrides,
 }) {
   try {
     const computed = suppliedChanges
@@ -49,6 +50,7 @@ async function logChange(req, {
       eventId: randomUUID(),
       eventType: 'change',
       ...getActor(req),
+      ...(actorOverrides || {}),
       action,
       resourceType,
       resourceId,

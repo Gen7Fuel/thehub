@@ -1,14 +1,13 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-// const User = require("../../backend/models/User")
 const User = require("../models/User");
-const Permission = require("../models/Permission");
 const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
 const Role = require("../models/Role");
 const Maintenance = require("../models/Maintenance");
-const { getMergedPermissions, getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
+const { getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
+const { logAuthChange } = require('../utils/authLogger');
 
 // const { auth } = require("../middleware/authMiddleware.js");
 
@@ -44,7 +43,7 @@ const checkPermissionByPath = (tree, path) => {
   return false;
 };
 
-// POST /api/auth/identify
+// POST /login-auth/identify
 // identify if a user's role belongs to store account or office account
 // router.post("/identify", async (req, res) => {
 //   try {
@@ -207,9 +206,30 @@ router.post("/register", async (req, res) => {
       is_active: true,        // active by default
     });
 
+    logAuthChange(req, {
+      action: 'create',
+      resourceType: 'user',
+      resourceId: user._id,
+      username: 'unknown',
+      locationName: stationName,
+      statusCode: 201,
+      source: req.headers['x-action-source'] || 'register.page',
+      message: `New user registered: ${normalizedEmail}`,
+      changes: [{
+        operation: 'add',
+        path: 'user',
+        before: null,
+        after: { email: normalizedEmail, firstName, lastName, stationName },
+      }],
+      changeSummary: { added: 1, removed: 0, replaced: 0, total: 1 },
+    });
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
     res.status(201).json({
       message: "User registered successfully",
-      user,
+      user: safeUser,
     });
   } catch (err) {
     console.error("Error in register:", err);
@@ -301,6 +321,8 @@ router.post("/login", async (req, res) => {
     // --- END MAINTENANCE CHECK ---
 
     // Update login flags
+    const previousLoginDate = user.lastLoginDate;
+    const previousLoggedIn = !!user.is_loggedIn;
     const now = new Date();
 
     // 1. Move the old "current" login to "previous"
@@ -311,6 +333,21 @@ router.post("/login", async (req, res) => {
 
     user.is_loggedIn = true;
     await user.save({ timestamps: false });
+
+    logAuthChange(req, {
+      action: 'update',
+      resourceType: 'user',
+      resourceId: user._id,
+      username: user.email,
+      locationName: user.stationName,
+      source: req.headers['x-action-source'] || 'login.page',
+      message: `User logged in: ${user.email}`,
+      changes: [
+        { operation: 'replace', path: 'is_loggedIn', before: previousLoggedIn, after: true },
+        { operation: 'replace', path: 'lastLoginDate', before: previousLoginDate?.toISOString?.() || null, after: now.toISOString() },
+      ],
+      changeSummary: { added: 0, removed: 0, replaced: 2, total: 2 },
+    });
 
     // Get merged permissions (role + custom)
     // const mergedPermissions = await getMergedPermissions(user);

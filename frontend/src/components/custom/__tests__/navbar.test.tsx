@@ -34,7 +34,13 @@ vi.mock('@/lib/utils', async (importOriginal) => ({
 }))
 
 vi.mock('axios', () => ({
-  default: { get: mockAxiosGet, post: mockAxiosPost },
+  default: {
+    create: () => ({
+      get: mockAxiosGet, post: mockAxiosPost, put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
+    get: mockAxiosGet, post: mockAxiosPost,
+  },
 }))
 
 import Navbar from '../navbar'
@@ -152,7 +158,11 @@ describe('Navbar mobile menu', () => {
     fireEvent.click(within(getPanel()).getByRole('button', { name: 'Logout' }))
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/login' }))
-    expect(mockAxiosPost).toHaveBeenCalledWith('/api/auth/logout', {}, expect.anything())
+    expect(mockAxiosPost).toHaveBeenCalledWith('/auth/logout', {}, expect.objectContaining({
+      headers: expect.objectContaining({
+        'X-Action-Source': 'navbar.session',
+      }),
+    }))
   })
 
   it('closes on Escape', async () => {

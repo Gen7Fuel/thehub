@@ -10,6 +10,7 @@ const { pushNotification } = require('../services/notificationService');
 const { writeOffAutomationQueue } = require("../queues/writeOffAutomationQueue");
 const { getPg } = require("../config/pg");
 const moment = require("moment-timezone");
+const { logChange } = require('../middleware/changeLogger');
 
 // GET /api/write-off/list?site=RANKIN
 router.get('/work-list', async (req, res) => {
@@ -27,11 +28,25 @@ router.post('/work-list', async (req, res) => {
   try {
     const { site, item } = req.body;
     if (!site || !item) return res.status(400).json({ error: 'Site and item are required' });
+    const before = await WriteOffCart.findOne({ site }).lean();
     const workList = await WriteOffCart.findOneAndUpdate(
       { site },
       { $push: { items: item } },
       { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
     );
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'write-off-cart-item',
+      resourceId: workList.items?.[workList.items.length - 1]?._id || workList._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: 'write-off.create',
+      resourceLabel: item.name || item.upc_barcode,
+      message: `Write-off draft item ${item.name || item.upc_barcode} added for ${site}`,
+      before,
+      after: workList.toObject(),
+    });
     res.status(201).json(workList);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -42,6 +57,7 @@ router.put('/work-list/:itemId', async (req, res) => {
   try {
     const { site, ...updates } = req.body;
     if (!site) return res.status(400).json({ error: 'Site is required' });
+    const before = await WriteOffCart.findOne({ site }).lean();
     const allowed = ['gtin', 'upc_barcode', 'name', 'qty', 'onHandAtWriteOff', 'reason', 'isManualEntry', 'expiryDate', 'markdownAction'];
     const itemUpdates = Object.fromEntries(Object.entries(updates).filter(([key]) => allowed.includes(key)));
     const workList = await WriteOffCart.findOneAndUpdate(
@@ -50,6 +66,19 @@ router.put('/work-list/:itemId', async (req, res) => {
       { new: true, runValidators: true }
     );
     if (!workList) return res.status(404).json({ error: 'Work-list item not found' });
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'write-off-cart-item',
+      resourceId: req.params.itemId,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: 'write-off.create',
+      resourceLabel: `Draft item ${req.params.itemId}`,
+      message: `Write-off draft item ${req.params.itemId} updated for ${site}`,
+      before,
+      after: workList.toObject(),
+    });
     res.json(workList);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -59,12 +88,26 @@ router.put('/work-list/:itemId', async (req, res) => {
 router.delete('/work-list/:itemId', async (req, res) => {
   try {
     if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const before = await WriteOffCart.findOne({ site: req.query.site }).lean();
     const workList = await WriteOffCart.findOneAndUpdate(
       { site: req.query.site },
       { $pull: { items: { _id: req.params.itemId } } },
       { new: true }
     );
     if (!workList) return res.status(404).json({ error: 'Work list not found' });
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'write-off-cart-item',
+      resourceId: req.params.itemId,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: 'write-off.create',
+      resourceLabel: `Draft item ${req.params.itemId}`,
+      message: `Write-off draft item ${req.params.itemId} removed from ${req.query.site}`,
+      before,
+      after: workList.toObject(),
+    });
     res.json(workList);
   } catch (error) {
     res.status(500).json({ error: 'Error removing work-list item' });
@@ -74,7 +117,21 @@ router.delete('/work-list/:itemId', async (req, res) => {
 router.delete('/work-list', async (req, res) => {
   try {
     if (!req.query.site) return res.status(400).json({ error: 'Site is required' });
+    const before = await WriteOffCart.findOne({ site: req.query.site }).lean();
     const workList = await WriteOffCart.findOneAndUpdate({ site: req.query.site }, { $set: { items: [] } }, { new: true });
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'write-off-cart',
+      resourceId: workList?._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: 'write-off.create',
+      resourceLabel: req.query.site,
+      message: `Write-off draft list cleared for ${req.query.site}`,
+      before,
+      after: workList?.toObject() || { site: req.query.site, items: [] },
+    });
     res.json(workList || { site: req.query.site, items: [] });
   } catch (error) {
     res.status(500).json({ error: 'Error clearing write-off work list' });
@@ -194,6 +251,12 @@ router.post('/', async (req, res) => {
       const savedWO = await woList.save();
       woMongoId = savedWO._id;
       createdLists.push(woList.listNumber);
+      await logChange(req, {
+        action: 'create', resourceType: 'write-off', resourceId: savedWO._id, resourceStore: 'mongodb',
+        success: true, statusCode: 201, source: 'write-off.create', resourceLabel: savedWO.listNumber,
+        message: `Write-off list ${savedWO.listNumber} created for ${site} with ${savedWO.items.length} item${savedWO.items.length === 1 ? '' : 's'}`,
+        before: null, after: savedWO.toObject(),
+      });
     }
 
     // 6. Save About to Expire List (ATE)
@@ -210,6 +273,12 @@ router.post('/', async (req, res) => {
       const savedATE = await ateList.save();
       ateMongoId = savedATE._id;
       createdLists.push(ateList.listNumber);
+      await logChange(req, {
+        action: 'create', resourceType: 'write-off', resourceId: savedATE._id, resourceStore: 'mongodb',
+        success: true, statusCode: 201, source: 'write-off.create', resourceLabel: savedATE.listNumber,
+        message: `About-to-expire write-off list ${savedATE.listNumber} created for ${site} with ${savedATE.items.length} item${savedATE.items.length === 1 ? '' : 's'}`,
+        before: null, after: savedATE.toObject(),
+      });
     }
 
     // 7. Save Bistro List (BT)
@@ -226,6 +295,12 @@ router.post('/', async (req, res) => {
       const savedBT = await btList.save();
       btMongoId = savedBT._id;
       createdLists.push(btList.listNumber);
+      await logChange(req, {
+        action: 'create', resourceType: 'write-off', resourceId: savedBT._id, resourceStore: 'mongodb',
+        success: true, statusCode: 201, source: 'write-off.create', resourceLabel: savedBT.listNumber,
+        message: `Bistro write-off list ${savedBT.listNumber} created for ${site} with ${savedBT.items.length} item${savedBT.items.length === 1 ? '' : 's'}`,
+        before: null, after: savedBT.toObject(),
+      });
     }
 
     // The work list is only a draft. Clear it after all requested write-off
@@ -359,9 +434,16 @@ router.patch('/:id/items/:itemId/upc', async (req, res) => {
     if (item.found !== false) return res.status(400).json({ error: 'Only missing items can be updated.' });
     const upc = String(req.body.upc_barcode || '').trim();
     if (!upc) return res.status(400).json({ error: 'A UPC is required.' });
+    const before = list.toObject();
     item.upc_barcode = upc;
-    await list.save();
-    res.json(list);
+    const updatedList = await list.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'write-off-item', resourceId: req.params.itemId, resourceStore: 'mongodb',
+      success: true, statusCode: 200, source: 'write-off.detail', resourceLabel: updatedList.listNumber,
+      message: `Missing UPC updated for write-off ${updatedList.listNumber} item ${req.params.itemId}`,
+      before, after: updatedList.toObject(),
+    });
+    res.json(updatedList);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -375,6 +457,7 @@ router.patch('/:id/items/:itemId/details', async (req, res) => {
     const item = list.items.id(req.params.itemId);
     if (!item) return res.status(404).json({ error: "Item not found" });
 
+    const before = list.toObject();
     // Update common fields
     item.qty = qty;
     item.isEdited = true;
@@ -386,8 +469,14 @@ router.patch('/:id/items/:itemId/details', async (req, res) => {
       item.reason = reason;
     }
 
-    await list.save();
-    res.json(list);
+    const updatedList = await list.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'write-off-item', resourceId: req.params.itemId, resourceStore: 'mongodb',
+      success: true, statusCode: 200, source: 'write-off.detail', resourceLabel: updatedList.listNumber,
+      message: `Write-off ${updatedList.listNumber} item ${req.params.itemId} details updated`,
+      before, after: updatedList.toObject(),
+    });
+    res.json(updatedList);
   } catch (err) {
     console.error("Patch Error:", err);
     res.status(500).json({ error: err.message });
@@ -409,6 +498,7 @@ router.patch('/:id/items/:itemId', async (req, res) => {
       return res.status(404).json({ error: "Item not found in this list" });
     }
 
+    const before = list.toObject();
     // Update the item
     list.items[itemIndex].completed = completed;
 
@@ -428,6 +518,12 @@ router.patch('/:id/items/:itemId', async (req, res) => {
     list.markModified('items');
 
     const updatedList = await list.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'write-off-item', resourceId: req.params.itemId, resourceStore: 'mongodb',
+      success: true, statusCode: 200, source: 'write-off.detail', resourceLabel: updatedList.listNumber,
+      message: `Write-off ${updatedList.listNumber} item ${req.params.itemId} marked ${completed ? 'complete' : 'incomplete'}`,
+      before, after: updatedList.toObject(),
+    });
     res.json(updatedList);
 
   } catch (err) {
@@ -541,17 +637,25 @@ router.patch('/:id/resubmit-missing', async (req, res) => {
     if (!list.submitted) return res.status(400).json({ error: 'The list has not been submitted.' });
     const missingItems = (list.items || []).filter((item) => item.found === false);
     if (!missingItems.length) return res.status(400).json({ error: 'There are no missing items to resubmit.' });
+    const before = list.toObject();
     const location = await Location.findOne({ site: list.site });
     const localMoment = moment(list.createdAt).tz(location?.timezone || 'America/Toronto');
     list.submittedAt = new Date();
     list.csoSubmissionStatus = 'pending';
-    await list.save();
+    const updatedList = await list.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'write-off', resourceId: updatedList._id, resourceStore: 'mongodb',
+      success: true, statusCode: 200, source: 'write-off.detail', resourceLabel: updatedList.listNumber,
+      message: `Missing items resubmission queued for write-off ${updatedList.listNumber}`,
+      before, after: updatedList.toObject(),
+      bulk: { affectedCount: missingItems.length, truncated: false },
+    });
     await writeOffAutomationQueue.add('sync-write-off-missing', {
       writeOffId: list._id, targetStationCsoCode: '31750',
       formattedDate: localMoment.format('MM/DD/YYYY'), formattedTime: localMoment.format('HH:mm:ss'),
       listNumber: list.listNumber, items: missingItems.map((item) => item.toObject()), missingOnly: true,
     }, { jobId: `write-off-missing-${list._id}-${Date.now()}` });
-    res.json(list);
+    res.json(updatedList);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -566,12 +670,11 @@ router.patch("/:id/finalize", async (req, res) => {
 
     const isBT = list.listType === "BT";
     const isWO = list.listType === "WO";
+    const before = list.toObject();
 
     // 1. Mark as submitted
     list.submitted = true;
     list.status = "Complete";
-    // const finalizedList = await list.save();
-    const finalizedList = [];
 
     // 2. Fetch Location and Calculate Timezone-specific Timestamps
     let csoLink = "";
@@ -604,18 +707,26 @@ router.patch("/:id/finalize", async (req, res) => {
     if (isWO) {
       list.submittedAt = new Date();
       list.csoSubmissionStatus = "pending";
-      await list.save();
+    }
+    const finalizedList = await list.save();
+    await logChange(req, {
+      action: 'approve', resourceType: 'write-off', resourceId: finalizedList._id, resourceStore: 'mongodb',
+      success: true, statusCode: 200, source: 'write-off.detail', resourceLabel: finalizedList.listNumber,
+      message: `${isBT ? 'Bistro write-off approval' : 'Write-off finalization'} completed for ${finalizedList.listNumber}`,
+      before, after: finalizedList.toObject(),
+    });
+    if (isWO) {
       await writeOffAutomationQueue.add("sync-write-off", {
-        writeOffId: list._id,
+        writeOffId: finalizedList._id,
         targetStationCsoCode,
         formattedDate,
         formattedTime,
-        listNumber: list.listNumber,
-        items: (list.items || []).map((item) => item.toObject()),
+        listNumber: finalizedList.listNumber,
+        items: (finalizedList.items || []).map((item) => item.toObject()),
       }, {
-        jobId: `write-off-${list._id}`,
+        jobId: `write-off-${finalizedList._id}`,
       });
-      console.log(`📥 Queued CStore write-off automation for ${list.listNumber}`);
+      console.log(`📥 Queued CStore write-off automation for ${finalizedList.listNumber}`);
     }
 
     // 4. Notification & Email Configuration
@@ -707,6 +818,7 @@ router.post('/:id/items/:itemId/comments', async (req, res) => {
     if (!item.comments) {
       item.comments = [];
     }
+    const before = list.toObject();
     // 3. Push the comment to the ITEM'S comment array
     item.comments.push({
       initials,
@@ -716,10 +828,16 @@ router.post('/:id/items/:itemId/comments', async (req, res) => {
     });
 
     // 4. Save the parent document
-    await list.save();
+    const updatedList = await list.save();
+    await logChange(req, {
+      action: 'create', resourceType: 'write-off-comment', resourceId: item._id, resourceStore: 'mongodb',
+      success: true, statusCode: 200, source: 'write-off.detail', resourceLabel: list.listNumber,
+      message: `Comment added to write-off ${list.listNumber} item ${item._id}`,
+      before, after: updatedList.toObject(),
+    });
 
     // 5. Return the full updated list so frontend state stays in sync
-    res.json(list);
+    res.json(updatedList);
   } catch (err) {
     console.error("Comment Error:", err);
     res.status(500).json({ message: 'Failed to add comment.' });

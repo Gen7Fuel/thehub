@@ -1,3 +1,5 @@
+import { locationsApi } from '@/api/locations/locations.api'
+
 // Shared offline cache for the site/location list. GET /api/locations
 // requires no auth (see backend/routes/location.js), so this is prefetched
 // eagerly on app boot — even on the login page — rather than waiting for an
@@ -5,6 +7,7 @@
 // same key, so the moment any of them succeeds online, the whole app has an
 // offline fallback for the next time any of them is rendered.
 const CACHE_KEY = 'cachedLocations'
+let locationPrefetchInFlight: Promise<unknown> | null = null
 
 export function saveCachedLocations(locations: unknown[]): void {
   try {
@@ -34,11 +37,15 @@ export function getCachedLocations<T = any>(): T[] {
 // so it never gets around to warming the cache at all — see network.ts's
 // isActuallyOnline() for the same pattern already used elsewhere here.
 export function prefetchLocations(): void {
-  fetch('/api/locations', {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+  if (locationPrefetchInFlight) return
+
+  locationPrefetchInFlight = locationsApi.list({
+    auth: false,
     signal: AbortSignal.timeout(5000),
   })
-    .then((res) => (res.ok ? res.json() : Promise.reject(res)))
     .then((data) => saveCachedLocations(data))
     .catch(() => {})
+    .finally(() => {
+      locationPrefetchInFlight = null
+    })
 }

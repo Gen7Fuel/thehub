@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { orderRecService } from '@/api/order-rec/order-rec.service'
 import { DatePicker } from '@/components/custom/datePicker'
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { VendorPicker } from '@/components/custom/vendorPicker'
@@ -18,15 +18,8 @@ async function fetchOrderRecs(location: string, vendor: string, date: Date | und
     const params: any = { site: location }
     if (vendor) params.vendor = vendor
     if (date) params.date = toUTC(date).toISOString().split('T')[0]
-    // add authorization header with bearer token
-    const token = localStorage.getItem('token')
-    const res = await axios.get('/api/order-rec', {
-      params,
-      headers: {
-      Authorization: token ? `Bearer ${token}` : undefined,
-      },
-    })
-    setOrderRecs(res.data)
+    const data = await orderRecService.list<any[]>(params, 'order-rec.list-old')
+    setOrderRecs(data)
   } catch (err) {
     setError('Failed to fetch order recs')
   } finally {

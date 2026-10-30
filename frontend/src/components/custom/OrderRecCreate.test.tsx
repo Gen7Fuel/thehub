@@ -10,6 +10,27 @@ const { navigate, auth } = vi.hoisted(() => ({
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => auth }))
 vi.mock('@/context/SiteContext', () => ({ useSite: () => ({ selectedSite: '' }) }))
+vi.mock('@/api/order-rec/order-rec.service', () => ({
+  orderRecService: {
+    lookupScanItem: async (site: string, upc: string) => {
+      const response = await fetch(`/api/order-rec/scan/item?site=${encodeURIComponent(site)}&upc=${encodeURIComponent(upc)}`, {
+        headers: { 'X-Required-Permission': 'orderRec.scanToOrder' },
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message)
+      return data
+    },
+    createScan: async (input: unknown) => {
+      const response = await fetch('/api/order-rec/scan', {
+        method: 'POST', body: JSON.stringify(input),
+        headers: { 'X-Required-Permission': 'orderRec.scanToOrder' },
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message)
+      return data
+    },
+  },
+}))
 vi.mock('@/components/custom/sitePicker', () => ({
   SitePicker: ({ value, onValueChange }: any) => <select aria-label="Store" value={value} onChange={e => onValueChange(e.target.value)}><option>Rankin</option><option>Other store</option></select>,
 }))

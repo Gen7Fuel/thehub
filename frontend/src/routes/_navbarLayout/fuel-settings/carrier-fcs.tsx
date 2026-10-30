@@ -13,8 +13,9 @@ import {
   Search,
 } from "lucide-react";
 import CreatableSelect from "react-select/creatable";
-import axios from "axios";
 import { useAuth } from "@/context/AuthContext";
+import { fuelSettingsService } from "@/api/fuel-settings/fuel-settings.service";
+import { isApiError } from "@/api/core/errors";
 
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-settings/carrier-fcs",
@@ -102,18 +103,13 @@ export function RouteComponent() {
   const fetchFCSData = async () => {
     try {
       setLoading(true);
-      const res = await axios.get("/api/fuel-settings/carrier-fcs", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "fuelSettings.fsc",
-        },
-      });
-      setData(res.data);
+      const result = await fuelSettingsService.list<CarrierFCSRow[]>("carrier-fcs");
+      setData(result);
       setEditedRows({});
       setDeletedRows({});
     } catch (err: any) {
       console.error(err);
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }
@@ -287,24 +283,13 @@ export function RouteComponent() {
   const handlePushNewEntriesToServer = async () => {
     if (newEntriesList.length === 0) return;
     try {
-      const res = await axios.post(
-        "/api/fuel-settings/carrier-fcs/batch",
-        { entries: newEntriesList },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "fuelSettings.fsc.edit",
-          },
-        },
-      );
-      if (res.status === 200) {
-        alert("Successfully added new entries to the table.");
-        closeCreationWizard();
-        await fetchFCSData();
-      }
+      await fuelSettingsService.createBatch("carrier-fcs", newEntriesList);
+      alert("Successfully added new entries to the table.");
+      closeCreationWizard();
+      await fetchFCSData();
     } catch (err: any) {
       console.error(err);
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }
@@ -324,6 +309,10 @@ export function RouteComponent() {
         deletionsPayload.push({
           carrier: row["Carrier"],
           province: row["Province"],
+          liveFcs: row.Live_FCS,
+          liveUpdatedAt: row.Live_Updated_At,
+          stagedFcs: row.Stg_FCS,
+          stagedUpdatedAt: row.Stg_Updated_At,
         });
       } else if (editedRows[key] !== undefined) {
         updatesPayload.push({
@@ -335,33 +324,22 @@ export function RouteComponent() {
     }
 
     try {
-      const res = await axios.put(
-        "/api/fuel-settings/carrier-fcs/batch",
-        {
-          updates: updatesPayload,
-          deletions: deletionsPayload,
-          isImmediate: isImmediateAction,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "fuelSettings.fsc.edit",
-          },
-        },
+      await fuelSettingsService.updateBatch("carrier-fcs", {
+        updates: updatesPayload,
+        deletions: deletionsPayload,
+        isImmediate: isImmediateAction,
+      });
+      alert(
+        isImmediateAction
+          ? "Changes applied live right now!"
+          : "Changes saved and scheduled successfully.",
       );
-      if (res.status === 200) {
-        alert(
-          isImmediateAction
-            ? "Changes applied live right now!"
-            : "Changes saved and scheduled successfully.",
-        );
-        setIsScheduleConfirmOpen(false);
-        setIsLiveConfirmOpen(false);
-        await fetchFCSData();
-      }
+      setIsScheduleConfirmOpen(false);
+      setIsLiveConfirmOpen(false);
+      await fetchFCSData();
     } catch (err: any) {
       console.error(err);
-      if (err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
-import axios from 'axios'
+import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { Loader2, RefreshCw, Cylinder, History, LayoutDashboard, Edit3, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from "@/components/ui/button";
@@ -46,13 +46,8 @@ function VolumeDashboard() {
   const fetchAndSync = async (isManual = false) => {
     if (isManual) setSyncing(true); else setLoading(true);
     try {
-      const res = await axios.get('/api/fuel-station-tanks/sync-all-volumes', {
-        headers: { 
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "fuelManagement.volume.fetchLatestReading"
-        }
-      })
-      setAllTanks(res.data)
+      const data = await fuelStationTanksService.syncAllVolumes<any[]>('fuel-management.volume', 'Latest fuel tank volume readings viewed')
+      setAllTanks(data)
     } catch (err) {
       toast.error("Sync failed");
     } finally {
@@ -65,18 +60,12 @@ function VolumeDashboard() {
   const fetchHistorical = async (stationId: string) => {
     setLoading(true);
     try {
-      const res = await axios.get(`/api/fuel-station-tanks/reconciliation/${stationId}`, {
-        headers: { 
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "fuelManagement.volume.viewHistoricalSalesVolumeChart"
-        }      
-      });
-
-      setHistoricalData(res.data);
+      const data = await fuelStationTanksService.getReconciliation<any[]>(stationId)
+      setHistoricalData(data);
 
       // Automatically set the grade to the first one available in the new data
-      if (res.data.length > 0 && res.data[0].grades.length > 0) {
-        setSelectedGrade(res.data[0].grades[0].grade);
+      if (data.length > 0 && data[0].grades.length > 0) {
+        setSelectedGrade(data[0].grades[0].grade);
       }
     } catch (err) {
       toast.error("Historical fetch failed");
@@ -314,14 +303,10 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
     }
     setIsSubmitting(true);
     try {
-      await axios.patch(`/api/fuel-station-tanks/manual-update/${tank._id}`,
+      await fuelStationTanksService.manualUpdate(
+        tank._id,
         { volume: manualVolume, manualTime, manualDate },
-        { 
-          headers: { 
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "fuelManagement.volume.addPhysicalReading"
-          }   
-        }
+        `Tank #${tank.tankNo || tank._id}`,
       );
       toast.success("Manual reading recorded");
       setIsOpen(false);
@@ -337,13 +322,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
     setIsLoadingChart(true);
     try {
       const dateStr = format(date, 'yyyy-MM-dd');
-      const res = await axios.get(`/api/fuel-station-tanks/history/${tank._id}?date=${dateStr}`, { 
-          headers: { 
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "fuelManagement.volume.viewHistoricalVolume"
-          }   
-      });
-      setChartData(res.data);
+      setChartData(await fuelStationTanksService.getHistory(tank._id, dateStr));
     } catch (err) {
       toast.error("Failed to load history");
     } finally {

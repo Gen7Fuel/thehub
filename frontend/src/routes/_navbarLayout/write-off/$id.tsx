@@ -8,9 +8,10 @@ import { MessageSquareText, MessageSquarePlus, Pencil, Image as ImageIcon, Barco
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Package, CheckCircle2, CheckSquare, Square, Minus, Plus } from 'lucide-react'
 import Barcode from 'react-barcode'
-import axios from 'axios'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { writeOffService } from '@/api/write-off/write-off.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
   component: RouteComponent,
@@ -24,10 +25,7 @@ export const Route = createFileRoute('/_navbarLayout/write-off/$id')({
   staleTime: 0, 
   gcTime: 0,
   loader: async ({ params }) => {
-    const res = await axios.get(`/api/write-off/${params.id}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-    })
-    return res.data
+    return writeOffService.get<any>(params.id)
   }
 })
 
@@ -89,30 +87,16 @@ function RouteComponent() {
 
   const handleComment = async (itemId: string, text: string) => {
     try {
-      const token = localStorage.getItem('token');
       // Assuming 'user' is available in your component's scope (from context or props)
       const initials = user?.initials || '';
       const author = user?.name || '';
 
-      const res = await axios.post(
-        `/api/write-off/${writeOff._id}/items/${itemId}/comments`,
-        {
-          initials,
-          author,
-          text
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "writeOff.requests"
-          }
-        }
-      );
+      const data = await writeOffService.addComment<any>(String(writeOff._id), itemId, { initials, author, text });
 
       // Update the local state with the returned list data
-      setWriteOff(mergeWriteOffResponse(res.data));
+      setWriteOff(mergeWriteOffResponse(data));
     } catch (err: any) {
-      if (err.response?.status === 403) return navigate({ to: "/no-access" });
+      if ((isApiError(err) && err.status === 403) || err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Failed to add comment", err);
       alert("Could not save comment. Please try again.");
     }
@@ -132,21 +116,12 @@ function RouteComponent() {
         payload.reason = editItem.reason;
       }
 
-      const res = await axios.patch(
-        `/api/write-off/${writeOff._id}/items/${editItem._id}/details`,
-        payload,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "writeOff.requests"
-          }
-        }
-      );
+      const data = await writeOffService.updateItemDetails<any>(String(writeOff._id), String(editItem._id), payload);
 
-      setWriteOff(mergeWriteOffResponse(res.data));
+      setWriteOff(mergeWriteOffResponse(data));
       setEditItem(null);
     } catch (err: any) {
-      if (err.response?.status === 403) return navigate({ to: "/no-access" });
+      if ((isApiError(err) && err.status === 403) || err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Update failed", err);
       alert("Failed to update item details.");
     }
@@ -154,19 +129,10 @@ function RouteComponent() {
 
   const handleToggleItem = async (itemId: string, currentVal: boolean) => {
     try {
-      const res = await axios.patch(
-        `/api/write-off/${writeOff._id}/items/${itemId}`,
-        { completed: !currentVal },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "writeOff.requests"
-          }
-        }
-      );
-      setWriteOff(mergeWriteOffResponse(res.data));
+      const data = await writeOffService.updateItemCompleted<any>(String(writeOff._id), itemId, !currentVal);
+      setWriteOff(mergeWriteOffResponse(data));
     } catch (err: any) {
-      if (err.response?.status === 403) return navigate({ to: "/no-access" });
+      if ((isApiError(err) && err.status === 403) || err.response?.status === 403) return navigate({ to: "/no-access" });
       // This will now show the actual error message from the backend
       console.error("Failed to update item:", err.response?.data || err.message);
     }
@@ -179,27 +145,18 @@ function RouteComponent() {
 
     if (!window.confirm(confirmMessage)) return;
     try {
-      const res = await axios.patch(
-        `/api/write-off/${writeOff._id}/finalize`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            "X-Required-Permission": "writeOff.requests"
-          }
-        }
-      );
+      const data = await writeOffService.finalize<any>(String(writeOff._id), writeOff.listType);
       // Finalize queues background automation and may return an empty/legacy
       // response body. Preserve the loaded write-off shape so the page can
       // render immediately without losing `items`.
       setWriteOff((current: any) => ({
         ...current,
-        ...(res.data && !Array.isArray(res.data) ? res.data : {}),
+        ...(data && !Array.isArray(data) ? data : {}),
         submitted: true,
       }));
       // Optional: add a success toast notification here
     } catch (err: any) {
-      if (err.response?.status === 403) return navigate({ to: "/no-access" });
+      if ((isApiError(err) && err.status === 403) || err.response?.status === 403) return navigate({ to: "/no-access" });
       console.error("Finalization failed", err);
     }
   };
@@ -207,19 +164,19 @@ function RouteComponent() {
   const handleUpdateMissingUpc = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await axios.patch(`/api/write-off/${writeOff._id}/items/${upcItem._id}/upc`, { upc_barcode: upcValue }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.requests.list.updateMissingItemsUpc' } });
-      setWriteOff(mergeWriteOffResponse(res.data));
+      const data = await writeOffService.updateMissingUpc<any>(String(writeOff._id), String(upcItem._id), upcValue);
+      setWriteOff(mergeWriteOffResponse(data));
       setUpcItem(null);
-    } catch (err: any) { alert(err.response?.data?.error || 'Failed to update UPC.'); }
+    } catch (err: any) { alert(isApiError(err) ? (err.details as any)?.error || err.message : err.response?.data?.error || 'Failed to update UPC.'); }
   };
 
   const handleResubmitMissing = async () => {
     if (!window.confirm('Resubmit all missing items to CStore?')) return;
     try {
-      const res = await axios.patch(`/api/write-off/${writeOff._id}/resubmit-missing`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.requests.list.pushMissingItems' } });
-      setWriteOff(mergeWriteOffResponse(res.data));
+      const data = await writeOffService.resubmitMissing<any>(String(writeOff._id));
+      setWriteOff(mergeWriteOffResponse(data));
       window.alert('Your request is queued. Check back in a few minutes to view the current status.');
-    } catch (err: any) { alert(err.response?.data?.error || 'Failed to resubmit missing items.'); }
+    } catch (err: any) { alert(isApiError(err) ? (err.details as any)?.error || err.message : err.response?.data?.error || 'Failed to resubmit missing items.'); }
   };
 
   // Helper to determine if the page should be read-only

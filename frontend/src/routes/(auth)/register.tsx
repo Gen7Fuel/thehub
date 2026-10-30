@@ -3,15 +3,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import axios from "axios";
+import { authService } from "@/api/auth/auth.service";
 
 export const Route = createFileRoute("/(auth)/register")({
   loader: async () => {
     try {
-      const response = await axios.get(`/api/locations`);
-      return { locations: response.data };
-    } catch (err) {
-      console.error("Failed to fetch locations:", err);
+      const locations = await authService.listRegistrationLocations<{ _id: string; stationName: string }[]>();
+      return { locations };
+    } catch {
+      console.error("Failed to fetch registration locations");
       return { locations: [] };
     }
   },
@@ -58,7 +58,7 @@ function RouteComponent() {
     }
 
     try {
-      const response = await axios.post(`/login-auth/register`, {
+      await authService.register({
         email,
         password,
         firstName,
@@ -66,17 +66,10 @@ function RouteComponent() {
         stationName,
       });
 
-      if (response.status === 201) {
-        alert("Registration successful!");
-        navigate({ to: "/login" });
-      }
-    } catch (err: any) {
-      if (err.response?.data?.message) {
-        setError(err.response.data.message);
-      } else {
-        setError("Registration failed! Please try again.");
-      }
-      console.error(err.response?.data || err.message);
+      alert("Registration successful!");
+      navigate({ to: "/login" });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Registration failed! Please try again.");
     }
   };
 

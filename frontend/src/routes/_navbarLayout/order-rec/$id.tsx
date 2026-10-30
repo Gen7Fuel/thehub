@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useEffect, useRef, useState } from 'react'
-import axios from 'axios'
 import { Button } from '@/components/ui/button'
 import { camelCaseToTitleCase } from '@/lib/utils'
 import { Square, CheckSquare, MinusSquare, Plus, Minus, Image as ImageIcon } from 'lucide-react';
@@ -18,6 +17,11 @@ import { getOrderRecStatusColor } from "@/lib/utils"
 import { getOrderRecById, saveOrderRec, savePendingAction, hasPendingActionsForId, deletePendingActionsForId } from "@/lib/orderRecIndexedDB"
 import { useAuth } from "@/context/AuthContext";
 import { isActuallyOnline } from "@/lib/network";
+import { orderRecService } from '@/api/order-rec/order-rec.service'
+import { vendorsService } from '@/api/vendors/vendors.service'
+import { isApiError } from '@/api/core/errors'
+import { locationsApi } from '@/api/locations/locations.api'
+import type { RequestOptions } from '@/api/core/types'
 // import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
@@ -94,12 +98,8 @@ function RouteComponent() {
     setMissingError(null)
     try {
       if (await isActuallyOnline()) {
-        const res = await axios.post(
-          `/api/order-rec/${orderId}/comments`,
-          { text, photos: [] },
-          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-        )
-        setOrderRec((prev: any) => ({ ...prev, comments: res.data.comments }))
+        const updated = await orderRecService.addComment<any>(orderRec, { text, photos: [] }, 'order-rec.detail')
+        setOrderRec((prev: any) => ({ ...prev, comments: updated.comments }))
         setScanStatus(`Sent: ${missingItem.name ?? missingItem.gtin}, count ${count}`)
       } else {
         await savePendingAction({ type: 'ADD_ORDER_REC_COMMENT', orderId, text, timestamp: Date.now() })
@@ -177,15 +177,8 @@ function RouteComponent() {
         // 3️⃣ Safe to refresh from backend
         const online = await isActuallyOnline();
         if (online) {
-          const res = await axios.get(`/api/order-rec/${id}`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}`, "X-Required-Permission": "orderRec.id" },
-          });
-
-          if (res.status === 403) {
-            navigate({ to: "/no-access" });
-            return;
-          }
-          const orderRecToSave = { ...res.data, id: res.data._id, _id: res.data._id };
+          const fresh = await orderRecService.get<any>(id)
+          const orderRecToSave = { ...fresh, id: fresh._id, _id: fresh._id };
 
           console.log("🌐 Refreshed from backend");
           setOrderRec(orderRecToSave);
@@ -282,18 +275,7 @@ function RouteComponent() {
     if (!confirmed) return;
 
     try {
-      const response = await axios.delete(`/api/order-rec/${id}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "orderRec.id.deleteButton",
-        },
-      });
-
-      // ✅ Handle 403 Forbidden
-      if (response.status === 403) {
-        navigate({ to: "/no-access" });
-        return;
-      }
+      await orderRecService.remove(orderRec || id)
 
       await deletePendingActionsForId(id);
 
@@ -301,7 +283,7 @@ function RouteComponent() {
       navigate({ to: "/order-rec/list" });
 
     } catch (err: any) {
-      if (axios.isAxiosError(err) && err.response?.status === 403) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
       }
@@ -619,13 +601,7 @@ function RouteComponent() {
     }
 
     // 1. Fetch Vendor Name
-    const response = await axios.get(`/api/vendors/${orderRec?.vendor}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    const vendor: Vendor = response.data;
+    const vendor = await vendorsService.get<Vendor>(orderRec?.vendor);
     const vendorName = vendor.name || 'Unknown';
 
     // --- LOGIC PATH A: UPLOADER NOTIFYING STORE ---
@@ -637,12 +613,11 @@ function RouteComponent() {
 
       try {
         // Fetch the store email
-        const locationRes = await axios.get(`/api/locations?stationName=${encodeURIComponent(site)}`, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        const locationData = locationRes.data;
+        const locationOptions: RequestOptions = {
+          permission: 'orderRec.id',
+          actionContext: { source: 'order-rec.detail', action: 'read', resourceType: 'location', message: `Store contact loaded for Order Rec at ${site}` },
+        };
+        const locationData = await locationsApi.getByName(site, locationOptions);
         const storeEmail = locationData?.email;
         // Get the new managerEmails array, default to empty if not found
         const managerEmails = locationData?.managerEmails || [];
@@ -661,7 +636,7 @@ function RouteComponent() {
         const combinedCC = Array.from(new Set([...baseCC, ...managerEmails]));
 
         // Call the updated backend route
-        await axios.post("/api/send-orderec-email", {
+        await orderRecService.sendEmail({
           to: storeEmail,
           cc: combinedCC,
           subject: `📦 New Order Recommendation for Site ${site}`,
@@ -672,11 +647,7 @@ function RouteComponent() {
             filename: orderRec.filename,
             orderRecId: orderRec._id
           }
-        }, {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        });
+        }, `New Order Rec notification sent to ${site}`);
 
         alert("Notification email sent to the store.");
         return;
@@ -713,7 +684,7 @@ function RouteComponent() {
       }
 
       // 3. Call the backend
-      await axios.post('/api/send-orderec-email', {
+      await orderRecService.sendEmail({
         to: orderRec.email,
         cc: ccList,
         subject: `✅ Order Reconciliation Completed for Site ${site}`,
@@ -724,11 +695,7 @@ function RouteComponent() {
           filename: orderRec.filename,
           orderRecId: orderRec._id
         }
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      }, `Completed Order Rec notification sent for ${site}`);
 
       alert('Notification sent!');
     } catch (err) {
@@ -1162,17 +1129,7 @@ function RouteComponent() {
     setGeneratingTemplate(true);
     try {
       const uniqueUpcs = [...new Set(candidates.map((c) => c.upc))];
-      const res = await axios.post(
-        "/api/order-rec/coremark-price-book",
-        { upcs: uniqueUpcs },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-            "X-Required-Permission": "orderRec.id",
-          },
-        }
-      );
-      priceBook = res.data || {};
+      priceBook = await orderRecService.coremarkPriceBook<typeof priceBook>(uniqueUpcs) || {};
     } catch (err) {
       console.error("Failed to fetch CoreMark price book data:", err);
     } finally {

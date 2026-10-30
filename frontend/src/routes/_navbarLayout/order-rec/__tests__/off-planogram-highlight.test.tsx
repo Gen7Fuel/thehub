@@ -40,7 +40,13 @@ vi.mock('@/lib/orderRecIndexedDB', () => ({
 vi.mock('@/lib/network', () => ({ isActuallyOnline: vi.fn().mockResolvedValue(false) }))
 
 vi.mock('axios', () => ({
-  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), isAxiosError: vi.fn(() => false) },
+  default: {
+    create: () => ({
+      get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn(), put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
+    get: vi.fn(), post: vi.fn(), put: vi.fn(), isAxiosError: vi.fn(() => false),
+  },
 }))
 
 vi.mock('@/api/cycle-count/cycle-count.service', () => ({

@@ -1,8 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
+import { fuelPricingService } from '@/api/fuel-pricing/fuel-pricing.service';
+import { cashSummaryService } from '@/api/cash-summary/cash-summary.service';
+import { dashboardService } from '@/api/dashboard/dashboard.service';
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { LocationPicker } from "@/components/custom/locationPicker";
-import { getCsoCodeByStationName, getVendorNameById } from "@/lib/utils";
 import { DonutSalesChart } from "@/components/custom/dashboard/salesByCategoryDonut";
 import {
   getDashboardData,
@@ -58,7 +60,6 @@ import { getOrderRecStatusColor } from "@/lib/utils";
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
 import { getPeriodKey } from "../_navbarLayout/audit/checklist/$id";
-import axios from "axios";
 import { auditService } from '@/api/audit/audit.service';
 import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 import { ArrowDownRight, ArrowUpRight, Minus, Table2 } from "lucide-react";
@@ -584,12 +585,6 @@ function RouteComponent() {
 
     const fetchAllData = async () => {
       try {
-        const params = new URLSearchParams({ site, startDate, endDate });
-        const authHeaders = {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-          "X-Required-Permission": "dashboard",
-        };
-
         const today = new Date();
         const end = new Date(today);
         end.setDate(end.getDate() - 1); // yesterday
@@ -599,14 +594,8 @@ function RouteComponent() {
         const ymd = (d: Date) =>
           `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
         const fmt = (d: Date) => d.toISOString().slice(0, 10);
-
-        // Safe balance date range (20 days before yesterday)
         const safeStart = new Date(end);
         safeStart.setDate(safeStart.getDate() - 20);
-        const safeQuery = new URLSearchParams({
-          from: ymd(safeStart),
-          to: ymd(end),
-        }).toString();
 
         // SQL date ranges
         const fuelStart = new Date(end);
@@ -642,8 +631,9 @@ function RouteComponent() {
         // FAST TRACK — IDB reads + csoCode (~100ms, no heavy DB)
         // Await this first so SQL can start before slow Mongo calls.
         // ────────────────────────────────────────────────────────
+        const locationPromise = dashboardService.getLocation<any>(site);
         const fastTrackPromise = Promise.allSettled([
-          getCsoCodeByStationName(site), // idx 0
+          locationPromise.then((location) => location?.csoCode ?? null), // idx 0
           getDashboardData(STORES.SALES, site), // idx 1
           getDashboardData(STORES.FUEL, site), // idx 2
           getDashboardData(STORES.TRANS, site), // idx 3
@@ -660,48 +650,14 @@ function RouteComponent() {
         // not wait for these.
         // ────────────────────────────────────────────────────────
         const slowTrackPromise = Promise.allSettled([
-          fetch(`/api/order-rec/range?${params}`, {
-            headers: authHeaders,
-          }).then(async (res) => {
-            if (res.status === 403) throw { is403: true };
-            if (!res.ok)
-              throw new Error(
-                `Failed to fetch order records: ${res.statusText}`,
-              );
-            return res.json();
-          }),
-          fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}/daily-balances?${safeQuery}`,
-            { headers: authHeaders },
-          ).then(async (res) => {
-            if (res.status === 403) throw { is403: true };
-            if (!res.ok)
-              throw new Error(
-                `Failed to fetch safe balance data: ${res.statusText}`,
-              );
-            return res.json();
-          }),
-          fetchLocation(site),
-          fetch(
-            `/api/cash-summary/over-short?site=${encodeURIComponent(site)}`,
-            { headers: authHeaders },
-          ).then(async (res) => {
-            if (res.status === 403) throw { is403: true };
-            if (!res.ok) throw new Error("Failed to fetch over/short data");
-            return res.json();
-          }),
-          fetch(
-            `/api/cash-summary/payables-comparison?site=${encodeURIComponent(site)}`,
-            { headers: authHeaders },
-          ).then(async (res) => {
-            if (res.status === 403) throw { is403: true };
-            if (!res.ok)
-              throw new Error("Failed to fetch payables comparison data");
-            return res.json();
-          }),
+          dashboardService.getOrderRecRange<any>({ site, startDate, endDate }),
+          dashboardService.getSafeBalances<{ data?: any[] }>(site, ymd(safeStart), ymd(end)),
+          locationPromise,
+          cashSummaryService.getDashboardOverShort<any>(site),
+          cashSummaryService.getDashboardPayablesComparison<any>(site),
           auditService.getDashboardStats<any>(site, pKeys),
-          fetchVendors(site),
-          fetchOrderRecs(site, weekStart, weekEnd),
+          dashboardService.getVendors<any[]>(site),
+          dashboardService.getOrderRecs<any>(site, weekStart, weekEnd),
         ]);
 
         // ── Await fast track only (~100ms) ──
@@ -810,7 +766,7 @@ function RouteComponent() {
 
         const orderRecsRes =
           orderRecResult.status === "fulfilled" ? orderRecResult.value : [];
-        const safeBalanceJson =
+        const safeBalanceJson: { data?: any[] } =
           safeBalanceResult.status === "fulfilled"
             ? safeBalanceResult.value
             : {};
@@ -883,7 +839,8 @@ function RouteComponent() {
         const vendorNamesObj: Record<string, string> = {};
         await Promise.all(
           vendorIds.map(async (id: string) => {
-            const name = await getVendorNameById(id);
+            const vendor = await dashboardService.getVendor<any>(id);
+            const name = vendor?.name ?? null;
             if (name) vendorNamesObj[id] = name;
           }),
         );
@@ -1413,10 +1370,7 @@ function RouteComponent() {
   const fetchTickerData = useCallback(async () => {
     try {
       setLoadingTicker(true);
-      const token = localStorage.getItem("token");
-      const { data } = await axios.get("/api/fuel-pricing/prices-ticker", {
-        headers: { Authorization: `Bearer ${token || ""}` },
-      });
+      const data = await fuelPricingService.getTicker<any[]>('fuel-pricing.dashboard');
       setAllTickerData(data || []);
     } catch (err) {
       console.error("Failed fetching pricing ticker:", err);
@@ -3156,7 +3110,7 @@ const fetchAllSqlData = async (
   timesheetStart: string,
   timesheetEnd: string,
 ) => {
-  const params = new URLSearchParams({
+  return dashboardService.getSqlAllData<any>({
     csoCode,
     site,
     salesStart,
@@ -3170,36 +3124,10 @@ const fetchAllSqlData = async (
     timesheetStart,
     timesheetEnd,
   });
-
-  const res = await fetch(`/api/sql/all-data?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  });
-
-  return await res.json();
-};
-
-const fetchVendors = async (site: string) => {
-  const params = new URLSearchParams({ location: site });
-  return fetch(`/api/vendors?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then((res) => res.json());
-};
-
-const fetchOrderRecs = async (
-  site: string,
-  startDate: string,
-  endDate: string,
-) => {
-  const params = new URLSearchParams({ site, startDate, endDate });
-  return fetch(`/api/order-rec?${params}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-  }).then((res) => res.json());
 };
 
 export const fetchLocation = async (stationName: string) => {
-  return fetch(`/api/locations/name/${encodeURIComponent(stationName)}`).then(
-    (res) => res.json(),
-  );
+  return dashboardService.getLocation<any>(stationName);
 };
 
 const getCurrentWeekRange = () => {

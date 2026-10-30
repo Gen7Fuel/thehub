@@ -6,6 +6,7 @@ import { SitePicker } from '@/components/custom/sitePicker'
 import { useAuth } from '@/context/AuthContext'
 import { useSite } from '@/context/SiteContext'
 import { useHandheldScanner } from '@/lib/useHandheldScanner'
+import { orderRecService } from '@/api/order-rec/order-rec.service'
 
 interface ScannedItem {
   id: number
@@ -23,19 +24,6 @@ interface ScannedItem {
 }
 
 interface Draft { items: ScannedItem[] }
-const headers = () => ({
-  Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-  'X-Required-Permission': 'orderRec.scanToOrder',
-  'Content-Type': 'application/json',
-})
-
-async function request<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) })
-  const data = await response.json()
-  if (!response.ok) throw new Error(data.message || 'Request failed. Please try again.')
-  return data
-}
-
 export function OrderRecCreate() {
   const { user } = useAuth()
   const { selectedSite } = useSite()
@@ -105,9 +93,7 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
     // Keep the textbox available while slow lookups are queued in scan order.
     queue.current = queue.current.then(async () => {
       try {
-        const item = await request<Omit<ScannedItem, 'quantity'>>(
-          `/api/order-rec/scan/item?${new URLSearchParams({ site, upc: code })}`, { headers: headers() },
-        )
+        const item = await orderRecService.lookupScanItem<Omit<ScannedItem, 'quantity'>>(site, code)
         if (!mounted.current) return
         const existing = latestDraft.current.items.find(row => row.id === item.id)
         if (!existing && latestDraft.current.items.length >= 500) {
@@ -149,10 +135,10 @@ function OrderRecScanEditor({ site, setSite, navigate }: {
     setSaving(true)
     setError('')
     try {
-      const order = await request<{ _id: string }>('/api/order-rec/scan', {
-        method: 'POST', headers: headers(),
-        body: JSON.stringify({ site, items: items.map(({ id, quantity }) => ({ id, quantity })) }),
-      })
+      const order = await orderRecService.createScan<
+        { site: string; items: Array<{ id: number; quantity: number }> },
+        { _id: string }
+      >({ site, items: items.map(({ id, quantity }) => ({ id, quantity })) })
       setDraft({ items: [] })
       try { sessionStorage.removeItem(storageKey) } catch { /* Navigation can continue. */ }
       await navigate({ to: '/order-rec/$id', params: { id: order._id } })
