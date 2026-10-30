@@ -11,6 +11,14 @@ const { mockUseSearch, mockNavigate } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
 }))
 
+const mockSafesheetService = vi.hoisted(() => ({
+  get: vi.fn(),
+  addEntry: vi.fn(),
+  updateEntry: vi.fn(),
+  deleteEntry: vi.fn(),
+  uploadPhoto: vi.fn(),
+}))
+
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
 vi.mock('@tanstack/react-router', () => ({
@@ -47,6 +55,11 @@ vi.mock('@/context/SiteContext', () => ({
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
+
+// Keep page tests focused on UI behavior while the API contract is covered by
+// the safesheet service tests. These adapters preserve the existing fetch-based
+// assertions without letting the route call Axios during the test.
+vi.mock('@/api/safesheets/safesheets.service', () => ({ safesheetService: mockSafesheetService }))
 
 // Bypass password dialog — immediately call onSuccess so hasAccess becomes true
 vi.mock('@/components/custom/PasswordProtection', () => ({
@@ -136,6 +149,26 @@ describe('SafesheetRoute component', () => {
     mockUseAuth.mockReturnValue({ user: mockUserBase })
     mockUseSearch.mockReturnValue({ site: '', from: '2026-03-01', to: '2026-03-10' })
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: vi.fn().mockResolvedValue({}) } as any)
+    mockSafesheetService.get.mockImplementation(async (site: string, from: string, to: string, sortAssigned: boolean) => {
+      const response = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${sortAssigned ? 'true' : 'false'}`, { headers: {} })
+      if (!response.ok) throw new Error('Failed to fetch safesheet')
+      return response.json()
+    })
+    mockSafesheetService.addEntry.mockImplementation(async (site: string, input: unknown) => {
+      const response = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries`, { method: 'POST', body: JSON.stringify(input) })
+      if (!response.ok) throw new Error('Failed to add entry')
+      return response.json()
+    })
+    mockSafesheetService.updateEntry.mockImplementation(async (site: string, entryId: string, input: unknown) => {
+      const response = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`, { method: 'PUT', body: JSON.stringify(input) })
+      if (!response.ok) throw new Error('Failed to update entry')
+      return response.json()
+    })
+    mockSafesheetService.deleteEntry.mockImplementation(async (site: string, entryId: string) => {
+      const response = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error('Failed to delete entry')
+      return response.json()
+    })
   })
 
   it('refreshes sorted rows and balances after changing a deposit assigned date', async () => {

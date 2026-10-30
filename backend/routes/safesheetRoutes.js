@@ -2,7 +2,12 @@ const express = require('express');
 const router = express.Router();
 const Safesheet = require('../models/Safesheet');
 const Payable = require('../models/Payables');
-const { logAction } = require('../middleware/actionLogger');
+const { logChange } = require('../middleware/changeLogger');
+
+const actionSource = (req, fallback = 'safesheet.page') => {
+  const source = req.headers['x-action-source'];
+  return typeof source === 'string' && source.trim() ? source : fallback;
+};
 
 
 /**
@@ -13,19 +18,8 @@ router.get('/:site', async (req, res) => {
   try {
     const { site } = req.params;
     const sheet = await Safesheet.findOne({ site });
-    try {
-      await logAction(req, {
-        action: 'read',
-        resourceType: 'safesheet',
-        resourceId: sheet?._id,
-        success: true,
-        statusCode: 200,
-        message: `Safesheet exists check for site: ${site}`,
-      });
-    } catch (e) { }
     return res.status(200).json({ exists: !!sheet });
   } catch (err) {
-    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) { }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -39,24 +33,21 @@ router.post('/', async (req, res) => {
     const { site, initialBalance } = req.body;
     if (!site) return res.status(400).json({ error: 'site is required' });
     const sheet = await Safesheet.create({ site, initialBalance });
-    try {
-      await logAction(req, {
-        action: 'create',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 201,
-        message: `Safesheet created for site: ${site}`,
-        after: { site, initialBalance },
-      });
-    } catch (e) { }
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'safesheet',
+      resourceId: sheet._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: actionSource(req, 'settings.sites'),
+      resourceLabel: site,
+      message: `Safesheet created for site: ${site}`,
+      before: null,
+      after: sheet.toObject(),
+    });
     return res.status(201).json(sheet);
   } catch (err) {
-    if (!req.body?.site) {
-      try { await logAction(req, { action: 'create', resourceType: 'safesheet', success: false, statusCode: 400, message: 'site is required' }); } catch (_) { }
-    } else {
-      try { await logAction(req, { action: 'create', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) { }
-    }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -78,25 +69,22 @@ router.post('/site/:site/entries', async (req, res) => {
     await sheet.save();
 
     const entriesWithRunning = sheet.getEntriesWithRunningBalance();
-    try {
-      await logAction(req, {
-        action: 'update',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 201,
-        message: `Safesheet entry added for site: ${req.params.site}`,
-        after: {
-          entryDate: entry.date,
-          cashIn: entry.cashIn,
-          cashExpenseOut: entry.cashExpenseOut,
-          cashDepositBank: entry.cashDepositBank,
-        },
-      });
-    } catch (e) { }
+    const savedEntry = sheet.entries[sheet.entries.length - 1];
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'safesheet-entry',
+      resourceId: savedEntry._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: actionSource(req),
+      resourceLabel: `${req.params.site} entry`,
+      message: `Safesheet entry added for site: ${req.params.site}`,
+      before: null,
+      after: savedEntry.toObject(),
+    });
     return res.status(201).json({ entries: entriesWithRunning });
   } catch (err) {
-    try { await logAction(req, { action: 'update', resourceType: 'safesheet', success: false, statusCode: err.status || 500, message: err.message }); } catch (_) { }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -160,20 +148,9 @@ router.get('/site/:site', async (req, res) => {
       updatedAt: sheet.updatedAt,
     };
 
-    try {
-      await logAction(req, {
-        action: 'read',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 200,
-        message: `Safesheet read for site: ${site} (${fromYmd} to ${toYmd})`,
-      });
-    } catch (e) { }
     return res.json(payload)
   } catch (err) {
     console.error('Safesheet site range error:', err)
-    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: 'Failed to load safesheet range' }); } catch (_) { }
     return res.status(500).json({ error: 'Failed to load safesheet range' })
   }
 })
@@ -214,19 +191,8 @@ router.get('/site/:site/current', async (req, res) => {
     }
 
     const result = { site: sheet.site, cashOnHandSafe: Number(current.toFixed(2)) };
-    try {
-      await logAction(req, {
-        action: 'read',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 200,
-        message: `Safesheet current balance for site: ${req.params.site}`,
-      });
-    } catch (e) { }
     return res.json(result);
   } catch (err) {
-    try { await logAction(req, { action: 'read', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) { }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -249,16 +215,6 @@ router.get('/site/:site/daily-balances', async (req, res) => {
     // Pass the strings directly to the method
     const data = sheet.getDailyBalances(from, to);
 
-    try {
-      await logAction(req, {
-        action: 'read',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 200,
-        message: `Safesheet daily balances for site: ${site} range: ${from} to ${to}`,
-      });
-    } catch (e) { }
     return res.json({ data });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -289,33 +245,21 @@ router.put('/site/:site/entries/:entryId', async (req, res) => {
     await sheet.save();
 
     const entriesWithRunning = sheet.getEntriesWithRunningBalance();
-    try {
-      await logAction(req, {
-        action: 'update',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 200,
-        message: `Safesheet entry updated for site: ${site}`,
-        before: {
-          entryDate: beforeEntry.date,
-          description: beforeEntry.description,
-          cashIn: beforeEntry.cashIn,
-          cashExpenseOut: beforeEntry.cashExpenseOut,
-          cashDepositBank: beforeEntry.cashDepositBank,
-        },
-        after: {
-          entryDate: sheet.entries[entryIndex].date,
-          description: sheet.entries[entryIndex].description,
-          cashIn: sheet.entries[entryIndex].cashIn,
-          cashExpenseOut: sheet.entries[entryIndex].cashExpenseOut,
-          cashDepositBank: sheet.entries[entryIndex].cashDepositBank,
-        },
-      });
-    } catch (e) { }
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'safesheet-entry',
+      resourceId: sheet.entries[entryIndex]._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: actionSource(req),
+      resourceLabel: `${site} entry`,
+      message: `Safesheet entry updated for site: ${site}`,
+      before: beforeEntry,
+      after: sheet.entries[entryIndex].toObject(),
+    });
     return res.json({ entries: entriesWithRunning });
   } catch (err) {
-    try { await logAction(req, { action: 'update', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) { }
     return res.status(500).json({ error: err.message });
   }
 });
@@ -344,16 +288,6 @@ router.delete('/site/:site/entries/:entryId', async (req, res) => {
         deletedPayable = await Payable.findByIdAndDelete(beforeEntry.payableId);
         // null just means the linked payable is already gone/stale — not an error.
       } catch (cascadeErr) {
-        try {
-          await logAction(req, {
-            action: 'delete',
-            resourceType: 'safesheet',
-            resourceId: sheet._id,
-            success: false,
-            statusCode: 500,
-            message: `Safesheet entry delete aborted: failed to delete linked payable (payableId=${beforeEntry.payableId}): ${cascadeErr?.message || cascadeErr}`,
-          });
-        } catch (_) { }
         return res.status(500).json({ error: 'Failed to delete linked payable; safesheet entry was not removed.' });
       }
     }
@@ -363,47 +297,38 @@ router.delete('/site/:site/entries/:entryId', async (req, res) => {
 
     const entriesWithRunning = sheet.getEntriesWithRunningBalance();
 
-    try {
-      await logAction(req, {
-        action: 'delete',
-        resourceType: 'safesheet',
-        resourceId: sheet._id,
-        success: true,
-        statusCode: 200,
-        message: `Safesheet entry deleted for site: ${site}`,
-        before: {
-          entryId: beforeEntry._id,
-          entryDate: beforeEntry.date,
-          description: beforeEntry.description,
-          cashIn: beforeEntry.cashIn,
-          cashExpenseOut: beforeEntry.cashExpenseOut,
-          cashDepositBank: beforeEntry.cashDepositBank,
-        },
-      });
-    } catch (e) { }
+    await logChange(req, {
+      action: 'delete',
+      resourceType: 'safesheet-entry',
+      resourceId: beforeEntry._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: actionSource(req),
+      resourceLabel: `${site} entry`,
+      message: `Safesheet entry deleted for site: ${site}`,
+      before: beforeEntry,
+      after: null,
+    });
 
     if (deletedPayable) {
-      try {
-        await logAction(req, {
-          action: 'delete',
-          resourceType: 'payable',
-          resourceId: deletedPayable._id,
-          success: true,
-          statusCode: 200,
-          message: `Payable cascade-deleted (linked to safesheet entry ${entryId} for site: ${site})`,
-          before: {
-            vendorName: deletedPayable.vendorName,
-            amount: deletedPayable.amount,
-            paymentMethod: deletedPayable.paymentMethod,
-            location: deletedPayable.location?.toString(),
-          },
-        });
-      } catch (e) { }
+      await logChange(req, {
+        action: 'delete',
+        resourceType: 'payable',
+        resourceId: deletedPayable._id,
+        resourceStore: 'mongodb',
+        success: true,
+        statusCode: 200,
+        source: actionSource(req),
+        resourceLabel: `Payable linked to ${site} safesheet`,
+        message: `Payable cascade-deleted (linked to safesheet entry ${entryId} for site: ${site})`,
+        before: deletedPayable.toObject ? deletedPayable.toObject() : deletedPayable,
+        after: null,
+      });
     }
 
     return res.json({ entries: entriesWithRunning });
   } catch (err) {
-    try { await logAction(req, { action: 'delete', resourceType: 'safesheet', success: false, statusCode: 500, message: err.message }); } catch (_) { }
     return res.status(500).json({ error: err.message });
   }
 });

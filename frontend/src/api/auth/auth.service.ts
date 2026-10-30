@@ -1,19 +1,20 @@
 import { authApi } from './auth.api'
-import type { RequestOptions } from '@/api/core/types'
+import { locationsApi } from '@/api/locations/locations.api'
+import type { ActionType, RequestOptions } from '@/api/core/types'
 
-const context = (action: 'read' | 'update', resourceType: string, message: string): RequestOptions => ({
+const context = (source: string, action: ActionType, resourceType: string, message: string): RequestOptions => ({
   actionContext: {
     action,
     resourceType,
-    source: 'settings.reset-password',
+    source,
     message,
   },
 })
 
 export const authService = {
   identifyAccount<T = { inStoreAccount: boolean }>(email: string) {
-    return authApi.identify<T>(email, {
-      ...context('read', 'user-account', 'Password reset account type checked'),
+    return authApi.identifyLogin<T>(email, {
+      ...context('settings.reset-password', 'read', 'user-account', 'Password reset account type checked'),
       auth: false,
     })
   },
@@ -24,8 +25,36 @@ export const authService = {
       newPassword,
       {
         permission: 'passwordReset',
-        ...context('update', 'user-credential', 'Self-service credential update requested'),
+        ...context('settings.reset-password', 'update', 'user-credential', 'Self-service credential update requested'),
       },
     )
+  },
+
+  identifyLogin<T = { inStoreAccount: boolean; maintenance?: { active: boolean; endTime: string } }>(email: string) {
+    return authApi.identifyLogin<T>(email, {
+      ...context('login.page', 'read', 'user-account', `Login account type checked for ${email}`),
+      auth: false,
+    })
+  },
+
+  login<T = { token: string }>(email: string, password: string) {
+    return authApi.login<T>(email, password, {
+      ...context('login.page', 'read', 'user', `Login requested for ${email}`),
+      auth: false,
+    })
+  },
+
+  register<T = unknown>(input: { email: string; password: string; firstName: string; lastName: string; stationName: string }) {
+    return authApi.register<T>(input, {
+      ...context('register.page', 'create', 'user', `New user registration requested for ${input.email}`),
+      auth: false,
+    })
+  },
+
+  listRegistrationLocations<T = unknown[]>() {
+    return locationsApi.list({
+      auth: false,
+      ...context('register.page', 'read', 'location', 'Registration site locations viewed'),
+    }) as Promise<T>
   },
 }
