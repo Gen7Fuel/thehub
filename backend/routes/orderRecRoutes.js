@@ -17,6 +17,9 @@ const { getPg } = require('../config/pg');
 const { getPermissionMap } = require('../utils/permissionStore');
 const { createOrderRecVendorRouter } = require('./orderRecVendorRoutes');
 const { ensureVendorAssigned } = require('../services/orderRecScanner');
+const { logChange } = require('../middleware/changeLogger');
+
+const requestSource = (req, fallback) => req.headers['x-action-source'] || fallback;
 
 router.use('/scan', createOrderRecScanRouter({ getPg, Location, getPermissionMap, createOrderRec }));
 router.use(createOrderRecVendorRouter({ OrderRec, Vendor, getPermissionMap }));
@@ -414,6 +417,7 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     const { completed, isChanged } = req.body;
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+    const before = orderRec.toObject();
 
     const catIdx = Number(req.params.catIdx);
     const itemIdx = Number(req.params.itemIdx);
@@ -459,6 +463,13 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
     }
 
     await orderRec.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'order-rec', resourceId: orderRec._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req, 'order-rec.detail'),
+      message: `Order Rec item ${item.itemName || item.gtin || itemIdx} marked ${completed ? 'complete' : 'incomplete'} for ${orderRec.site}`,
+      before, after: orderRec.toObject(),
+    });
     const io = req.app.get("io");
     if (io) {
       io.emit("orderUpdated", orderRec);
@@ -601,9 +612,9 @@ router.put('/:id/item/:catIdx/:itemIdx', async (req, res) => {
 // Update one
 router.put('/:id', async (req, res) => {
   try {
+    const current = await OrderRec.findById(req.params.id).lean();
+    if (!current) return res.status(404).json({ message: 'Not found' });
     if (req.body.orderPlaced || req.body.delivered) {
-      const current = await OrderRec.findById(req.params.id).lean();
-      if (!current) return res.status(404).json({ message: 'Not found' });
       ensureVendorAssigned(current, req.body);
     }
     const update = {};
@@ -617,6 +628,13 @@ router.put('/:id', async (req, res) => {
       { new: true }
     );
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+    await logChange(req, {
+      action: 'update', resourceType: 'order-rec', resourceId: orderRec._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req, 'order-rec.detail'),
+      message: `Order Rec ${orderRec.filename || orderRec.integerId || orderRec._id} updated for ${orderRec.site}`,
+      before: current, after: orderRec.toObject(),
+    });
     res.json(orderRec);
   } catch (err) {
     res.status(err.status || 500).json({ message: err.message });
@@ -873,6 +891,14 @@ async function createOrderRec(req, res) {
 
     await orderRec.save();
 
+    await logChange(req, {
+      action: 'create', resourceType: 'order-rec', resourceId: orderRec._id,
+      resourceStore: 'mongodb', success: true, statusCode: 201,
+      source: requestSource(req, req.orderRecSource === 'scanner' ? 'order-rec.scanner' : 'order-rec.create'),
+      message: `${req.orderRecSource === 'scanner' ? 'Store-created' : 'Uploaded'} Order Rec created for ${site}`,
+      before: undefined, after: orderRec.toObject(),
+    });
+
     // Emit WebSocket event
     const io = req.app.get("io");
     if (io) io.emit("orderCreated", orderRec);
@@ -895,12 +921,21 @@ async function createOrderRec(req, res) {
 router.patch('/:id', async (req, res) => {
   try {
     const { extraItemsNote } = req.body;
+    const before = await OrderRec.findById(req.params.id).lean();
+    if (!before) return res.status(404).json({ error: 'Order rec not found' });
     const orderRec = await OrderRec.findByIdAndUpdate(
       req.params.id,
       { extraItemsNote },
       { new: true }
     );
     if (!orderRec) return res.status(404).json({ error: 'Order rec not found' });
+    await logChange(req, {
+      action: 'update', resourceType: 'order-rec', resourceId: orderRec._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req, 'order-rec.detail'),
+      message: `Extra-items note updated for Order Rec ${orderRec.filename || orderRec.integerId || orderRec._id}`,
+      before, after: orderRec.toObject(),
+    });
     res.json(orderRec);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update extra items note' });
@@ -914,6 +949,13 @@ router.delete('/:id', async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ error: 'Order rec not found.' });
     }
+    await logChange(req, {
+      action: 'delete', resourceType: 'order-rec', resourceId: deleted._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req, 'order-rec.detail'),
+      message: `Order Rec ${deleted.filename || deleted.integerId || deleted._id} deleted for ${deleted.site}`,
+      before: deleted.toObject(), after: undefined,
+    });
     const io = req.app.get("io");
     if (io) {
       // console.log("Emitting orderDeleted for", deleted._id);
@@ -936,6 +978,7 @@ router.put('/:id/status', async (req, res) => {
     const invoiceDate = typeof req.body.invoiceDate === 'string' ? req.body.invoiceDate.trim() : '';
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+    const before = orderRec.toObject();
 
     ensureVendorAssigned(orderRec, { status });
 
@@ -982,6 +1025,13 @@ router.put('/:id/status', async (req, res) => {
     }
 
     await orderRec.save();
+    await logChange(req, {
+      action: 'update', resourceType: 'order-rec', resourceId: orderRec._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req, 'order-rec.workflow'),
+      message: `Order Rec ${orderRec.filename || orderRec.integerId || orderRec._id} moved from ${currentStatus} to ${status}`,
+      before, after: orderRec.toObject(),
+    });
 
     // ✅ Recalculate lead time ONLY when transitioning to Delivered
     if (
@@ -1016,6 +1066,7 @@ router.post('/:id/comments', async (req, res) => {
 
     const orderRec = await OrderRec.findById(req.params.id);
     if (!orderRec) return res.status(404).json({ message: 'Not found' });
+    const before = orderRec.toObject();
 
     const author = req.user
       ? (`${req.user.firstName || ''} ${req.user.lastName || ''}`).trim() || req.user.email
@@ -1029,6 +1080,14 @@ router.post('/:id/comments', async (req, res) => {
       photos: Array.isArray(photos) ? photos : []
     });
     await orderRec.save();
+
+    await logChange(req, {
+      action: 'update', resourceType: 'order-rec', resourceId: orderRec._id,
+      resourceStore: 'mongodb', success: true, statusCode: 200,
+      source: requestSource(req, 'order-rec.detail'),
+      message: `Comment added to Order Rec ${orderRec.filename || orderRec.integerId || orderRec._id}`,
+      before, after: orderRec.toObject(),
+    });
 
     res.json(orderRec);
 

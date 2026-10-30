@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef } from 'react'
-import axios from 'axios'
+import { orderRecService } from '@/api/order-rec/order-rec.service'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { isActuallyOnline } from '@/lib/network'
@@ -140,12 +140,8 @@ export function OrderRecChat({
       if (failed > 0)
         throw new Error(`${failed} photo${failed > 1 ? 's' : ''} failed to upload. Remove them and try again.`)
 
-      const res = await axios.post(
-        `/api/order-rec/${orderRecId}/comments`,
-        { text: text.trim(), photos: results as string[] },
-        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
-      )
-      onCommentsUpdate(res.data.comments)
+      const updated = await orderRecService.addComment<{ comments: Comment[] }>(orderRecId, { text: text.trim(), photos: results as string[] }, 'order-rec.chat')
+      onCommentsUpdate(updated.comments)
       pendingPhotos.forEach(p => URL.revokeObjectURL(p.preview))
       uploadPromisesRef.current.clear()
       setText('')

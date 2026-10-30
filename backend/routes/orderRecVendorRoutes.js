@@ -1,8 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const { requireOrderRecPermission, requireStoreAccess } = require('../services/orderRecScanner');
+const { logChange } = require('../middleware/changeLogger');
 
-function createOrderRecVendorRouter({ OrderRec, Vendor, getPermissionMap }) {
+function createOrderRecVendorRouter({ OrderRec, Vendor, getPermissionMap, recordChange = logChange }) {
   const router = express.Router();
   router.patch('/:id/vendor', async (req, res) => {
     try {
@@ -30,6 +31,13 @@ function createOrderRecVendorRouter({ OrderRec, Vendor, getPermissionMap }) {
         filename: OrderRec.buildFilename(vendorDoc.name, order.createdAt, order.integerId),
       } }, { new: true, runValidators: true });
       if (!updated) return res.status(409).json({ message: 'This order changed while assigning its vendor. Refresh and try again.' });
+      await recordChange(req, {
+        action: 'update', resourceType: 'order-rec', resourceId: updated._id,
+        resourceStore: 'mongodb', success: true, statusCode: 200,
+        source: req.headers['x-action-source'] || 'order-rec.workflow',
+        message: `Order Rec ${updated.filename || updated.integerId || updated._id} assigned to ${vendorDoc.name}`,
+        before: order, after: typeof updated.toObject === 'function' ? updated.toObject() : updated,
+      });
       const io = req.app.get('io');
       if (io) io.emit('orderUpdated', updated);
       return res.json(updated);

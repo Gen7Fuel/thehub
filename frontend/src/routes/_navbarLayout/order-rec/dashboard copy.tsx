@@ -1,6 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { orderRecService } from '@/api/order-rec/order-rec.service'
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/dashboard copy')({
   component: RouteComponent,
@@ -13,15 +14,8 @@ function RouteComponent() {
   useEffect(() => {
     const fetchOrderRecs = async () => {
       setLoading(true);
-      const res = await fetch("/api/order-rec", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem(`token`)}`,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setOrderRecs(data);
-      }
+      const data = await orderRecService.list<any[]>({}, 'order-rec.dashboard');
+      setOrderRecs(data);
       setLoading(false);
     };
     fetchOrderRecs();
