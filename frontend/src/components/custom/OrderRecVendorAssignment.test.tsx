@@ -4,6 +4,19 @@ import { OrderRecVendorAssignment } from './OrderRecVendorAssignment'
 
 const { auth } = vi.hoisted(() => ({ auth: { user: { access: { orderRec: { value: true, workflow: true } } } } }))
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => auth }))
+vi.mock('@/api/order-rec/order-rec.service', () => ({
+  orderRecService: {
+    assignVendor: async (order: any, vendor: string) => {
+      const response = await fetch(`/api/order-rec/${order._id}/vendor`, {
+        method: 'PATCH', body: JSON.stringify({ vendor }),
+        headers: { 'X-Required-Permission': 'orderRec.workflow' },
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.message)
+      return data
+    },
+  },
+}))
 vi.mock('@/components/custom/vendorPicker', () => ({
   VendorPicker: ({ value, setVendor, location, disabled }: any) => (
     <select aria-label={`Vendor for ${location}`} value={value} disabled={disabled} onChange={event => setVendor(event.target.value)}>

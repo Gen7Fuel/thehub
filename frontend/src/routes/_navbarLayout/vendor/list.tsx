@@ -174,6 +174,8 @@
 //   );
 // }
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { vendorsService } from '@/api/vendors/vendors.service'
+import { isApiError } from '@/api/core/errors'
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -219,12 +221,7 @@ function RouteComponent() {
     const fetchVendors = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`/api/vendors`, {
-          headers: { Authorization: `Bearer ${token}`,"X-Required-Permission": "vendor" },
-        });
-        if (res.ok) {
-          const data: Vendor[] = await res.json();
+          const data = await vendorsService.list<Vendor[]>('vendor.list');
 
           const grouped: GroupedVendor[] = Object.values(
             data.reduce((acc: Record<string, GroupedVendor>, v) => {
@@ -260,13 +257,8 @@ function RouteComponent() {
           });
 
           setVendors(grouped);
-        } else if(res.status == 403) {
-          navigate({to:"/no-access"})
-          return;
-        } else {
-          setVendors([]);
-        }
-      } catch {
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) navigate({to:"/no-access"})
         setVendors([]);
       } finally {
         setLoading(false);

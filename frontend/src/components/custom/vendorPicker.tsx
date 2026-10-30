@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectLabel, SelectItem } from '@/components/ui/select'
-import axios from "axios"
+import { vendorsService } from '@/api/vendors/vendors.service'
 
 interface Vendor {
   _id: string
@@ -16,13 +16,7 @@ interface VendorPickerProps {
 }
 
 export async function fetchVendors(location?: string): Promise<Vendor[]> {
-  const params = location ? `?location=${encodeURIComponent(location)}` : '';
-  const res = await axios.get(`/api/vendors${params}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
-  })
-  return res.data
+  return vendorsService.list<Vendor[]>('order-rec.create', location ? { location } : undefined, `Vendors loaded for Order Rec at ${location || 'selected site'}`, 'orderRec')
 }
 
 export function VendorPicker({ value, setVendor, location, disabled }: VendorPickerProps) {

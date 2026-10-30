@@ -52,6 +52,15 @@ vi.mock('@/api/purchase-orders/purchase-orders.service', () => ({
   purchaseOrdersService: { create: mockCreatePurchaseOrder },
 }))
 
+vi.mock('@/api/order-rec/order-rec.service', () => ({
+  orderRecService: {
+    addComment: (order: any, input: unknown) => mockAxiosPost(
+      `/api/order-rec/${order._id || order}/comments`, input, expect.anything(),
+    ).then((response: any) => response.data),
+    updateItem: vi.fn(), update: vi.fn(), updateNote: vi.fn(),
+  },
+}))
+
 import { syncPendingActions, triggerBackgroundSync } from '../utils'
 
 const poAction = (overrides: Record<string, any> = {}) => ({

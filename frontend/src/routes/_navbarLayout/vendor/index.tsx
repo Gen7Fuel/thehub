@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 // import { LocationPicker } from "@/components/custom/locationPicker";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import CreatableSelect from 'react-select/creatable';
+import { vendorsService } from '@/api/vendors/vendors.service';
+import { isApiError } from '@/api/core/errors';
 
 interface SupplyItem {
   name: string;
@@ -41,12 +43,7 @@ function RouteComponent() {
   useEffect(() => {
     const fetchSites = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/locations", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = await res.json();
+        const data = await vendorsService.listLocations('vendor.create');
         setSites(data);
       } catch (err) {
         console.error("Failed to fetch sites:", err);
@@ -77,15 +74,7 @@ function RouteComponent() {
     e.preventDefault();
     setSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch("/api/vendors", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-          "X-Required-Permission": "vendor",
-        },
-        body: JSON.stringify({
+      await vendorsService.create({
           name,
           sites: vendorSites, // send site + frequency info
           category,
@@ -95,10 +84,8 @@ function RouteComponent() {
           notes,
           order_placement_method: orderPlacementMethod,
           vendor_order_frequency: vendorOrderFrequency ? parseFloat(vendorOrderFrequency) : undefined,
-        }),
       });
-      if (res.ok) {
-        alert("New vendor has been added successfully!");
+      alert("New vendor has been added successfully!");
         setName("");
         setStationSupplies([]);
         setEmailOrder(false);
@@ -108,20 +95,13 @@ function RouteComponent() {
         setOrderPlacementMethod("Email");
         setVendorOrderFrequency("");
         setCategory("");
-      } else if (res.status === 409) {
-        // Handle duplicate vendor (name + location)
-        const data = await res.json();
-        alert(data.error || "Vendor with this name and location already exists. Try editing it instead.");
-      } else if (res.status === 403) {
+    } catch (err) {
+      if (isApiError(err) && err.status === 403) {
         navigate({ to: "/no-access" });
         return;
-      } else {
-        const data = await res.json();
-        alert(data.error || "Failed to add vendor. Please try again.");
       }
-    } catch (err) {
       console.error("Error submitting vendor:", err);
-      alert("An unexpected error occurred while adding vendor.");
+      alert(err instanceof Error ? err.message : "An unexpected error occurred while adding vendor.");
     } finally {
       setSaving(false);
     }
@@ -130,18 +110,7 @@ function RouteComponent() {
   useEffect(() => {
     const fetchVendors = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/vendors", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "X-Required-Permission": "vendor"
-          },
-        });
-        if (res.status == 403) {
-          navigate({ to: "/no-access" })
-        }
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = (await res.json()) as { name: string; category: string }[];
+        const data = await vendorsService.list<{ name: string; category: string }[]>('vendor.create');
 
         // Extract unique vendor names
         const vendors = Array.from(new Set(data.map((v: any) => v.name).filter(Boolean)));
@@ -152,6 +121,7 @@ function RouteComponent() {
         setUniqueCategories(categories);
 
       } catch (err) {
+        if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' })
         console.error("Failed to fetch vendors:", err);
       }
     };

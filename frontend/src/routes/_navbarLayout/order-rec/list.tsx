@@ -3,6 +3,8 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { getOrderRecStatusColor } from "@/lib/utils"
 import { useEffect, useState, useMemo } from 'react'
 import { useAuth } from "@/context/AuthContext";
+import { orderRecService } from '@/api/order-rec/order-rec.service'
+import { isApiError } from '@/api/core/errors'
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/list')({
   component: RouteComponent,
@@ -264,22 +266,10 @@ function RouteComponent() {
 // Loader fetch function
 async function fetchOrderRecs(site: string) {
   try {
-    const response = await fetch(`/api/order-rec?site=${site}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-        "X-Required-Permission": "orderRec",
-      },
-    });
-
-    if (response.status === 403) {
-      // Return a special flag instead of navigating
-      return { data: [], accessDenied: true };
-    }
-
-    const data = await response.json();
+    const data = await orderRecService.list<any[]>({ site });
     return { data, accessDenied: false };
   } catch (err) {
     console.error(err);
-    return { data: [], accessDenied: false };
+    return { data: [], accessDenied: isApiError(err) && err.status === 403 };
   }
 }

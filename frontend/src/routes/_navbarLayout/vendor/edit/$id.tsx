@@ -355,6 +355,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import CreatableSelect from 'react-select/creatable';
+import { vendorsService } from '@/api/vendors/vendors.service';
+import { isApiError } from '@/api/core/errors';
 
 interface SupplyItem { name: string; vin: string; upc: string; size: string; }
 interface VendorSite { site: string; frequency: number | ''; leadTime?: number | null; }
@@ -387,14 +389,7 @@ function RouteComponent() {
     const fetchVendor = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch(`/api/vendors/by-name/${id}`, { headers: { Authorization: `Bearer ${token}`, "X-Required-Permission": "vendor" } });
-        if (res.status == 403) {
-          navigate({ to: "/no-access" })
-          return;
-        }
-        if (!res.ok) return;
-        const data = await res.json();
+        const data = await vendorsService.getByName<any>(id);
         setName(data.name);
         setStationSupplies(data.station_supplies || []);
         setEmailOrder(!!data.email_order);
@@ -410,6 +405,8 @@ function RouteComponent() {
           leadTime: s.leadTime ?? null
         }));
         setVendorSites(sites);
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' })
       } finally { setLoading(false); }
     };
     fetchVendor();
@@ -419,10 +416,7 @@ function RouteComponent() {
   useEffect(() => {
     const fetchSites = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/locations", { headers: { Authorization: `Bearer ${token}` } });
-        if (!res.ok) throw new Error("Failed to fetch sites");
-        const data = await res.json();
+        const data = await vendorsService.listLocations('vendor.edit');
         setAllSites(data.map((s: any) => s.stationName));
       } catch (err) { console.error(err); }
     };
@@ -433,12 +427,7 @@ function RouteComponent() {
   useEffect(() => {
     const fetchCategories = async () => {
       try {
-        const token = localStorage.getItem("token");
-        const res = await fetch("/api/vendors", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-        const data = (await res.json()) as { name: string; category: string }[];
+        const data = await vendorsService.list<{ name: string; category: string }[]>('vendor.edit');
 
         // Extract unique categories
         const categories = Array.from(new Set(data.map((v: any) => v.category).filter(Boolean)));
@@ -470,11 +459,7 @@ function RouteComponent() {
     e.preventDefault();
     setSaving(true);
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`/api/vendors/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, "X-Required-Permission": "vendor" },
-        body: JSON.stringify({
+      await vendorsService.update(id, {
           name,
           station_supplies: stationSupplies.filter(s => s.name && s.upc && s.size),
           email_order: emailOrder,
@@ -483,13 +468,11 @@ function RouteComponent() {
           category,
           notes,
           sites: vendorSites.concat(selectedNewSites.map(s => ({ site: s, frequency: '' }))),
-        }),
       });
-      if (res.status == 403) {
-        navigate({ to: "/no-access" })
-      }
-      if (res.ok) navigate({ to: "/vendor/list" });
-      else alert("Failed to update vendor");
+      navigate({ to: "/vendor/list" });
+    } catch (error) {
+      if (isApiError(error) && error.status === 403) navigate({ to: '/no-access' })
+      else alert(error instanceof Error ? error.message : 'Failed to update vendor')
     } finally { setSaving(false); }
   };
 

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { VendorPicker } from '@/components/custom/vendorPicker'
 import { Button } from '@/components/ui/button'
+import { orderRecService } from '@/api/order-rec/order-rec.service'
 
 interface AssignedOrderRec { _id: string; vendor: string; filename: string }
 
@@ -20,18 +21,7 @@ export function OrderRecVendorAssignment({ orderRec, onAssigned }: {
     setSaving(true)
     setError('')
     try {
-      const response = await fetch(`/api/order-rec/${orderRec._id}/vendor`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
-          'Content-Type': 'application/json',
-          'X-Required-Permission': 'orderRec.workflow',
-        },
-        body: JSON.stringify({ vendor }),
-        signal: AbortSignal.timeout(15000),
-      })
-      const updated = await response.json()
-      if (!response.ok) throw new Error(updated.message || 'Unable to assign vendor.')
+      const updated = await orderRecService.assignVendor<AssignedOrderRec>(orderRec, vendor)
       await onAssigned(updated)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to assign vendor. Please refresh and try again.')

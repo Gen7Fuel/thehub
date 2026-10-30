@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Vendor = require('../models/Vendor');
+const { logChange } = require('../middleware/changeLogger');
+
+const requestSource = req => req.headers['x-action-source'] || 'vendor';
 
 // Create new vendor
 // router.post('/', async (req, res) => {
@@ -81,6 +84,14 @@ router.post('/', async (req, res) => {
         })
       )
     );
+
+    await logChange(req, {
+      action: 'create', resourceType: 'vendor', resourceIds: vendorDocs.map(v => v._id),
+      resourceStore: 'mongodb', success: true, statusCode: 201, source: requestSource(req),
+      message: `Vendor ${name} created for ${vendorDocs.map(v => v.location).join(', ')}`,
+      before: undefined, after: vendorDocs.map(v => v.toObject()),
+      bulk: { affectedCount: vendorDocs.length, truncated: false },
+    });
 
     res.status(201).json(vendorDocs); // return array of created vendors
   } catch (err) {
@@ -172,6 +183,7 @@ router.put('/:id', async (req, res) => {
 
     // Fetch all docs with old name
     const allVendorDocs = await Vendor.find({ name: oldName });
+    const before = allVendorDocs.map(v => v.toObject());
 
     for (const site of sites) {
       const existingOldDoc = allVendorDocs.find(v => v.location === site.site);
@@ -211,6 +223,15 @@ router.put('/:id', async (req, res) => {
         });
       }
     }
+
+    const updatedVendorDocs = await Vendor.find({ name: newName });
+    await logChange(req, {
+      action: 'update', resourceType: 'vendor', resourceIds: updatedVendorDocs.map(v => v._id),
+      resourceStore: 'mongodb', success: true, statusCode: 200, source: requestSource(req),
+      message: `Vendor ${oldName} updated to ${newName} for ${sites.map(s => s.site).join(', ') || 'no sites'}`,
+      before, after: updatedVendorDocs.map(v => v.toObject()),
+      bulk: { affectedCount: Math.max(before.length, updatedVendorDocs.length), truncated: false },
+    });
 
     res.json({ message: 'Vendor updated successfully.' });
   } catch (err) {

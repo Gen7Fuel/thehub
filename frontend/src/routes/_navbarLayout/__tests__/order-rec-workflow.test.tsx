@@ -10,6 +10,17 @@ vi.mock('@tanstack/react-router', async importOriginal => ({
 }))
 vi.mock('@/lib/websocket', () => ({ getSocket: () => socket }))
 vi.mock('@/context/AuthContext', () => ({ useAuth: () => ({ user: { access: { orderRec: { value: true, workflow: true } } } }) }))
+vi.mock('@/api/order-rec/order-rec.service', () => ({ orderRecService: {
+  workflow: async (week: string) => (await (await fetch(`/api/order-rec/workflow?week=${week}`)).json()),
+  assignVendor: async (order: any, vendor: string) => (await (await fetch(`/api/order-rec/${order._id}/vendor`, { method: 'PATCH', body: JSON.stringify({ vendor }) })).json()),
+  updateStatus: vi.fn(), addComment: vi.fn(),
+} }))
+vi.mock('@/api/vendors/vendors.service', () => ({ vendorsService: {
+  list: async () => (await (await fetch('/api/vendors')).json()),
+} }))
+vi.mock('@/api/locations/locations.api', () => ({ locationsApi: {
+  list: async () => (await (await fetch('/api/locations')).json()),
+} }))
 vi.mock('@/components/custom/vendorPicker', () => ({
   VendorPicker: ({ value, setVendor }: any) => <select aria-label="Pending vendor" value={value} onChange={event => setVendor(event.target.value)}><option value="">Select vendor</option><option value="vendor-1">Acme</option></select>,
 }))

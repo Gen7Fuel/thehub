@@ -30,6 +30,7 @@ describe('head-office vendor assignment (HTTP, isolated database dependencies)',
       },
       Vendor: { findOne: vi.fn(query => ({ lean: async () => query.location === 'Rankin' ? vendor : null })) },
       getPermissionMap: () => permissionMap,
+      recordChange: vi.fn(),
     }))
     server = createServer(app)
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
