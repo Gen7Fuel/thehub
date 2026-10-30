@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useCallback, useEffect, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
-import axios from 'axios'
 import { FileText, Upload, X, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,6 +12,8 @@ import {
 } from '@/components/ui/card'
 import { LocationPicker } from '@/components/custom/locationPicker'
 import { Toaster, toast } from 'sonner'
+import { planogramService } from '@/api/planogram/planogram.service'
+import { isApiError } from '@/api/core/errors'
 
 type UploadResult = {
   message: string
@@ -56,8 +57,6 @@ function RouteComponent() {
   const [parseFailure, setParseFailure] = useState<ParseFailure | null>(null)
   const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm | null>(null)
 
-  const token = () => localStorage.getItem('token') || ''
-
   // Show what's already on file so it's clear what an upload would replace.
   useEffect(() => {
     if (!site) {
@@ -65,14 +64,8 @@ function RouteComponent() {
       return
     }
     let alive = true
-    axios
-      .get(`/api/planogram?site=${encodeURIComponent(site)}`, {
-        headers: {
-          Authorization: `Bearer ${token()}`,
-          'X-Required-Permission': 'planogram.view',
-        },
-      })
-      .then((r) => alive && setExisting(r.data))
+    planogramService.get<ExistingPlanogram>(site)
+      .then((data) => alive && setExisting(data))
       .catch(() => alive && setExisting({ exists: false }))
     return () => {
       alive = false
@@ -110,29 +103,17 @@ function RouteComponent() {
     setPendingConfirm(null)
 
     try {
-      const form = new FormData()
-      form.append('file', file)
-
-      // site travels in the query string: multer only fills req.body from
-      // multipart fields that arrive before the file part.
-      const res = await axios.post<UploadResult>(
-        `/api/planogram?site=${encodeURIComponent(site)}${confirm ? '&confirm=true' : ''}`,
-        form,
-        {
-          headers: {
-            Authorization: `Bearer ${token()}`,
-            'X-Required-Permission': 'planogram.upload',
-          },
-        },
-      )
-
-      setResult(res.data)
+      const data = await planogramService.upload<UploadResult>(site, file, confirm)
+      setResult(data)
       setFile(null)
-      setExisting({ exists: true, gtinCount: res.data.gtinCount })
-      toast.success(`Planogram saved — ${res.data.gtinCount} GTINs for ${site}.`)
+      setExisting({ exists: true, gtinCount: data.gtinCount })
+      toast.success(`Planogram saved — ${data.gtinCount} GTINs for ${site}.`)
     } catch (err: any) {
-      const status = err?.response?.status
-      const data = err?.response?.data
+      // Api clients normally normalize errors to ApiError. The fallback keeps
+      // the page resilient for alternate clients/adapters that expose the
+      // conventional Axios response shape.
+      const status = isApiError(err) ? err.status : (err as any)?.response?.status
+      const data = isApiError(err) ? err.details as any : (err as any)?.response?.data
 
       if (status === 409 && data?.needsConfirmation) {
         setPendingConfirm({
