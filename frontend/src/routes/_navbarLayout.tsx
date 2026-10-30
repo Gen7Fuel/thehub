@@ -17,8 +17,8 @@ import NotificationPopup from "@/components/custom/NotificationPopup";
 import { OfflineBanner } from "@/components/custom/OfflineBanner";
 import FuelPriceTicker from "@/components/custom/FuelPriceTicker";
 import { getSocket } from "@/lib/websocket";
-import axios from "axios";
 import { fuelPricingService } from "@/api/fuel-pricing/fuel-pricing.service";
+import { notificationsService } from "@/api/notifications/notifications.service";
 import { Toaster } from "sonner";
 import {
   createFileRoute,
@@ -249,12 +249,7 @@ function RouteComponent() {
 
   const fetchUnreadSummary = useCallback(async () => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get("/api/notification/unread-summary", {
-        headers: { Authorization: `Bearer ${token || ""}` },
-      });
-
-      const count = res.data.unreadCount;
+      const { unreadCount: count } = await notificationsService.pollUnreadSummary();
       if (count > 0) {
         setUnreadCount(count);
         setShowPopup(true);
@@ -326,14 +321,7 @@ function RouteComponent() {
   const handleDismiss = useCallback(async () => {
     setShowPopup(false);
     try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        "/api/notification/dismiss-summary",
-        {},
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      await notificationsService.dismissSummary();
     } catch (err) {
       console.error("Error updating summary marker:", err);
     }

@@ -5,11 +5,11 @@ import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useRef, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import SignatureCanvas from 'react-signature-canvas';
-import { domain } from '@/lib/constants';
 import { Loader2 } from 'lucide-react';
-import axios from "axios"
 import { format } from 'date-fns'
 import { useAuth } from "@/context/AuthContext";
+import { purchaseOrdersService } from '@/api/purchase-orders/purchase-orders.service';
+import { isApiError } from '@/api/core/errors';
 
 export const Route = createFileRoute('/_navbarLayout/po/signature')({
   component: RouteComponent,
@@ -53,28 +53,12 @@ function RouteComponent() {
 
       const { filename } = await uploadBase64Image(receipt, "receipt.jpg");
 
-      const authHeaders = {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-        "X-Required-Permission": "po"
-      };
-
-      const authAxios = async (fn: () => Promise<any>) => {
-        try {
-          return await fn();
-        } catch (err: any) {
-          if (axios.isAxiosError(err) && err.response?.status === 403) {
-            navigate({ to: "/no-access" });
-          }
-          throw err;
-        }
-      };
-
       // Fleet upsert and change-notification are now handled by the backend POST /api/purchase-orders.
 
       const stationName = user?.location || 'Rankin';
 
-      const poResponse = await authAxios(() =>
-        axios.post(`${domain}/api/purchase-orders`, {
+      try {
+        return await purchaseOrdersService.create({
           source: 'PO',
           date: date ? format(date, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
           stationName,
@@ -90,14 +74,11 @@ function RouteComponent() {
           driverName,
           vehicleMakeModel: vehicleInfo,
           licensePlate,
-        }, { headers: authHeaders })
-      );
-
-      if (poResponse.status !== 200 && poResponse.status !== 201) {
-        throw new Error('Failed to create purchase order');
+        });
+      } catch (err) {
+        if (isApiError(err) && err.status === 403) navigate({ to: '/no-access' });
+        throw err;
       }
-
-      return poResponse.data;
     },
     onSuccess: () => {
       console.log('Purchase order created successfully');

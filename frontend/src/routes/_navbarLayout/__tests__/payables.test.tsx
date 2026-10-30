@@ -16,6 +16,10 @@ const {
   mockGetPendingActions,
   mockDeletePendingAction,
   mockTriggerBackgroundSync,
+  mockPayablesListLocations,
+  mockPayablesList,
+  mockPayablesUpdate,
+  mockPayablesListVendorOptions,
 } = vi.hoisted(() => {
   const mockStore = {
     payableVendorName: 'Shell Canada' as string,
@@ -58,6 +62,10 @@ const {
     mockGetPendingActions: vi.fn().mockResolvedValue([]),
     mockDeletePendingAction: vi.fn().mockResolvedValue(undefined),
     mockTriggerBackgroundSync: vi.fn().mockResolvedValue(undefined),
+    mockPayablesListLocations: vi.fn(),
+    mockPayablesList: vi.fn(),
+    mockPayablesUpdate: vi.fn().mockResolvedValue({}),
+    mockPayablesListVendorOptions: vi.fn().mockResolvedValue([]),
   }
 })
 
@@ -80,6 +88,17 @@ vi.mock('@/context/AuthContext', () => ({
 vi.mock('@/context/SiteContext', () => ({
   useSite: () => ({ selectedSite: '', setSelectedSite: vi.fn() }),
 }))
+
+vi.mock('@/api/payables/payables.service', () => ({
+  payablesService: {
+    listLocations: mockPayablesListLocations,
+    list: mockPayablesList,
+    update: mockPayablesUpdate,
+    listVendorOptions: mockPayablesListVendorOptions,
+  },
+}))
+
+vi.mock('@/api/core/errors', () => ({ isApiError: (error: any) => typeof error?.status === 'number' }))
 
 vi.mock('@/store', () => ({
   useFormStore: (selector: (state: any) => any) => selector(mockStore),
@@ -310,10 +329,8 @@ describe('Payable List — list.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto' },
     })
-    // First call: locations lookup, second call: payables fetch
-    mockAxiosGet
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-      .mockResolvedValueOnce({ data: samplePayables })
+    mockPayablesListLocations.mockResolvedValue([{ _id: 'loc-1', stationName: 'Rankin' }])
+    mockPayablesList.mockResolvedValue(samplePayables)
   })
 
   it('renders the "Payables List" heading', async () => {
@@ -332,10 +349,7 @@ describe('Payable List — list.tsx', () => {
   })
 
   it('shows "No payables found" when the response is empty', async () => {
-    mockAxiosGet
-      .mockReset()
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-      .mockResolvedValueOnce({ data: [] })
+    mockPayablesList.mockResolvedValueOnce([])
 
     renderWithSuspense(<PayableList />)
     await waitFor(() =>
@@ -358,9 +372,7 @@ describe('Payable List — list.tsx', () => {
   })
 
   it('navigates to /no-access when the fetch returns 403', async () => {
-    mockAxiosGet.mockReset().mockRejectedValue(
-      Object.assign(new Error('Forbidden'), { response: { status: 403 } })
-    )
+    mockPayablesListLocations.mockRejectedValueOnce({ status: 403 })
 
     renderWithSuspense(<PayableList />)
     await waitFor(() =>
@@ -369,10 +381,7 @@ describe('Payable List — list.tsx', () => {
   })
 
   it('displays payable.date directly when present, instead of deriving it from createdAt', async () => {
-    mockAxiosGet
-      .mockReset()
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-      .mockResolvedValueOnce({ data: [samplePayableWithDate] })
+    mockPayablesList.mockResolvedValueOnce([samplePayableWithDate])
 
     renderWithSuspense(<PayableList />)
     await waitFor(() =>
@@ -384,7 +393,7 @@ describe('Payable List — list.tsx', () => {
     mockUseAuth.mockReturnValue({
       user: { id: 'u1', location: 'Rankin', timezone: 'America/Toronto', access: { payables: { changeDate: true } } },
     })
-    mockAxiosPut.mockResolvedValue({ data: { ...samplePayables[0], date: '2026-03-15' } })
+    mockPayablesUpdate.mockResolvedValue({ ...samplePayables[0], date: '2026-03-15' })
 
     renderWithSuspense(<PayableList />)
     await waitFor(() =>
@@ -395,19 +404,16 @@ describe('Payable List — list.tsx', () => {
     fireEvent.click(screen.getByTestId('calendar'))
 
     await waitFor(() =>
-      expect(mockAxiosPut).toHaveBeenCalledWith(
-        expect.stringContaining('/api/payables/pay-1'),
+      expect(mockPayablesUpdate).toHaveBeenCalledWith(
+        samplePayables[0],
         { date: '2026-03-15' },
-        expect.any(Object)
+        'Payable date changed to 2026-03-15',
       )
     )
   })
 
   it('shows a queued payable from the offline sync queue as "Pending upload"', async () => {
-    mockAxiosGet
-      .mockReset()
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-      .mockResolvedValueOnce({ data: [] })
+    mockPayablesList.mockResolvedValueOnce([])
     mockGetPendingActions.mockResolvedValueOnce([
       {
         type: 'CREATE_PAYABLE',
@@ -431,10 +437,7 @@ describe('Payable List — list.tsx', () => {
   })
 
   it('shows a permanently-failed payable with red/error styling and its reason, separate from the pending count', async () => {
-    mockAxiosGet
-      .mockReset()
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-      .mockResolvedValueOnce({ data: [] })
+    mockPayablesList.mockResolvedValueOnce([])
     mockGetPendingActions.mockResolvedValueOnce([
       {
         type: 'CREATE_PAYABLE',
@@ -464,10 +467,7 @@ describe('Payable List — list.tsx', () => {
   })
 
   it('shows the one queued payable the background sync loop is actively uploading as "Sending…", distinct from "Pending upload"', async () => {
-    mockAxiosGet
-      .mockReset()
-      .mockResolvedValueOnce({ data: [{ _id: 'loc-1', stationName: 'Rankin' }] })
-      .mockResolvedValueOnce({ data: [] })
+    mockPayablesList.mockResolvedValueOnce([])
     mockGetPendingActions.mockResolvedValueOnce([
       {
         type: 'CREATE_PAYABLE',

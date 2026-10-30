@@ -10,6 +10,7 @@ import { HelpCircle, LogOut, Settings as SettingsIcon, LayoutDashboard, Home as 
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import { cn } from "@/lib/utils"
 import { NavbarMobileMenu, type MobileMenuItem, type MobileMenuState } from './navbarMobileMenu'
+import { notificationsService } from '@/api/notifications/notifications.service'
 import {
   Dialog,
   DialogContent,
@@ -58,12 +59,9 @@ export default function Navbar() {
   useEffect(() => {
     const fetchUnreadCount = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get('/api/notification', {
-          headers: { Authorization: `Bearer ${token || ''}` }
-        });
+        const result = await notificationsService.pollInbox<any[]>();
         // Count only unread items from the list
-        const count = res.data.filter((n: any) => !n.isRead && n.status !== 'archived').length;
+        const count = result.filter((n: any) => !n.isRead && n.status !== 'archived').length;
         setUnreadCount(count);
       } catch (err) {
         console.error("Error fetching unread count", err);
@@ -292,13 +290,8 @@ export default function Navbar() {
   // 1. Function to fetch the actual count from the server
   const refreshUnreadCount = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
-      // Note: I recommend a generic "all unread" count for the Bell icon 
-      // vs the "since last login" count for the Popup.
-      const res = await axios.get('/api/notification/unread-count', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUnreadCount(res.data.count);
+      const result = await notificationsService.pollUnreadCount();
+      setUnreadCount(result.count);
     } catch (err) {
       console.error("Error syncing count", err);
     }
