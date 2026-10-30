@@ -9,10 +9,10 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertTriangle, Info, PlusCircle, Search, Trash2, Image as ImageIcon } from 'lucide-react';
-import axios from 'axios';
 import { DatePicker } from '@/components/custom/datePicker';
 import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
 import { isApiError } from '@/api/core/errors';
+import { writeOffService } from '@/api/write-off/write-off.service';
 
 export const Route = createFileRoute('/_navbarLayout/write-off/create')({
   component: RouteComponent,
@@ -89,13 +89,10 @@ function RouteComponent() {
 
   const fetchWorkList = async () => {
     if (!currentSite) return;
-    const res = await axios.get('/api/write-off/work-list', {
-      params: { site: currentSite },
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
-    });
-    setWorkList(res.data.items || []);
-    setWorkListUpdatedAt(res.data.updatedAt || null);
-    setWorkListTimezone(res.data.siteTimezone || 'America/Toronto');
+    const data = await writeOffService.getWorkList<any>(currentSite);
+    setWorkList(data.items || []);
+    setWorkListUpdatedAt(data.updatedAt || null);
+    setWorkListTimezone(data.siteTimezone || 'America/Toronto');
   };
 
   const formattedWorkListUpdatedAt = workListUpdatedAt
@@ -196,13 +193,11 @@ function RouteComponent() {
       };
 
     try {
-      const res = await axios.post('/api/write-off/work-list', { site: currentSite, item }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
-      });
-      setWorkList(res.data.items || []);
+      const data = await writeOffService.addWorkListItem<any>(currentSite, item);
+      setWorkList(data.items || []);
       await fetchWorkList();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Unable to add item to the work list.');
+      alert(isApiError(error) ? (error.details as any)?.error || error.message : error.response?.data?.error || 'Unable to add item to the work list.');
       return;
     }
 
@@ -214,28 +209,20 @@ function RouteComponent() {
   };
 
   const updateWorkListItem = async (item: WriteOffItem, field: string, value: any) => {
-    const res = await axios.put(`/api/write-off/work-list/${(item as any)._id}`, { site: currentSite, [field]: value }, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
-    });
-    setWorkList(res.data.items || []);
+    const data = await writeOffService.updateWorkListItem<any>(currentSite, String((item as any)._id), field, value);
+    setWorkList(data.items || []);
     await fetchWorkList();
   };
 
   const removeWorkListItem = async (item: WriteOffItem) => {
-    const res = await axios.delete(`/api/write-off/work-list/${(item as any)._id}`, {
-      params: { site: currentSite },
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
-    });
-    setWorkList(res.data.items || []);
+    const data = await writeOffService.removeWorkListItem<any>(currentSite, String((item as any)._id));
+    setWorkList(data.items || []);
     await fetchWorkList();
   };
 
   const clearWorkList = async () => {
-    const res = await axios.delete('/api/write-off/work-list', {
-      params: { site: currentSite },
-      headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'X-Required-Permission': 'writeOff.create' },
-    });
-    setWorkList(res.data.items || []);
+    const data = await writeOffService.clearWorkList<any>(currentSite);
+    setWorkList(data.items || []);
     await fetchWorkList();
   };
 
@@ -244,26 +231,21 @@ function RouteComponent() {
     if (!window.confirm("Are you sure you want to submit this write-off? The list cannot be edited after submission and the page will be reloaded.")) return;
 
     try {
-      const res = await axios.post('/api/write-off', {
+      const data = await writeOffService.create<any>({
         site: currentSite,
         submittedBy: user?.email,
         items: workList, // Backend will split these
         timestamp: Date.now()
-      }, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          "X-Required-Permission": "writeOff.create"
-        }
       });
 
       // res.data.lists will be an array like ["WO-SITE-123", "ATE-SITE-123"]
-      const listNames = res.data.lists.join(" and ");
+      const listNames = data.lists.join(" and ");
       alert(`Successfully created: ${listNames}`);
 
       // Optional: navigate to the dashboard to see the new lists
       navigate({ to: '/write-off', search: { site: currentSite } });
     } catch (e: any) {
-      if (e.response?.status === 403) navigate({ to: "/no-access" });
+      if ((isApiError(e) && e.status === 403) || e.response?.status === 403) navigate({ to: "/no-access" });
       alert("Submission failed. Please try again.");
     }
   };

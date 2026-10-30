@@ -3,20 +3,13 @@ import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { SitePicker } from '@/components/custom/sitePicker'
 import { useAuth } from '@/context/AuthContext'
+import { sftpService } from '@/api/sftp/sftp.service'
+import type { SftpFile } from '@/api/sftp/sftp.api'
 
 type sftpSearch = {
   site: string
   shift?: string
   type?: 'sft' | 'br'
-}
-
-type sftpFile = {
-  name: string
-  size: number
-  modifyTime: number
-  accessTime: number
-  type: string
-  path: string
 }
 
 type sftpMetrics = {
@@ -51,23 +44,16 @@ export const Route = createFileRoute('/_navbarLayout/sftp')({
   }),
   loaderDeps: ({ search: { site, type } }) => ({ site, type }),
   loader: async ({ deps: { site, type } }) => {
-    if (!site) return { files: [] as sftpFile[] }
-    const res = await fetch(
-      `/api/sftp/receive?site=${encodeURIComponent(site)}&type=${type}`,
-      {
-        headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
-      },
-    )
-    if (!res.ok) throw new Error(await res.text().catch(() => 'Failed to load files'))
-    const { files } = await res.json()
-    return { files }
+    if (!site) return { files: [] as SftpFile[] }
+    const fileType: 'sft' | 'br' = type === 'br' ? 'br' : 'sft'
+    return sftpService.listFiles<{ files: SftpFile[] }>(site, fileType)
   },
 })
 
 function RouteComponent() {
   const { user } = useAuth()
   const canViewJsonApiResponse = Boolean(user?.access?.viewJsonApiResponse)
-  const { files } = Route.useLoaderData() as { files: sftpFile[] }
+  const { files } = Route.useLoaderData() as { files: SftpFile[] }
   const [content, setContent] = useState<string | null>(null)
   const [metrics, setMetrics] = useState<sftpMetrics| null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
@@ -91,21 +77,7 @@ function RouteComponent() {
       const attempts = 3
       for (let i = 0; i < attempts; i++) {
         try {
-          const r = await fetch(
-            `/api/sftp/receive/${shift}?site=${encodeURIComponent(site)}&type=${type}`,
-            { signal: controller.signal,
-              headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
-            }
-          )
-          // const r = await fetch(
-          //   `https://bridge.gen7fuel.com/api/sftp/receive/${shift}?site=${encodeURIComponent(site)}&type=${type}`,
-          //   {
-          //     headers: { Authorization: `Bearer ${localStorage.getItem(`token`) || ``}` },
-          //     signal: controller.signal,
-          //   }
-          // )
-          if (!r.ok) throw new Error(`HTTP ${r.status}`)
-          const d = await r.json()
+          const d = await sftpService.getFile<{ content?: string; metrics?: sftpMetrics }>(shift, site, type, controller.signal)
           if (!alive) return
           setContent(d.content ?? '')
           // Only SFT has metrics for now
@@ -114,7 +86,8 @@ function RouteComponent() {
           return
         } catch (e) {
           if (!alive || (e as any).name === 'AbortError') return
-          if (i < attempts - 1) await new Promise(res => setTimeout(res, 200 * Math.pow(2, i)))
+          const status = (e as { status?: number }).status
+          if (status !== 401 && status !== 403 && i < attempts - 1) await new Promise(res => setTimeout(res, 200 * Math.pow(2, i)))
           else {
             setContentError('Failed to load file content')
             setLoadingContent(false)
@@ -167,7 +140,7 @@ function RouteComponent() {
 
   const items = sortedFiles
     .map(f => ({ file: f, shift: extractShift(f.name) }))
-    .filter(x => x.shift) as { file: sftpFile; shift: string }[]
+    .filter(x => x.shift) as { file: SftpFile; shift: string }[]
 
   return (
     <div className="container mx-auto pt-5 p-6 max-w-7xl space-y-6">

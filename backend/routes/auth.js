@@ -312,6 +312,24 @@ router.post('/change-password-self', auth, async (req, res) => {
       });
     }
 
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'user-credential',
+      resourceId: user._id,
+      success: true,
+      statusCode: 200,
+      source: 'settings.reset-password',
+      resourceLabel: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+      message: 'Account credentials updated by the account owner',
+      changes: [{
+        operation: 'replace',
+        path: 'credentials.password',
+        before: '[REDACTED]',
+        after: '[REDACTED]',
+      }],
+      changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+    });
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Server error during password reset.' });
