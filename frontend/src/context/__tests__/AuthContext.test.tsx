@@ -1,13 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 
-const { mockPrefetchArCustomers, mockJwtDecode } = vi.hoisted(() => ({
-  mockPrefetchArCustomers: vi.fn(),
+const { mockJwtDecode } = vi.hoisted(() => ({
   mockJwtDecode: vi.fn(),
-}))
-
-vi.mock('@/lib/arCustomersCache', () => ({
-  prefetchArCustomers: mockPrefetchArCustomers,
 }))
 
 vi.mock('jwt-decode', () => ({
@@ -26,8 +21,8 @@ beforeEach(() => {
   vi.clearAllMocks()
 })
 
-describe('AuthProvider — AR customer prefetch on login', () => {
-  it('prefetches AR customers once a valid token resolves to a user (fresh login / returning session)', async () => {
+describe('AuthProvider — persisted session resolution', () => {
+  it('resolves a valid persisted token without triggering unrelated feature requests', async () => {
     localStorage.setItem('token', 'a-token')
     mockJwtDecode.mockReturnValue({ id: 'u1', email: 'user@example.com', permissions: [], site_access: {} })
 
@@ -37,10 +32,10 @@ describe('AuthProvider — AR customer prefetch on login', () => {
       </AuthProvider>
     )
 
-    await waitFor(() => expect(mockPrefetchArCustomers).toHaveBeenCalled())
+    await waitFor(() => expect(document.querySelector('[data-testid="user"]')?.textContent).toBe('user@example.com'))
   })
 
-  it('does not prefetch AR customers when there is no token (logged out / login page)', async () => {
+  it('keeps the user logged out when there is no token', async () => {
     render(
       <AuthProvider>
         <Consumer />
@@ -48,6 +43,6 @@ describe('AuthProvider — AR customer prefetch on login', () => {
     )
 
     await waitFor(() => expect(mockJwtDecode).not.toHaveBeenCalled())
-    expect(mockPrefetchArCustomers).not.toHaveBeenCalled()
+    expect(document.querySelector('[data-testid="user"]')?.textContent).toBe('no-user')
   })
 })

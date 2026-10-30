@@ -39,7 +39,7 @@ export const authService = {
 
   login<T = { token: string }>(email: string, password: string) {
     return authApi.login<T>(email, password, {
-      ...context('login.page', 'read', 'user', `Login requested for ${email}`),
+      ...context('login.page', 'login', 'user', `Login requested for ${email}`),
       auth: false,
     })
   },
@@ -51,12 +51,23 @@ export const authService = {
     })
   },
 
+  refreshToken<T = { token: string }>(userId: string) {
+    return authApi.refreshToken<T>(userId, {
+      ...context('navbar.session', 'read', 'user-session', 'Authenticated session token refresh requested'),
+      auth: false,
+    })
+  },
+
+  getMaintenanceStatus<T = unknown>() {
+    return authApi.getMaintenanceStatus<T>({ auth: false })
+  },
+
   logout(reason: 'manual' | 'expired' = 'manual') {
     const message = reason === 'expired'
       ? 'Expired user session logout requested by the application shell'
       : 'User logout requested from the navigation bar'
     return authApi.logout(
-      context('navbar.session', 'update', 'user', message),
+      context('navbar.session', 'logout', 'user', message),
     )
   },
 

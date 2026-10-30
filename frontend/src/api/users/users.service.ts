@@ -7,6 +7,7 @@ import type { Role } from '@/api/roles/roles.types'
 import type { Site } from '@/api/locations/locations.types'
 import type { SettingsUser } from './users.types'
 import { usersApi as usersResourceApi } from './users.api'
+import type { PermissionUser, PermissionUserChange } from './users.api'
 
 const config = (action: 'read' | 'update', resourceType: string, message: string) => actionOptions('settings', 'settings.users', action, resourceType, message)
 
@@ -46,5 +47,18 @@ export const usersApi = {
   },
   async logoutAll(): Promise<void> {
     await usersResourceApi.logoutMultiple(config('update', 'user-session', 'Administrative logout requested for all non-admin users'))
+  },
+  async listByPermission(permId: number, permissionName: string): Promise<PermissionUser[]> {
+    return usersResourceApi.listByPermission(
+      permId,
+      config('read', 'user-permission', `Users viewed for permission ${permissionName}`),
+    )
+  },
+  async updateByPermission(permId: number, permissionName: string, changes: PermissionUserChange[]): Promise<void> {
+    await usersResourceApi.updateByPermission(
+      permId,
+      changes,
+      config('update', 'user-permission', `Permission ${permissionName} assignment update requested for ${changes.length} user${changes.length === 1 ? '' : 's'}`),
+    )
   },
 }

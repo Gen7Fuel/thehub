@@ -1,7 +1,7 @@
 const { randomUUID } = require('crypto');
 const { getClientIp } = require('../utils/clientIp');
 
-const ACTIONS = new Set(['create', 'read', 'update', 'delete', 'approve', 'reject']);
+const ACTIONS = new Set(['create', 'read', 'update', 'delete', 'approve', 'reject', 'login', 'logout']);
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9._-]+$/;
 const METHOD_ACTIONS = {
   GET: 'read',

@@ -249,6 +249,7 @@ function RouteComponent() {
         onSuccess={handlePasswordSuccess}
         onCancel={handlePasswordCancel}
         userLocation={user?.location || "Rankin"}
+        source="cycle-count.inventory"
       />
     )
   }

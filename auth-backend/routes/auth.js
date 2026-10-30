@@ -70,6 +70,13 @@ router.post("/identify", async (req, res) => {
     const user = await User.findOne({
       email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i')
     }).populate("role");
+    if (user) {
+      res.locals.authAuditActor = {
+        userId: user._id,
+        username: user.email,
+        locationName: user.stationName,
+      };
+    }
 
     // Check for maintenance status
     const ongoing = await Maintenance.findOne({ status: "ongoing" });
@@ -205,6 +212,11 @@ router.post("/register", async (req, res) => {
       role: null,             // no role assigned yet
       is_active: true,        // active by default
     });
+    res.locals.authAuditActor = {
+      userId: user._id,
+      username: 'unknown',
+      locationName: stationName,
+    };
 
     logAuthChange(req, {
       action: 'create',
@@ -289,6 +301,11 @@ router.post("/login", async (req, res) => {
     // Case-insensitive lookup by email
     const user = await User.findOne({ email: new RegExp(`^${escapeRegExp(inputEmail)}$`, 'i') });
     if (!user) return res.status(400).json({ message: "Invalid credentials" });
+    res.locals.authAuditActor = {
+      userId: user._id,
+      username: user.email,
+      locationName: user.stationName,
+    };
 
     // Check if user is inactive
     if (!user.is_active) {
@@ -423,6 +440,11 @@ router.post("/refresh-token", async (req, res) => {
     // Fetch the user from DB
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
+    res.locals.authAuditActor = {
+      userId: user._id,
+      username: user.email,
+      locationName: user.stationName,
+    };
 
     // Rebuild permissions / timezone / access if needed
     // const mergedPermissions = await getMergedPermissions(user);

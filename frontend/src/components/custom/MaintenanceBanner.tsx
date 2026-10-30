@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
 import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
+import { maintenanceApi as maintenanceResourceApi } from '@/api/maintenance/maintenance.api'
+import { authService } from '@/api/auth/auth.service'
 import { ShieldCheck, AlertTriangle, Clock, CheckCircle2, XCircle } from "lucide-react";
 
 interface MaintenanceBannerProps {
@@ -146,9 +147,7 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
 
     try {
       // 1. Primary Attempt: Query Main Backend
-      const { data } = await axios.get('/api/maintenance', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const data = await maintenanceResourceApi.list<any>({});
 
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
@@ -174,7 +173,7 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
       const sorted = potentialMaintenances.sort((a: any, b: any) => {
         const priority: Record<string, number> = { ongoing: 1, scheduled: 2, completed: 3, cancelled: 4 };
         if (priority[a.status] !== priority[b.status]) return priority[a.status] - priority[b.status];
-        return new Date(a.scheduleStart).getTime() - new Date(a.scheduleStart).getTime();
+        return new Date(a.scheduleStart).getTime() - new Date(b.scheduleStart).getTime();
       });
 
       const topPriority = sorted[0] || null;
@@ -194,9 +193,7 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
 
       try {
         // 2. Fallback Attempt: Query Auth-Backend Endpoint
-        const { data: authData } = await axios.get('/login-auth/maintenance-status', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const authData = await authService.getMaintenanceStatus<any>();
 
         if (authData.active && authData.maintenance) {
           applyLockdownLogic(authData.maintenance);

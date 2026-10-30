@@ -5,6 +5,8 @@ export type ActionType =
   | 'delete'
   | 'approve'
   | 'reject'
+  | 'login'
+  | 'logout'
 
 export interface ActionContext {
   action: ActionType

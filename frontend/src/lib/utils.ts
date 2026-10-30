@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { domain } from "@/lib/constants"
 import { jwtDecode } from "jwt-decode"
 import axios from "axios"
 import { getPendingActionEntries, deletePendingAction, updatePendingAction, saveOrderRec } from "@/lib/orderRecIndexedDB"
@@ -200,85 +199,6 @@ export function camelCaseToTitleCase(str: string): string {
 }
 
 
-/**
- * Send email via backend API
- * @param {string} to - Recipient email address
- * @param {string} subject - Email subject
- * @param {string} content - Email content (can be HTML or plain text)
- * @param {boolean} isHtml - Whether content is HTML (default: false)
- * @returns {Promise} - Promise resolving to response
- */
-export async function sendEmail({
-  to,
-  cc,
-  subject,
-  content,
-  isHtml = false
-}: {
-  to: string;
-  cc: string[];
-  subject: string;
-  content: string;
-  isHtml?: boolean;
-}) {
-  try {
-    const response = await axios.post(`${domain}/api/send-email`, {
-      to,
-      cc,
-      subject,
-      text: isHtml ? '' : content,
-      html: isHtml ? content : ''
-    }, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-    console.log('Email sent successfully:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error sending email:', error);
-    throw error;
-  }
-}
-
-/**
- * Send bulk emails via backend API
- * @param {string[]} recipients - Array of recipient email addresses
- * @param {string} subject - Email subject
- * @param {string} content - Email content
- * @param {boolean} isHtml - Whether content is HTML (default: false)
- * @returns {Promise} - Promise resolving to response
- */
-export async function sendBulkEmail({
-  recipients,
-  subject,
-  content,
-  isHtml = false
-}: {
-  recipients: string[];
-  subject: string;
-  content: string;
-  isHtml?: boolean;
-}) {
-  try {
-    const response = await axios.post(`${domain}/api/send-bulk-email`, {
-      recipients,
-      subject,
-      text: isHtml ? '' : content,
-      html: isHtml ? content : ''
-    }, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-    console.log('Bulk emails sent successfully:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error sending bulk emails:', error);
-    throw error;
-  }
-}
-
 const user = localStorage.getItem('TimeZone')
 /**
  * Converts a date string from the user's timezone to UTC.
@@ -328,40 +248,6 @@ export function isTokenExpired(token: string | null): boolean {
     return payload.exp * 1000 < Date.now();
   } catch {
     return true;
-  }
-}
-
-/**
- * Fetches vendor name by vendor ID.
- * @param {string} vendorId - The vendor's MongoDB ObjectId.
- * @returns {Promise<string | null>} - The vendor name, or null if not found.
- */
-export async function getVendorNameById(vendorId: string): Promise<string | null> {
-  try {
-    const response = await axios.get(`/api/vendors/${vendorId}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    return response.data?.name ?? null;
-  } catch (error) {
-    console.error('Error fetching vendor name:', error);
-    return null;
-  }
-}
-
-// get csoCode by station name
-export async function getCsoCodeByStationName(stationName: string): Promise<string | null> {
-  try {
-    const response = await axios.get(`/api/locations/name/${encodeURIComponent(stationName)}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    return response.data?.csoCode ?? null;
-  } catch (error) {
-    console.error('Error fetching CSO code:', error);
-    return null;
   }
 }
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { isApiError } from '@/api/core/errors'
 import { fuelStatisticsService } from '@/api/fuel-management/fuel-statistics.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { cn } from "@/lib/utils";
@@ -251,8 +251,8 @@ function FuelStatisticsComponent() {
     }
   };
 
-  const handleAxiosErrorCheck = (err: unknown) => {
-    if (axios.isAxiosError(err) && err.response?.status === 403) {
+  const handleApiErrorCheck = (err: unknown) => {
+    if (isApiError(err) && err.status === 403) {
       navigate({ to: "/no-access" });
       return true;
     }
@@ -266,7 +266,7 @@ function FuelStatisticsComponent() {
       const data = await fuelStationTanksService
         .listLocations<any[]>('fuel-management.statistics', 'Fuel statistics stations viewed', 'fuelManagement.statistics')
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) return [];
+          if (handleApiErrorCheck(err)) return [];
           throw err;
         });
       return data;
@@ -293,7 +293,7 @@ function FuelStatisticsComponent() {
       const data = await fuelStationTanksService
         .syncAllVolumes<any[]>('fuel-management.statistics', 'Current fuel tank volumes viewed for statistics', 'fuelManagement.statistics')
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) return [];
+          if (handleApiErrorCheck(err)) return [];
           throw err;
         });
       return data || [];
@@ -333,7 +333,7 @@ function FuelStatisticsComponent() {
       const data = await fuelStatisticsService
         .inventoryCoverage<any>(activeTankCoveragePairs, 14)
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) {
+          if (handleApiErrorCheck(err)) {
             return { data: { byGrade: {}, forecastDays: [] } };
           }
           throw err;
@@ -353,7 +353,7 @@ function FuelStatisticsComponent() {
         const data = await fuelStatisticsService
           .pipelineSummary<any>(selectedStationIds, fromMonth, toMonth)
           .catch((err) => {
-            if (handleAxiosErrorCheck(err)) return { data: [] };
+            if (handleApiErrorCheck(err)) return { data: [] };
             throw err;
           });
         return data?.data || [];
@@ -372,7 +372,7 @@ function FuelStatisticsComponent() {
       const data = await fuelStatisticsService
         .salesSummary<any>(selectedStationIds, fromMonth, toMonth)
         .catch((err) => {
-          if (handleAxiosErrorCheck(err)) return { data: [] };
+          if (handleApiErrorCheck(err)) return { data: [] };
           throw err;
         });
       return data?.data || [];
