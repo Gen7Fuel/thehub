@@ -51,6 +51,15 @@ export const authService = {
     })
   },
 
+  logout(reason: 'manual' | 'expired' = 'manual') {
+    const message = reason === 'expired'
+      ? 'Expired user session logout requested by the application shell'
+      : 'User logout requested from the navigation bar'
+    return authApi.logout(
+      context('navbar.session', 'update', 'user', message),
+    )
+  },
+
   listRegistrationLocations<T = unknown[]>() {
     return locationsApi.list({
       auth: false,

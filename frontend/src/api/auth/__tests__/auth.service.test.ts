@@ -84,4 +84,17 @@ describe('authService request metadata', () => {
     expect(config.headers['X-Action-Source']).toBe('register.page')
     expect(JSON.stringify(config.headers)).not.toContain('secret-password')
   })
+
+  it('annotates navbar logout without exposing the bearer token in metadata', async () => {
+    await authService.logout('manual')
+
+    expect(mocks.post).toHaveBeenCalledWith('/auth/logout', {}, expect.objectContaining({
+      headers: expect.objectContaining({
+        'X-Action-Type': 'update',
+        'X-Action-Source': 'navbar.session',
+        'X-Action-Resource': 'user',
+        'X-Action-Message': 'User logout requested from the navigation bar',
+      }),
+    }))
+  })
 })

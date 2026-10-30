@@ -11,6 +11,9 @@ export const authApi = {
   async register<T = unknown>(input: { email: string; password: string; firstName: string; lastName: string; stationName: string }, options: RequestOptions): Promise<T> {
     return (await authClient.post('/register', input, requestConfig(options))).data
   },
+  async logout(options: RequestOptions): Promise<void> {
+    await apiClient.post('/auth/logout', {}, requestConfig(options))
+  },
   async changePasswordSelf<T = { success: boolean }>(currentPassword: string, newPassword: string, options: RequestOptions): Promise<T> {
     return (await apiClient.post('/auth/change-password-self', { currentPassword, newPassword }, requestConfig(options))).data
   },

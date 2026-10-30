@@ -310,11 +310,30 @@ function getInitials(firstName, lastName) {
 router.post("/logout", auth, async (req, res) => {
   try {
     const userId = req.user.id; // from JWT middleware
-    console.log('user id:', userId);
 
-    await User.findByIdAndUpdate(userId, {
+    const userBeforeLogout = await User.findByIdAndUpdate(userId, {
       is_loggedIn: false
     }, { timestamps: false });
+
+    if (userBeforeLogout) {
+      await logChange(req, {
+        action: 'update',
+        resourceType: 'user',
+        resourceId: userBeforeLogout._id,
+        resourceStore: 'mongodb',
+        success: true,
+        statusCode: 200,
+        source: req.headers['x-action-source'] || 'navbar.session',
+        message: `User logged out: ${userBeforeLogout.email}`,
+        changes: [{
+          operation: 'replace',
+          path: 'is_loggedIn',
+          before: !!userBeforeLogout.is_loggedIn,
+          after: false,
+        }],
+        changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+      });
+    }
 
     res.json({ message: "Logged out successfully" });
   } catch (err) {

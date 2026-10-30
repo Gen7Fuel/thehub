@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+const { mockListLocations } = vi.hoisted(() => ({
+  mockListLocations: vi.fn(),
+}))
+
+vi.mock('@/api/locations/locations.api', () => ({
+  locationsApi: { list: mockListLocations },
+}))
+
 import { saveCachedLocations, getCachedLocations, prefetchLocations } from '../locationsCache'
 
 const sampleLocations = [
@@ -9,6 +18,7 @@ const sampleLocations = [
 beforeEach(() => {
   localStorage.clear()
   vi.restoreAllMocks()
+  mockListLocations.mockReset()
 })
 
 // ─── saveCachedLocations / getCachedLocations ─────────────────────────────────
@@ -43,14 +53,11 @@ describe('saveCachedLocations / getCachedLocations', () => {
 // ─── prefetchLocations ─────────────────────────────────────────────────────────
 
 describe('prefetchLocations', () => {
-  it('caches the response body on a successful fetch', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(sampleLocations),
-    }))
+  it('caches the response body on a successful API request', async () => {
+    mockListLocations.mockResolvedValue(sampleLocations)
 
     prefetchLocations()
-    // fetch + .then chain resolve on microtasks — flush them
+    // API promise + .then chain resolve on microtasks — flush them
     await new Promise((r) => setTimeout(r, 0))
 
     expect(getCachedLocations()).toEqual(sampleLocations)
@@ -58,7 +65,7 @@ describe('prefetchLocations', () => {
 
   it('leaves any existing cache untouched when the fetch fails (offline)', async () => {
     saveCachedLocations(sampleLocations)
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network Error')))
+    mockListLocations.mockRejectedValue(new Error('Network Error'))
 
     prefetchLocations()
     await new Promise((r) => setTimeout(r, 0))
@@ -66,8 +73,8 @@ describe('prefetchLocations', () => {
     expect(getCachedLocations()).toEqual(sampleLocations)
   })
 
-  it('does not throw when the response is not ok', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+  it('does not throw when the API request fails', async () => {
+    mockListLocations.mockRejectedValue(new Error('Request failed'))
 
     expect(() => prefetchLocations()).not.toThrow()
     await new Promise((r) => setTimeout(r, 0))
@@ -78,14 +85,29 @@ describe('prefetchLocations', () => {
   // captive portal) can hang indefinitely instead of failing, so this
   // fire-and-forget prefetch would never get around to warming the cache at
   // all for that session.
-  it('bounds the request with an abort signal, so a hung connection cannot block this indefinitely', () => {
-    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
-    vi.stubGlobal('fetch', fetchSpy)
+  it('bounds the request with an abort signal, so a hung connection cannot block this indefinitely', async () => {
+    mockListLocations.mockResolvedValue([])
 
     prefetchLocations()
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/locations', expect.objectContaining({
+    expect(mockListLocations).toHaveBeenCalledWith(expect.objectContaining({
+      auth: false,
       signal: expect.any(AbortSignal),
     }))
+    await new Promise((r) => setTimeout(r, 0))
+  })
+
+  it('deduplicates overlapping shell and StrictMode prefetches', async () => {
+    let resolveRequest!: (value: typeof sampleLocations) => void
+    mockListLocations.mockReturnValue(new Promise((resolve) => {
+      resolveRequest = resolve
+    }))
+
+    prefetchLocations()
+    prefetchLocations()
+
+    expect(mockListLocations).toHaveBeenCalledTimes(1)
+    resolveRequest(sampleLocations)
+    await new Promise((r) => setTimeout(r, 0))
   })
 })

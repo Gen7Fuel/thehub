@@ -35,6 +35,19 @@ describe('Self-service password change logging contract', () => {
   });
 });
 
+describe('Navbar logout logging contract', () => {
+  it('keeps the route active and records the user state mutation', () => {
+    const start = activeMainAuthRoute.indexOf('router.post("/logout"');
+    const end = activeMainAuthRoute.indexOf("router.post('/change-password-self'", start);
+    const source = activeMainAuthRoute.slice(start, end);
+
+    expect(source).toContain('await logChange(req');
+    expect(source).toContain("source: req.headers['x-action-source'] || 'navbar.session'");
+    expect(source).toContain("path: 'is_loggedIn'");
+    expect(source).toContain('after: false');
+  });
+});
+
 describe('Public authentication logging contract', () => {
   it('retires public auth routes from the main backend', () => {
     expect(route).toContain('RETIRED: public identity lookup moved to auth-backend');
