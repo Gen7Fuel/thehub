@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
+import { sageService } from '@/api/sage/sage.service'
 
 export const Route = createFileRoute('/_navbarLayout/callback')({
   component: CallbackPage,
@@ -17,19 +18,11 @@ function CallbackPage() {
       setError('No authorization code found in URL.')
       return
     }
+    const authorizationCode = code
 
     async function exchangeCode() {
       try {
-        const resp = await fetch('/api/sage/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code }),
-        })
-        const data = await resp.json()
-        if (!resp.ok) {
-          setError(data.error ? JSON.stringify(data.error) : 'Token exchange failed')
-          return
-        }
+        const data = await sageService.exchangeToken<{ access_token?: string; error?: unknown }>(authorizationCode)
         const accessToken = data.access_token
         if (!accessToken) {
           setError('No access token found in response.')

@@ -38,4 +38,7 @@ export const cashSummaryApi = {
   async getOverShort<T = unknown>(query: Query, options: RequestOptions): Promise<T> {
     return (await apiClient.get('/cash-summary/over-short', { ...requestConfig(options), params: query })).data
   },
+  async getTaxExemptReport<T = unknown>(query: Query, options: RequestOptions): Promise<T> {
+    return (await apiClient.get('/cash-summary/tax-exempt-report', { ...requestConfig(options), params: query })).data
+  },
 }

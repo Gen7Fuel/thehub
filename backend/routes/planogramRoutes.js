@@ -5,6 +5,7 @@ const multer = require('multer')
 const Planogram = require('../models/Planogram')
 const OrderRec = require('../models/OrderRec')
 const Location = require('../models/Location')
+const { logChange } = require('../middleware/changeLogger')
 const {
   parsePlanogramWorkbook,
   normalizeGtin,
@@ -121,6 +122,14 @@ router.post('/', upload.single('file'), async (req, res) => {
         throw e
       }
     }
+
+    await logChange(req, {
+      action: existing ? 'update' : 'create', resourceType: 'planogram', resourceId: doc._id,
+      resourceStore: 'mongodb', success: true, statusCode: 201,
+      source: req.headers['x-action-source'] || 'planogram',
+      message: `Planogram for ${site} replaced using ${req.file.originalname || 'uploaded workbook'} — ${previousCount} to ${doc.gtinCount} GTINs`,
+      before: existing || undefined, after: typeof doc.toObject === 'function' ? doc.toObject() : doc,
+    })
 
     res.status(201).json({
       message: `Planogram replaced for ${site}`,
@@ -239,9 +248,19 @@ router.post('/recheck/:orderRecId', async (req, res) => {
       // changed so a concurrent item toggle isn't clobbered, and needs no
       // markModified() on the nested categories array.
       await OrderRec.updateOne({ _id: orderRec._id }, { $set })
+      const updatedOrderRec = await OrderRec.findById(orderRec._id).lean()
+
+      await logChange(req, {
+        action: 'update', resourceType: 'order-rec', resourceId: orderRec._id,
+        resourceStore: 'mongodb', success: true, statusCode: 200,
+        source: req.headers['x-action-source'] || 'planogram.recheck',
+        message: `Order Rec planogram flags rechecked for ${orderRec.site} — ${changed} items changed, ${flagged} flagged`,
+        before: orderRec, after: updatedOrderRec,
+        bulk: { affectedCount: changed, truncated: changed > 100 },
+      })
 
       const io = req.app.get('io')
-      if (io) io.emit('orderUpdated', await OrderRec.findById(orderRec._id).lean())
+      if (io) io.emit('orderUpdated', updatedOrderRec)
     }
 
     res.json({
