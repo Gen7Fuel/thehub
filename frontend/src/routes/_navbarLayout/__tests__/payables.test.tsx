@@ -106,6 +106,10 @@ vi.mock('@/store', () => ({
 
 vi.mock('axios', () => ({
   default: {
+    create: () => ({
+      get: mockAxiosGet, post: mockAxiosPost, put: mockAxiosPut, delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
     get: mockAxiosGet,
     post: mockAxiosPost,
     put: mockAxiosPut,

@@ -5,7 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 const { mockAxiosGet } = vi.hoisted(() => ({ mockAxiosGet: vi.fn() }))
 
 vi.mock('axios', () => ({
-  default: { get: mockAxiosGet },
+  default: {
+    create: () => ({
+      get: mockAxiosGet, post: vi.fn(), put: vi.fn(), delete: vi.fn(),
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+    }),
+    get: mockAxiosGet,
+  },
 }))
 
 vi.mock('@/context/AuthContext', () => ({

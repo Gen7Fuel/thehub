@@ -5,8 +5,6 @@ import { jwtDecode } from "jwt-decode"
 import axios from "axios"
 import { getPendingActionEntries, deletePendingAction, updatePendingAction, saveOrderRec } from "@/lib/orderRecIndexedDB"
 import { isActuallyOnline } from "@/lib/network"
-import { payablesService } from "@/api/payables/payables.service"
-import { purchaseOrdersService } from "@/api/purchase-orders/purchase-orders.service"
 // import { useAuth } from "@/context/AuthContext";
 
 export function cn(...inputs: ClassValue[]) {
@@ -451,6 +449,9 @@ async function syncOneAction(action: any): Promise<void> {
 
   else if (action.type === "CREATE_PURCHASE_ORDER") {
     const { filename } = await uploadBase64Image(action.receipt, "receipt.jpg");
+    // Keep feature API clients lazy: this shared utility is imported by most
+    // pages, while only PO offline replay needs the Purchase Orders client.
+    const { purchaseOrdersService } = await import("@/api/purchase-orders/purchase-orders.service");
     await purchaseOrdersService.create(
       { ...action.payload, receipt: filename },
       'po.offline-sync',
@@ -469,6 +470,9 @@ async function syncOneAction(action: any): Promise<void> {
       imageFilenames.push(filename);
     }
 
+    // Payables is another optional offline action. Loading it only here avoids
+    // pulling its Locations/API client into every consumer of lib/utils.
+    const { payablesService } = await import("@/api/payables/payables.service");
     await payablesService.resolveLocationAndCreate({
       ...action.payload,
       images: imageFilenames,
