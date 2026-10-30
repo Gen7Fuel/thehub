@@ -1,12 +1,8 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-const Permission = require("../models/Permission");
-const Location = require("../models/Location"); // Add this at the top with other requires
 const router = express.Router();
 const Role = require("../models/Role");
-const { getMergedPermissions, getMergedPermissionsTreeArray } = require("../utils/mergePermissionObjects");
 
 const { auth } = require("../middleware/authMiddleware.js");
 const { logChange } = require('../middleware/changeLogger');
@@ -16,8 +12,8 @@ function escapeRegExp(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// POST /api/auth/identify
-// identify if a user's role belongs to store account or office account
+// RETIRED: public identity lookup moved to auth-backend `/login-auth/identify`.
+/*
 router.post("/identify", async (req, res) => {
   try {
     const inputEmail = String(req.body.email || '').trim();
@@ -37,6 +33,7 @@ router.post("/identify", async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+*/
 
 // router.post("/register", async (req, res) => {
 //   const { email, password, firstName, lastName, stationName } = req.body;
@@ -86,6 +83,8 @@ router.post("/identify", async (req, res) => {
 //     res.status(500).json({ message: err.message });
 //   }
 // });
+// RETIRED: public registration moved to auth-backend `/login-auth/register`.
+/*
 router.post("/register", async (req, res) => {
   const { email, password, firstName, lastName, stationName } = req.body;
 
@@ -120,15 +119,38 @@ router.post("/register", async (req, res) => {
       is_active: true,        // active by default
     });
 
+    await logChange(req, {
+      action: 'create',
+      resourceType: 'user',
+      resourceId: user._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 201,
+      source: req.headers['x-action-source'] || 'register.page',
+      actor: { username: 'unknown', locationName: stationName },
+      message: `New user registered: ${normalizedEmail}`,
+      changes: [{
+        operation: 'add',
+        path: 'user',
+        before: null,
+        after: { email: normalizedEmail, firstName, lastName, stationName },
+      }],
+      changeSummary: { added: 1, removed: 0, replaced: 0, total: 1 },
+    });
+
+    const safeUser = user.toObject();
+    delete safeUser.password;
+
     res.status(201).json({
       message: "User registered successfully",
-      user,
+      user: safeUser,
     });
   } catch (err) {
     console.error("Error in register:", err);
     res.status(500).json({ message: err.message });
   }
 });
+*/
 
 // Old Permissions login route
 // router.post("/login", async (req, res) => {
@@ -172,6 +194,8 @@ router.post("/register", async (req, res) => {
 // });
 
 // Route with new permissions
+// RETIRED: public login moved to auth-backend `/login-auth/login`.
+/*
 router.post("/login", async (req, res) => {
   console.log("Login attempt from backend for email:", req.body.email);
   const { email, password } = req.body;
@@ -191,11 +215,31 @@ router.post("/login", async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
     // Update login flags
-    user.lastLoginDate = new Date();
+    const previousLoginDate = user.lastLoginDate;
+    const previousLoggedIn = !!user.is_loggedIn;
+    const loginDate = new Date();
+    user.lastLoginDate = loginDate;
     user.is_loggedIn = true;
 
     // MUST disable timestamps so updatedAt doesn't change unnecessarily
     await user.save({ timestamps: false });
+
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'user',
+      resourceId: user._id,
+      resourceStore: 'mongodb',
+      success: true,
+      statusCode: 200,
+      source: req.headers['x-action-source'] || 'login.page',
+      actor: { userId: user._id, username: user.email, locationName: user.stationName },
+      message: `User logged in: ${user.email}`,
+      changes: [
+        { operation: 'replace', path: 'is_loggedIn', before: previousLoggedIn, after: true },
+        { operation: 'replace', path: 'lastLoginDate', before: previousLoginDate?.toISOString?.() || null, after: loginDate.toISOString() },
+      ],
+      changeSummary: { added: 0, removed: 0, replaced: 2, total: 2 },
+    });
 
     // Get merged permissions (role + custom)
     // const mergedPermissions = await getMergedPermissions(user);
@@ -233,6 +277,7 @@ router.post("/login", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+*/
 
 function getSecondsUntilNext9AMUTC() {
   const now = new Date();
@@ -265,11 +310,30 @@ function getInitials(firstName, lastName) {
 router.post("/logout", auth, async (req, res) => {
   try {
     const userId = req.user.id; // from JWT middleware
-    console.log('user id:', userId);
 
-    await User.findByIdAndUpdate(userId, {
+    const userBeforeLogout = await User.findByIdAndUpdate(userId, {
       is_loggedIn: false
     }, { timestamps: false });
+
+    if (userBeforeLogout) {
+      await logChange(req, {
+        action: 'update',
+        resourceType: 'user',
+        resourceId: userBeforeLogout._id,
+        resourceStore: 'mongodb',
+        success: true,
+        statusCode: 200,
+        source: req.headers['x-action-source'] || 'navbar.session',
+        message: `User logged out: ${userBeforeLogout.email}`,
+        changes: [{
+          operation: 'replace',
+          path: 'is_loggedIn',
+          before: !!userBeforeLogout.is_loggedIn,
+          after: false,
+        }],
+        changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+      });
+    }
 
     res.json({ message: "Logged out successfully" });
   } catch (err) {
@@ -409,6 +473,8 @@ router.post("/verify-password", auth, async (req, res) => {
   }
 });
 
+// RETIRED: token refresh moved to auth-backend `/login-auth/refresh-token`.
+/*
 router.post("/refresh-token", async (req, res) => {
   try {
     const { userId } = req.body;
@@ -455,5 +521,6 @@ router.post("/refresh-token", async (req, res) => {
     res.status(500).json({ message: "Failed to refresh token" });
   }
 });
+*/
 
 module.exports = router;

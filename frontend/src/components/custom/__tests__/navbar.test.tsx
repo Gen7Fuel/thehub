@@ -158,7 +158,11 @@ describe('Navbar mobile menu', () => {
     fireEvent.click(within(getPanel()).getByRole('button', { name: 'Logout' }))
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/login' }))
-    expect(mockAxiosPost).toHaveBeenCalledWith('/api/auth/logout', {}, expect.anything())
+    expect(mockAxiosPost).toHaveBeenCalledWith('/auth/logout', {}, expect.objectContaining({
+      headers: expect.objectContaining({
+        'X-Action-Source': 'navbar.session',
+      }),
+    }))
   })
 
   it('closes on Escape', async () => {

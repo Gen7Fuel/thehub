@@ -12,6 +12,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch';
+import { safesheetService } from '@/api/safesheets/safesheets.service'
 import {
   pad,
   ymd,
@@ -206,28 +207,14 @@ export default function RouteComponent() {
       setLoading(true);
       setError(null);
       try {
-        const sortAssigned = switchValue ? 'true' : 'false';
-        const res = await fetch(
-          `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${sortAssigned}`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem('token')}`,
-              'X-Required-Permission': 'accounting.safesheet',
-            },
-          }
-        );
-        if (res.status === 403) {
-          navigate({ to: '/no-access' });
-          return;
-        }
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error || 'Failed to fetch safesheet');
-        }
-        const data: SafeSheet = await res.json();
+        const data = await safesheetService.get<SafeSheet>(site, from, to, switchValue)
         if (mounted) setSheet(data);
       } catch (err: any) {
         console.error(err);
+        if (err?.status === 403) {
+          navigate({ to: '/no-access' });
+          return;
+        }
         if (mounted) setError(err.message || 'Unknown error');
       } finally {
         if (mounted) setLoading(false);
@@ -238,6 +225,12 @@ export default function RouteComponent() {
       mounted = false;
     };
   }, [site, from, to, switchValue]);
+
+  const refreshSheet = async () => {
+    if (!site || !from || !to) return
+    const refreshed = await safesheetService.get<SafeSheet>(site, from, to, switchValue)
+    setSheet(refreshed)
+  }
 
   // read numeric value
   const readEditableNumber = (el?: HTMLInputElement | null) => {
@@ -280,39 +273,12 @@ export default function RouteComponent() {
 
     try {
       setAddCashInLoading(true)
-      const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'accounting.safesheet',
-        },
-        body: JSON.stringify(entryBody),
-      })
-
-      if (res.status === 403) {
-        navigate({ to: '/no-access' })
-        return
-      }
-
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error || 'Failed to add entry')
+      await safesheetService.addEntry(site, entryBody)
 
       // Refresh safesheet for the current range to avoid showing out-of-range entries
       if (site && from && to) {
         try {
-          const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
-                'X-Required-Permission': 'accounting.safesheet',
-              },
-            },
-          )
-          if (!ref.ok) throw new Error('Failed to refresh safesheet')
-          const refreshed: SafeSheet = await ref.json()
-          setSheet(refreshed)
+          await refreshSheet()
         } catch (refreshErr) {
           console.error(refreshErr)
         }
@@ -324,6 +290,10 @@ export default function RouteComponent() {
       setAddCashInDesc('')
     } catch (err: any) {
       console.error(err)
+      if (err?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       setAddCashInError(err.message || 'Add entry failed')
     } finally {
       setAddCashInLoading(false)
@@ -354,39 +324,12 @@ export default function RouteComponent() {
     }
 
     try {
-      const res = await fetch(`/api/safesheets/site/${encodeURIComponent(site)}/entries`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-          'X-Required-Permission': 'accounting.safesheet',
-        },
-        body: JSON.stringify(entryBody),
-      })
-
-      if (res.status === 403) {
-        navigate({ to: '/no-access' })
-        return
-      }
-
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error || 'Failed to add entry')
+      await safesheetService.addEntry(site, entryBody)
 
       // Refresh safesheet for the current range to avoid showing out-of-range entries
       if (site && from && to) {
         try {
-          const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
-                'X-Required-Permission': 'accounting.safesheet',
-              },
-            },
-          )
-          if (!ref.ok) throw new Error('Failed to refresh safesheet')
-          const refreshed: SafeSheet = await ref.json()
-          setSheet(refreshed)
+          await refreshSheet()
         } catch (refreshErr) {
           console.error(refreshErr)
         }
@@ -400,6 +343,10 @@ export default function RouteComponent() {
       setError(null)
     } catch (err: any) {
       console.error(err)
+      if (err?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       setError(err.message || 'Add entry failed')
     }
   }
@@ -413,48 +360,22 @@ export default function RouteComponent() {
     if (!site) return
 
     try {
-      const res = await fetch(
-        `/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'accounting.safesheet',
-          },
-          body: JSON.stringify({ [field]: value }),
-        },
-      )
-
-      if (res.status === 403) {
-        navigate({ to: '/no-access' })
-        return
-      }
-
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error || 'Failed to update entry')
+      await safesheetService.updateEntry(site, entryId, { [field]: value })
 
       // Refresh safesheet for the current range to keep entries scoped
       if (site && from && to) {
         try {
-          const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
-                'X-Required-Permission': 'accounting.safesheet',
-              },
-            },
-          )
-          if (!ref.ok) throw new Error('Failed to refresh safesheet')
-          const refreshed: SafeSheet = await ref.json()
-          setSheet(refreshed)
+          await refreshSheet()
         } catch (refreshErr) {
           console.error(refreshErr)
         }
       }
     } catch (err: any) {
       console.error(err)
+      if (err?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       setError(err.message || 'Update failed')
     }
   }
@@ -464,40 +385,12 @@ export default function RouteComponent() {
     if (!site) return
     setDeleteLoading(true)
     try {
-      const res = await fetch(
-        `/api/safesheets/site/${encodeURIComponent(site)}/entries/${entryId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
-            'X-Required-Permission': 'accounting.safesheet.deleteEntry',
-          },
-        },
-      )
-
-      if (res.status === 403) {
-        navigate({ to: '/no-access' })
-        return
-      }
-
-      const body = await res.json().catch(() => null)
-      if (!res.ok) throw new Error(body?.error || 'Failed to delete entry')
+      await safesheetService.deleteEntry(site, entryId)
 
       // Refresh safesheet for the current range
       if (site && from && to) {
         try {
-          const ref = await fetch(
-            `/api/safesheets/site/${encodeURIComponent(site)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&sortAssigned=${switchValue ? 'true' : 'false'}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem('token')}`,
-                'X-Required-Permission': 'accounting.safesheet',
-              },
-            },
-          )
-          if (!ref.ok) throw new Error('Failed to refresh safesheet')
-          const refreshed: SafeSheet = await ref.json()
-          setSheet(refreshed)
+          await refreshSheet()
         } catch (refreshErr) {
           console.error(refreshErr)
         }
@@ -507,6 +400,10 @@ export default function RouteComponent() {
       setDeleteTargetEntry(null)
     } catch (err: any) {
       console.error(err)
+      if (err?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       setError(err.message || 'Delete failed')
     } finally {
       setDeleteLoading(false)
@@ -553,24 +450,19 @@ export default function RouteComponent() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    const formData = new FormData()
-    formData.append('file', file)
-
     try {
-      const res = await fetch('/cdn/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!res.ok) throw new Error('Image upload failed')
-
-      const data = await res.json()
-      const filename = data.filename
+      const data = await safesheetService.uploadPhoto(file, site || '', photoTargetEntry)
+      const filename = data.filename || data.fileInfo?.filename
+      if (!filename) throw new Error('Image upload failed')
 
       // Update backend entry
       await updateEntry(photoTargetEntry, 'photo', filename)
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
+      if (err?.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
       alert('Failed to upload image')
     }
 

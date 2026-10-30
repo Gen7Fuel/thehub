@@ -124,7 +124,7 @@ export function LocationPicker({
     queryKey: ["locations"],
     queryFn: fetchLocations,
     // Seeds the query with whatever was cached from a previous successful
-    // fetch (see prefetchLocations() in main.tsx/__root.tsx) so the picker
+    // fetch (see prefetchLocations() in __root.tsx) so the picker
     // has data on the very first render, regardless of whether this
     // component's own fetchLocations() call has settled — a fetch to a
     // reachable-but-not-actually-online host (dead router, captive portal)
@@ -219,7 +219,7 @@ const fetchLocations = async () => {
     return response.data;
   } catch (err) {
     // Offline (or request failed) — fall back to the last successful fetch,
-    // warmed as early as app boot (see prefetchLocations in main.tsx), so
+    // warmed as early as app boot (see prefetchLocations in __root.tsx), so
     // the picker isn't empty just because this particular page load couldn't
     // reach the server. Only treat this as a "successful" result when the
     // cache actually has something in it — React Query marks whatever this

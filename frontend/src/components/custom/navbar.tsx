@@ -2,7 +2,6 @@ import { Link, useLocation, useMatchRoute, useNavigate } from '@tanstack/react-r
 import { Button } from '../ui/button'
 import { useCallback, useEffect, useState } from 'react'
 import { isTokenExpired } from '../../lib/utils'
-import axios from 'axios'
 import { getSocket } from "@/lib/websocket";
 import { triggerBackgroundSync } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext";
@@ -11,6 +10,7 @@ import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import { cn } from "@/lib/utils"
 import { NavbarMobileMenu, type MobileMenuItem, type MobileMenuState } from './navbarMobileMenu'
 import { notificationsService } from '@/api/notifications/notifications.service'
+import { authService } from '@/api/auth/auth.service'
 import {
   Dialog,
   DialogContent,
@@ -57,37 +57,12 @@ export default function Navbar() {
   };
 
   useEffect(() => {
-    const fetchUnreadCount = async () => {
-      try {
-        const result = await notificationsService.pollInbox<any[]>();
-        // Count only unread items from the list
-        const count = result.filter((n: any) => !n.isRead && n.status !== 'archived').length;
-        setUnreadCount(count);
-      } catch (err) {
-        console.error("Error fetching unread count", err);
-      }
-    };
-
-    fetchUnreadCount();
-
-    // Listen for the 'notificationRead' event from the Notification Page
-    const handleRead = () => {
-      setUnreadCount((prev) => Math.max(0, prev - 1));
-    };
-
-    window.addEventListener('notificationRead', handleRead);
-    return () => window.removeEventListener('notificationRead', handleRead);
-  }, []);
-
-  useEffect(() => {
     const token = localStorage.getItem('token');
 
     if (isTokenExpired(token)) {
       // Call backend logout so is_loggedIn becomes false
       if (token) {
-        axios.post("/api/auth/logout", {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        }).catch(err => {
+        authService.logout('expired').catch(err => {
           console.warn("Logout API failed:", err);
         });
       }
@@ -175,9 +150,7 @@ export default function Navbar() {
       const token = localStorage.getItem("token");
 
       if (token) {
-        await axios.post("/api/auth/logout", {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        await authService.logout('manual');
       }
     } catch (err) {
       // don't block logout if server fails

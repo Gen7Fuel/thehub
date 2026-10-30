@@ -40,13 +40,8 @@ function RootErrorComponent({ error }: { error: Error }) {
 }
 
 function RootComponent() {
-  // Warms the offline site-list cache from a real React lifecycle hook.
-  // main.tsx also fires this as raw top-level module code, as early as
-  // physically possible (before React even mounts), but that alone proved
-  // unreliable in practice — this effect is the dependable trigger, since
-  // it runs on every route __root wraps (login included) via the normal
-  // mount lifecycle rather than racing page-load timing. GET /api/locations
-  // requires no auth, so there's nothing gating this on login state.
+  // Warm the offline site-list cache once from a dependable React lifecycle.
+  // This root wraps every route, including login, and /api/locations is public.
   useEffect(() => {
     prefetchLocations()
   }, [])

@@ -8,7 +8,7 @@ import {
   InputOTPGroup,
   InputOTPHiddenSlot,
 } from "@/components/custom/input-otp-masked";
-import axios from 'axios'
+import { authService } from '@/api/auth/auth.service'
 // import { domain } from '@/lib/constants'
 import { clearLocalDB } from "@/lib/orderRecIndexedDB";
 import { clearDashboardDB } from '@/lib/dashboardIndexedDB';
@@ -67,27 +67,20 @@ function RouteComponent() {
     const formattedEmail = email.trim().toLowerCase();
 
     try {
-      let res;
-      // --- TESTING REDIRECT LOGIC ---
-      // if (testEmails.includes(formattedEmail)) {
-      res = await axios.post(`/login-auth/identify`, { email: formattedEmail });
-      // } else {
-      //   console.log("🏠 Standard account: Routing to EXISTING Backend");
-      //   res = await axios.post(`${domain}/api/auth/identify`, { email: formattedEmail });
-      // }
-      setIsStoreAccount(res.data.inStoreAccount);
+      const result = await authService.identifyLogin(formattedEmail);
+      setIsStoreAccount(result.inStoreAccount);
 
       // Set maintenance info if returned
-      if (res.data.maintenance?.active) {
-        setMaintInfo(res.data.maintenance);
+      if (result.maintenance?.active) {
+        setMaintInfo(result.maintenance);
       } else {
         setMaintInfo(null);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // If 404, we still check if maintenance info was attached to the error response
-      if (err.response?.data?.maintenance?.active) {
-        setMaintInfo(err.response.data.maintenance);
-      }
+      const maintenance = (err as { response?: { data?: { maintenance?: { active: boolean; endTime: string } } } })
+        .response?.data?.maintenance;
+      if (maintenance?.active) setMaintInfo(maintenance);
       setIsStoreAccount(true);
     } finally {
       setStep('authenticate');
@@ -109,19 +102,8 @@ function RouteComponent() {
     // const formattedEmail = email.trim().toLowerCase();
 
     try {
-      let response;
-      // if (testEmails.includes(formattedEmail)) {
-      response = await axios.post(`/login-auth/login`, {
-        email: email.trim().toLowerCase(),
-        password: passToSubmit
-      })
-      // } else {
-      //   response = await axios.post(`${domain}/api/auth/login`, {
-      //     email: email.trim().toLowerCase(),
-      //     password: passToSubmit
-      //   })
-      // }
-      localStorage.setItem('token', response.data.token)
+      const response = await authService.login(email.trim().toLowerCase(), passToSubmit)
+      localStorage.setItem('token', response.token)
 
       // Initialize showFuelTicker to 'false' by default
       const existingFuelTickerState = localStorage.getItem('showFuelTicker');
@@ -135,12 +117,12 @@ function RouteComponent() {
       refreshAuth()
 
       const socket = getSocket();
-      socket.auth = { token: response.data.token }; // Update the token manually
+      socket.auth = { token: response.token }; // Update the token manually
       socket.disconnect().connect();               // Force a fresh handshake with the new token
 
       navigate({ to: '/' })
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Invalid credentials');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Invalid credentials');
       setLoading(false)
     }
   }
