@@ -39,4 +39,12 @@ describe('Fuel Management change logging contract', () => {
     expect(source).toContain('resourceIds: savedOrders.map');
     expect(source).toContain('bulk: { count: savedOrders.length }');
   });
+
+  it('records the completed business result of a manual daily fuel sync', () => {
+    const source = read('fuelStationTankRoutes.js');
+    expect(source).toContain("resourceType: 'fuel-data-sync'");
+    expect(source).toContain("resourceStore: 'external'");
+    expect(source).toContain("message: 'Manual daily fuel sync and archive completed'");
+    expect(source).toContain("path: 'syncStatus'");
+  });
 });

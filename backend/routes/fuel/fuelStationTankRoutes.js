@@ -1243,6 +1243,20 @@ router.post("/manual-daily-sync", async (req, res) => {
     // Call the function logic here
     await runDailyFuelSync();
 
+    const completedAt = new Date().toISOString();
+    await logChange(req, {
+      action: 'update',
+      resourceType: 'fuel-data-sync',
+      resourceStore: 'external',
+      success: true,
+      statusCode: 200,
+      source: req.headers['x-action-source'] || 'settings.system',
+      message: 'Manual daily fuel sync and archive completed',
+      changes: [{ operation: 'replace', path: 'syncStatus', before: 'requested', after: 'completed' }],
+      changeSummary: { added: 0, removed: 0, replaced: 1, total: 1 },
+      correlationId: completedAt,
+    });
+
     res.json({
       message: "Daily fuel sync and archive completed successfully.",
     });

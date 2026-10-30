@@ -161,6 +161,7 @@ describe('Navbar mobile menu', () => {
     expect(mockAxiosPost).toHaveBeenCalledWith('/auth/logout', {}, expect.objectContaining({
       headers: expect.objectContaining({
         'X-Action-Source': 'navbar.session',
+        'X-Action-Type': 'logout',
       }),
     }))
   })

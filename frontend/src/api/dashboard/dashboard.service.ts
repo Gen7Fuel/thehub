@@ -9,6 +9,11 @@ const read = (source: string, resourceType: string, message: string) =>
   actionOptions('dashboard', source, 'read', resourceType, message)
 
 export const dashboardService = {
+  refreshCacheForSettings<T = { message: string }>() {
+    return dashboardApi.refreshCache<T>(
+      actionOptions('settings', 'settings.system', 'update', 'dashboard-cache', 'Manual Dashboard cache refresh requested from Settings'),
+    )
+  },
   getOrderRecRange<T = unknown>(query: Record<string, unknown>) {
     return orderRecApi.range<T>(query, read('dashboard.order-recs', 'order-rec', `Order Rec dashboard viewed${query.site ? ` for ${query.site}` : ''}`))
   },

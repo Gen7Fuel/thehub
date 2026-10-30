@@ -1,4 +1,5 @@
 const { randomUUID } = require('crypto');
+const { getClientIp } = require('./clientIp');
 
 let ChangeLog = null;
 try {
@@ -40,9 +41,9 @@ function logAuthChange(req, {
     source: source || req.headers['x-action-source'] || 'auth',
     method: req.method,
     path: req.originalUrl || req.url,
-    ip: req.ip,
+    ip: getClientIp(req),
     userAgent: req.headers['user-agent'],
-    requestId: req.headers['x-request-id'],
+    requestId: req.requestId,
     changes,
     changeSummary,
   };

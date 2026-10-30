@@ -10,8 +10,7 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import { jwtDecode } from "jwt-decode";
 // import { getSocket } from "@/lib/websocket";
-import axios from "axios";
-import { prefetchArCustomers } from "@/lib/arCustomersCache";
+import { authService } from "@/api/auth/auth.service";
 // import { domain } from '@/lib/constants'
 
 /* -----------------------------------------------------
@@ -134,12 +133,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (!userId) throw new Error("User ID missing in token");
 
-      const response = await axios.post(
-        `/login-auth/refresh-token`,
-        { userId } // 🔥 send userId explicitly in body
-      );
-
-      const newToken = response.data.token;
+      const response = await authService.refreshToken<{ token: string }>(userId);
+      const newToken = response.token;
       if (newToken) {
         localStorage.setItem("token", newToken);
         refreshAuth();
@@ -159,15 +154,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 
   }, []);
-
-  // Warms the AR-customer offline cache as soon as we have a valid user —
-  // covers both a fresh login and an app boot that finds an already-valid
-  // token (the common case, since a token persists across sessions). GET
-  // /api/ar-customers requires auth, so this can't run any earlier than
-  // this, unlike the unauthenticated locations prefetch in main.tsx.
-  useEffect(() => {
-    if (user) prefetchArCustomers();
-  }, [user]);
 
   return (
     <AuthContext.Provider value={{ user, setUser, refreshAuth, refreshTokenFromBackend }}>

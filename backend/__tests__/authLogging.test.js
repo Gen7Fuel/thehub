@@ -15,6 +15,14 @@ const authLogger = fs.readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../auth-backend/utils/authLogger.js'),
   'utf8',
 );
+const authAccessLogger = fs.readFileSync(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../auth-backend/middleware/authAccessLogger.js'),
+  'utf8',
+);
+const authApp = fs.readFileSync(
+  path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../auth-backend/app.js'),
+  'utf8',
+);
 const activeMainAuthRoute = route
   .replace(/\/\*[\s\S]*?\*\//g, '')
   .replace(/^\s*\/\/.*$/gm, '');
@@ -95,5 +103,24 @@ describe('Public authentication logging contract', () => {
     expect(authLogger).toContain('setImmediate(() =>');
     expect(authLogger).toContain('Auth ChangeLog disabled: shared model could not be loaded:');
     expect(authLogger).toContain('Auth change log persistence failed:');
+  });
+
+  it('records auth attempts and failures asynchronously without reading credentials', () => {
+    expect(authApp).toContain('app.use(authAccessLogger());');
+    expect(authAccessLogger).toContain("require('../models/AccessLog')");
+    expect(authAccessLogger).toContain("path === '/login-auth/health'");
+    expect(authAccessLogger).toContain("path === '/login-auth/maintenance-status' && res.statusCode < 400");
+    expect(authAccessLogger).toContain("setImmediate(() =>");
+    expect(authAccessLogger).not.toContain('req.body.password');
+    expect(authAccessLogger).not.toContain('password:');
+  });
+
+  it('uses trusted-proxy client IPs and generated request IDs in auth logs', () => {
+    expect(authApp).toContain("app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal'])");
+    expect(authApp).toContain('app.use(requestId());');
+    expect(authLogger).toContain('ip: getClientIp(req)');
+    expect(authLogger).toContain('requestId: req.requestId');
+    expect(authAccessLogger).toContain('ip: getClientIp(req)');
+    expect(authAccessLogger).toContain('requestId: req.requestId');
   });
 });

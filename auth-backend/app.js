@@ -5,6 +5,8 @@ const connectDB = require("./config/db");
 const http = require("http");
 const port = 5005
 const morgan = require('morgan');
+const requestId = require('./middleware/requestId');
+const authAccessLogger = require('./middleware/authAccessLogger');
 
 
 const authRoutes = require("./routes/auth");
@@ -15,6 +17,11 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
+// Caddy reaches this service over the private Docker network. Trust only
+// private/loopback proxy hops so req.ip resolves the real browser address
+// without accepting a client-spoofed X-Forwarded-For value.
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
+
 app.use((req, res, next) => {
   console.log(`📡 Incoming Request: ${req.method} ${req.url}`);
   next();
@@ -23,6 +30,8 @@ app.use((req, res, next) => {
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
+app.use(requestId());
+app.use(authAccessLogger());
 
 
 // Health check

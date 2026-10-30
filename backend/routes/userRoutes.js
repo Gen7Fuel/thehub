@@ -182,6 +182,7 @@ router.put('/by-permission/:permId', async (req, res) => {
     }
 
     const io = req.app.get("io");
+    const appliedChanges = [];
 
     for (const { userId, value } of changes) {
       const user = await User.findById(userId).populate('role', 'permissionsArray');
@@ -189,6 +190,8 @@ router.put('/by-permission/:permId', async (req, res) => {
 
       const roleValue = user.role?.permissionsArray?.find((p) => p.permId === permId)?.value ?? false;
       const existingIdx = user.customPermissionsArray.findIndex((p) => p.permId === permId);
+      const beforeValue = existingIdx > -1 ? user.customPermissionsArray[existingIdx].value : roleValue;
+      if (Boolean(value) === Boolean(beforeValue)) continue;
 
       if (value === roleValue) {
         // Matches the role default again -> no override needed
@@ -203,7 +206,41 @@ router.put('/by-permission/:permId', async (req, res) => {
       user.markModified('customPermissionsArray');
       await user.save();
 
+      appliedChanges.push({
+        userId: user._id,
+        userLabel: userLabel(user),
+        before: beforeValue,
+        after: Boolean(value),
+      });
+
       if (io) io.to(userId).emit("permissions-updated");
+    }
+
+    if (appliedChanges.length > 0) {
+      const loggedChanges = appliedChanges.slice(0, 100).map((entry) => ({
+        operation: 'replace',
+        path: `users.${entry.userId}.permissions.${permId}`,
+        before: entry.before,
+        after: entry.after,
+      }));
+      await logChange(req, {
+        action: 'update',
+        resourceType: 'user-permission',
+        resourceIds: appliedChanges.map((entry) => entry.userId),
+        resourceStore: 'mongodb',
+        success: true,
+        statusCode: 200,
+        source: req.headers['x-action-source'] || 'settings.permissions',
+        message: `Permission ${permId} assignment updated for ${appliedChanges.length} user${appliedChanges.length === 1 ? '' : 's'}`,
+        changes: loggedChanges,
+        changeSummary: { added: 0, removed: 0, replaced: appliedChanges.length, total: appliedChanges.length },
+        changesTruncated: appliedChanges.length > loggedChanges.length,
+        bulk: {
+          affectedCount: appliedChanges.length,
+          resourceIds: appliedChanges.slice(0, 100).map((entry) => String(entry.userId)),
+          truncated: appliedChanges.length > 100,
+        },
+      });
     }
 
     res.json({ success: true });
