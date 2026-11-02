@@ -125,6 +125,9 @@ function VolumeDashboard() {
 
   // If stationId was populated, it is an object. We need the ._id from inside it.
   const currentStationId = selectedTank?.stationId?._id || selectedTank?.stationId;
+  const cstoreVolumeUrl = selectedTank?.stationId?.csoCode
+    ? `https://03.cstoreoffice.com/daily-fuel-inv.php?Station=${encodeURIComponent(selectedTank.stationId.csoCode)}`
+    : 'https://03.cstoreoffice.com/daily-fuel-inv.php';
 
   useEffect(() => {
     // If we are in historical mode and the site changes, refresh the data
@@ -184,6 +187,23 @@ function VolumeDashboard() {
           )}
         </div>
       </div >
+
+      {/* TEMPORARY VOLUME DATA WARNING: remove/comment out this block once the live volume pipeline is fixed. */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-amber-950 shadow-sm">
+        <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+        <p className="text-sm font-semibold leading-relaxed">
+          There has been a database pipeline failure affecting the current fuel volumes. Until it is fixed, please refer to the{' '}
+          <a
+            href={cstoreVolumeUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="font-black text-amber-700 underline underline-offset-2 hover:text-amber-900"
+          >
+            CStore volume page
+          </a>{' '}
+          for the latest information.
+        </p>
+      </div>
 
       {/* SINGLE UNIFIED ROW FOR ALL TANKS */}
       {/* CONTENT SWITCHER */}
