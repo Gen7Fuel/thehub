@@ -1,5 +1,6 @@
 import type { ActionType, RequestOptions } from '@/api/core/types'
 import { orderRecApi } from './order-rec.api'
+import { locationsApi } from '@/api/locations/locations.api'
 
 const ctx = (source: string, action: ActionType, message: string, permission = 'orderRec'): RequestOptions => ({
   permission, actionContext: { source, action, resourceType: 'order-rec', message },
@@ -7,6 +8,16 @@ const ctx = (source: string, action: ActionType, message: string, permission = '
 const label = (order: any) => order?.filename || order?.integerId || order?._id || 'unknown order'
 
 export const orderRecService = {
+  listWorkflowLocations() {
+    return locationsApi.list({ permission: 'orderRec.workflow', actionContext: {
+      action: 'read', source: 'order-rec.workflow', resourceType: 'location', message: 'Locations loaded for Order Rec workflow',
+    } })
+  },
+  getStoreContact(site: string) {
+    return locationsApi.getByName(site, { permission: 'orderRec.id', actionContext: {
+      action: 'read', source: 'order-rec.detail', resourceType: 'location', message: `Store contact loaded for Order Rec at ${site}`,
+    } })
+  },
   list<T>(query: Record<string, unknown>, source = 'order-rec.list') { return orderRecApi.list<T>(query, ctx(source, 'read', `Order Recs viewed${query.site ? ` for ${query.site}` : ''}`)) },
   workflow<T>(week: string) { return orderRecApi.workflow<T>(week, ctx('order-rec.workflow', 'read', `Order Rec workflow viewed for week of ${week}`, 'orderRec.workflow')) },
   range<T>(query: Record<string, unknown>) { return orderRecApi.range<T>(query, ctx('order-rec.dashboard', 'read', `Order Rec dashboard viewed${query.site ? ` for ${query.site}` : ''}`)) },

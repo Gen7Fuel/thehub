@@ -20,8 +20,6 @@ import {
 import { Info } from "lucide-react"
 import { orderRecService } from '@/api/order-rec/order-rec.service'
 import { vendorsService } from '@/api/vendors/vendors.service'
-import { locationsApi } from '@/api/locations/locations.api'
-import type { RequestOptions } from '@/api/core/types'
 import { isApiError } from '@/api/core/errors'
 
 
@@ -311,10 +309,9 @@ function RouteComponent() {
 
       buildWeeks();
 
-      const locationOptions: RequestOptions = { permission: 'orderRec.workflow', actionContext: { action: 'read', source: 'order-rec.workflow', resourceType: 'location', message: 'Locations loaded for Order Rec workflow' } }
       const [vendorsData, storesData] = await Promise.all([
         vendorsService.list<Vendor[]>('order-rec.workflow', undefined, 'Vendors loaded for Order Rec workflow', 'orderRec.workflow'),
-        locationsApi.list(locationOptions),
+        orderRecService.listWorkflowLocations(),
       ]);
 
         const grouped = vendorsData.reduce((acc: Record<string, Vendor[]>, v: Vendor) => {

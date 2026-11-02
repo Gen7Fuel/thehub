@@ -6,6 +6,12 @@ import type { MaintenanceInput } from './maintenance.types'
 const config = (action: 'read' | 'create' | 'update' | 'delete', message: string) => actionOptions('settings.maintenance', 'settings.maintenance', action, 'maintenance', message)
 
 export const maintenanceApi = {
+  getBannerSchedules<T>() {
+    return maintenanceResourceApi.list<T>({ actionContext: {
+      action: 'read', resourceType: 'maintenance', source: 'maintenance.banner',
+      message: 'Maintenance status checked for the global banner',
+    } })
+  },
   async list<T>(): Promise<T[]> { return maintenanceResourceApi.list<T>(config('read', 'Maintenance schedules viewed in Settings')) },
   async get<T>(id: string): Promise<T> { return maintenanceResourceApi.get<T>(id, config('read', 'Maintenance schedule opened in Settings')) },
   async create(input: MaintenanceInput): Promise<void> { await maintenanceResourceApi.create(input, config('create', `Maintenance schedule ${input.name} creation requested`)) },

@@ -11,6 +11,10 @@ const accessCodeOptions = (source: string, location: string): RequestOptions => 
 })
 
 export const locationsService = {
+  list(options: RequestOptions = {}) {
+    return locationsApi.list(options)
+  },
+
   verifyManagerCode(location: string, code: string, source: string) {
     return locationsApi.checkManagerCode(location, code, accessCodeOptions(source, location))
   },

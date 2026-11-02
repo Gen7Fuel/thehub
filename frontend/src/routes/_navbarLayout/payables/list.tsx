@@ -153,9 +153,7 @@ function RouteComponent() {
 
   async function fetchImageDataUri(filename: string): Promise<string> {
     try {
-      const resp = await fetch(`${domain}/cdn/download/${encodeURIComponent(filename)}`)
-      if (!resp.ok) return ''
-      const blob = await resp.blob()
+      const blob = await cdnService.downloadImage(`${domain}/cdn/download/${encodeURIComponent(filename)}`)
       const reader = new FileReader()
       return await new Promise<string>((resolve, reject) => {
         reader.onerror = () => reject(reader.error)
@@ -629,3 +627,4 @@ function RouteComponent() {
     </div>
   )
 }
+import { cdnService } from '@/api/cdn/cdn.service'
