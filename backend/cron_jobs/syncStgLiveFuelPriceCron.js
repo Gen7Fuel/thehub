@@ -19,6 +19,9 @@ async function processMonthlySync() {
       { name: 'CarrierHaulage', keys: ['Carrier', 'Type', 'Location', 'Pickup'] }
     ];
 
+    // mssql rejects parameter names containing spaces or punctuation.
+    const cleanParamName = (column) => column.replace(/[^a-zA-Z0-9_]/g, '');
+
     for (const table of tables) {
       // 1. Fetch pending records from Staging
       const stgData = await new mssql.Request(transaction)
@@ -26,17 +29,27 @@ async function processMonthlySync() {
 
       for (const row of stgData.recordset) {
         // 2. Prepare dynamic WHERE clause for the primary keys
-        const whereClause = table.keys.map(k => `[${k}] = @${k.replace(/\s/g, '')}`).join(' AND ');
+        const whereClause = table.keys.map(k => `[${k}] = @${cleanParamName(k)}`).join(' AND ');
         
         // 3. Perform Upsert into Live Table
         const upsertReq = new mssql.Request(transaction);
-        table.keys.forEach(k => upsertReq.input(k.replace(/\s/g, ''), mssql.VarChar, row[k]));
+        table.keys.forEach(k => upsertReq.input(cleanParamName(k), mssql.VarChar, row[k]));
         
         // Add values for update (excluding keys)
-        const columns = Object.keys(row).filter(c => !table.keys.includes(c) && c !== 'Updated At');
-        columns.forEach(c => upsertReq.input(c, mssql.Float, row[c]));
+        const metadataColumns = new Set([
+          'Created At',
+          'Updated At',
+          'Deleted At',
+          'Created_At',
+          'Updated_At',
+          'Deleted_At'
+        ]);
+        const columns = Object.keys(row).filter(
+          c => !table.keys.includes(c) && !metadataColumns.has(c)
+        );
+        columns.forEach(c => upsertReq.input(cleanParamName(c), mssql.Float, row[c]));
 
-        const updateSet = columns.map(c => `[${c}] = @${c}`).join(', ');
+        const updateSet = columns.map(c => `[${c}] = @${cleanParamName(c)}`).join(', ');
 
         await upsertReq.query(`
           UPDATE [FUEL].[${table.name}] 
@@ -46,13 +59,13 @@ async function processMonthlySync() {
           IF @@ROWCOUNT = 0
           BEGIN
             INSERT INTO [FUEL].[${table.name}] (${table.keys.map(k => `[${k}]`).join(', ')}, ${columns.map(c => `[${c}]`).join(', ')}, [Updated At])
-            VALUES (${table.keys.map(k => `@${k.replace(/\s/g, '')}`).join(', ')}, ${columns.map(c => `@${c}`).join(', ')}, GETDATE())
+            VALUES (${table.keys.map(k => `@${cleanParamName(k)}`).join(', ')}, ${columns.map(c => `@${cleanParamName(c)}`).join(', ')}, GETDATE())
           END
         `);
 
         // 4. Clear staging timestamp
         const clearReq = new mssql.Request(transaction);
-        table.keys.forEach(k => clearReq.input(k.replace(/\s/g, ''), mssql.VarChar, row[k]));
+        table.keys.forEach(k => clearReq.input(cleanParamName(k), mssql.VarChar, row[k]));
         await clearReq.query(`UPDATE [FUEL].[Stg_${table.name}] SET [Updated At] = NULL WHERE ${whereClause}`);
       }
     }
