@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { getSocket } from "@/lib/websocket";
 import { useAuth } from "@/context/AuthContext";
-import { maintenanceApi as maintenanceResourceApi } from '@/api/maintenance/maintenance.api'
+import { maintenanceApi } from '@/api/maintenance/maintenance.service'
 import { authService } from '@/api/auth/auth.service'
 import { ShieldCheck, AlertTriangle, Clock, CheckCircle2, XCircle } from "lucide-react";
 
@@ -147,7 +147,7 @@ export default function MaintenanceBanner({ onStatusChange }: MaintenanceBannerP
 
     try {
       // 1. Primary Attempt: Query Main Backend
-      const data = await maintenanceResourceApi.list<any>({});
+      const data = await maintenanceApi.getBannerSchedules<any>();
 
       const now = new Date();
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);

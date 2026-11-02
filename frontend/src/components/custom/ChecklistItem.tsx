@@ -1,3 +1,4 @@
+import { cdnService } from "@/api/cdn/cdn.service";
 import { useState } from "react";
 import { Edit, MessageSquareText, ImagePlus, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -143,14 +144,7 @@ export function ChecklistItemCard({
       formData.append("file", file);
 
       try {
-        const res = await fetch("/cdn/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) throw new Error("Image upload failed");
-
-        const data = await res.json();
+        const data = await cdnService.uploadAuditPhoto(formData);
         uploadedFilenames.push(data.filename);
       } catch (err) {
         console.error(err);

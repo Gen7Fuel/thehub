@@ -30,6 +30,12 @@ describe('frontend API architecture', () => {
       const parsed = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS)
 
       const visit = (node: ts.Node) => {
+        if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) {
+          const target = (node.moduleSpecifier as ts.StringLiteral).text
+          if (target.endsWith('.api') || target.includes('api/core/clients')) {
+            violations.push(`${relativeFile}: direct resource/client import ${target}`)
+          }
+        }
         if (ts.isCallExpression(node)) {
           const expression = node.expression
           const isFetch = ts.isIdentifier(expression) && expression.text === 'fetch'
@@ -41,7 +47,7 @@ describe('frontend API architecture', () => {
           if ((isFetch || isAxiosMethod) && node.arguments[0]) {
             const target = node.arguments[0].getText(parsed)
             const isHealthProbe = relativeFile === 'lib/network.ts' && target.includes('/api/health')
-            if (!isHealthProbe && (target.includes('/api/') || target.includes('/login-auth/'))) {
+            if (!isHealthProbe && (target.includes('/api/') || target.includes('/login-auth/') || target.includes('/cdn/'))) {
               const line = parsed.getLineAndCharacterOfPosition(node.getStart(parsed)).line + 1
               violations.push(`${relativeFile}:${line} -> ${target}`)
             }

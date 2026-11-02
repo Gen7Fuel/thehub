@@ -1,4 +1,4 @@
-import { locationsApi } from '@/api/locations/locations.api'
+import { locationsService } from '@/api/locations/locations.service'
 
 // Shared offline cache for the site/location list. GET /api/locations
 // requires no auth (see backend/routes/location.js), so this is prefetched
@@ -31,7 +31,7 @@ export function getCachedLocations<T = any>(): T[] {
 // offline cache and bounded-request behaviour; React Query deduplicates the
 // LocationPicker consumers that share its `locations` query key.
 export function loadLocations<T = unknown>(auth = true): Promise<T[]> {
-  const request = locationsApi.list({
+  const request = locationsService.list({
       auth,
       signal: AbortSignal.timeout(5000),
     })

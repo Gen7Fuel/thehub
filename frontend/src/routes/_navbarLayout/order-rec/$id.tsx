@@ -20,8 +20,6 @@ import { isActuallyOnline } from "@/lib/network";
 import { orderRecService } from '@/api/order-rec/order-rec.service'
 import { vendorsService } from '@/api/vendors/vendors.service'
 import { isApiError } from '@/api/core/errors'
-import { locationsApi } from '@/api/locations/locations.api'
-import type { RequestOptions } from '@/api/core/types'
 // import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute('/_navbarLayout/order-rec/$id')({
@@ -613,11 +611,7 @@ function RouteComponent() {
 
       try {
         // Fetch the store email
-        const locationOptions: RequestOptions = {
-          permission: 'orderRec.id',
-          actionContext: { source: 'order-rec.detail', action: 'read', resourceType: 'location', message: `Store contact loaded for Order Rec at ${site}` },
-        };
-        const locationData = await locationsApi.getByName(site, locationOptions);
+        const locationData = await orderRecService.getStoreContact(site);
         const storeEmail = locationData?.email;
         // Get the new managerEmails array, default to empty if not found
         const managerEmails = locationData?.managerEmails || [];

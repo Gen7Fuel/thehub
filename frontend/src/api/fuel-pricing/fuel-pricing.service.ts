@@ -1,6 +1,7 @@
 import { actionOptions } from '@/api/resources/action-options'
 import type { ActionType, RequestOptions } from '@/api/core/types'
 import { fuelPricingApi } from './fuel-pricing.api'
+import { locationsApi } from '@/api/locations/locations.api'
 import type {
   FuelPriceSubmission,
   FuelPriceVerification,
@@ -33,6 +34,12 @@ const verificationOptions = (
 })
 
 export const fuelPricingService = {
+  getLocation(stationName: string, source: FuelPricingSource) {
+    return locationsApi.getByName(stationName, actionOptions(
+      'fuelPricing.setFuelPrice', source, 'read', 'location',
+      `Fuel pricing location details loaded for ${stationName}`,
+    ))
+  },
   getMatrix<T = unknown>(date: string) {
     return fuelPricingApi.getMatrix<T>(
       date,

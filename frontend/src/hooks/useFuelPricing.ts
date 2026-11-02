@@ -5,8 +5,6 @@ import { toast } from "sonner"; // or your preferred toast library
 import { isApiError } from "@/api/core/errors";
 import { fuelPricingService } from "@/api/fuel-pricing/fuel-pricing.service";
 import type { FuelPricingSource } from "@/api/fuel-pricing/fuel-pricing.types";
-import { locationsApi } from "@/api/locations/locations.api";
-import { actionOptions } from "@/api/resources/action-options";
 
 export const SORTED_DISPLAY_GRADES = [
   { id: "REG", label: "Regular", lookup: "Regular" },
@@ -125,16 +123,7 @@ export function useFuelPricing({ user, selectedSite, source }: UseFuelPricingOpt
     queryFn: async () => {
       if (!selectedSite) return null;
       try {
-        return await locationsApi.getByName(
-          selectedSite,
-          actionOptions(
-            'fuelPricing.setFuelPrice',
-            source,
-            'read',
-            'location',
-            `Fuel pricing location details loaded for ${selectedSite}`,
-          ),
-        );
+        return await fuelPricingService.getLocation(selectedSite, source);
       } catch (err) {
         if (handleApiErrorCheck(err)) return null;
         throw err;

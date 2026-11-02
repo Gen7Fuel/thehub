@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { ApiError } from '@/api/core/errors'
 
 const {
   mockAxiosGet,
@@ -63,6 +64,13 @@ vi.mock('@/api/order-rec/order-rec.service', () => ({
 
 import { syncPendingActions, triggerBackgroundSync } from '../utils'
 
+vi.mock('@/api/cdn/cdn.service', () => ({
+  cdnService: {
+    uploadBase64Image: (base64Data: string, fileName: string) =>
+      mockAxiosPost('/cdn/upload-base64', { base64Data, fileName }).then((response: any) => response.data),
+  },
+}))
+
 const poAction = (overrides: Record<string, any> = {}) => ({
   type: 'CREATE_PURCHASE_ORDER',
   receipt: 'data:image/png;base64,abc',
@@ -77,6 +85,18 @@ const payableAction = (overrides: Record<string, any> = {}) => ({
   payload: { vendorName: 'Shell Canada', location: 'Rankin', notes: '', paymentMethod: 'safe', amount: 100, date: '2026-01-01' },
   queuedAt: 1,
   ...overrides,
+})
+
+it.each([undefined, 408, 429, 500, 503])('keeps wrapped API failure %s queued for retry', async (status) => {
+  const original = Object.assign(new Error('Temporary failure'), {
+    isAxiosErr: true,
+    response: status == null ? undefined : { status, data: { message: 'Temporary failure' } },
+  })
+  mockCreatePurchaseOrder.mockRejectedValue(new ApiError(original))
+  mockGetPendingActionEntries.mockResolvedValue([{ key: 91, action: poAction() }])
+  await syncPendingActions()
+  expect(mockUpdatePendingAction).not.toHaveBeenCalledWith(91, expect.objectContaining({ failed: true }))
+  expect(mockDeletePendingAction).not.toHaveBeenCalled()
 })
 
 beforeEach(() => {

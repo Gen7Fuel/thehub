@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { cdnService } from '@/api/cdn/cdn.service'
 import { createFileRoute, useLoaderData, useNavigate } from '@tanstack/react-router'
 import { format, subDays } from 'date-fns'
 import type { DateRange } from 'react-day-picker'
@@ -130,9 +131,7 @@ function RouteComponent() {
   )
 
   const fetchAsDataUrl = async (url: string): Promise<string> => {
-    const res = await fetch(url)
-    if (!res.ok) throw new Error(`Failed to load image (${res.status})`)
-    const blob = await res.blob()
+    const blob = await cdnService.downloadImage(url)
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader()
       reader.onloadend = () => resolve(String(reader.result))

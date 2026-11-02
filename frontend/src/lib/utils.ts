@@ -2,6 +2,8 @@ import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { jwtDecode } from "jwt-decode"
 import axios from "axios"
+import { cdnService } from "@/api/cdn/cdn.service"
+import { isApiError } from "@/api/core/errors"
 import { getPendingActionEntries, deletePendingAction, updatePendingAction, saveOrderRec } from "@/lib/orderRecIndexedDB"
 import { isActuallyOnline } from "@/lib/network"
 // import { useAuth } from "@/context/AuthContext";
@@ -11,21 +13,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export async function uploadBase64Image(base64Data: string | null, fileName: string): Promise<any> {
-  const response = await axios.post(`/cdn/upload-base64`, {
-    base64Data,
-    fileName,
-  }, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    },
-    // Bounds how long a caller waits before treating the connection as
-    // unreachable (e.g. to fall back to an offline queue) — axios has no
-    // timeout by default, so a stalled connection would otherwise hang far
-    // longer than the browser's own "no network" detection.
-    timeout: 60000,
-  });
-  console.log('Uploaded file info:', response.data);
-  return response.data;
+  return cdnService.uploadBase64Image(base64Data, fileName);
 }
 
 export const formatFleetCardNumber = (number: string) => {
@@ -387,6 +375,10 @@ async function syncOneAction(action: any): Promise<void> {
 // Everything else (no response at all = network/timeout, 5xx, 408, 429) is
 // transient and stays queued for the next pass.
 function isPermanentFailure(err: unknown): boolean {
+  if (isApiError(err)) {
+    const status = err.status;
+    return status != null && status >= 400 && status < 500 && status !== 408 && status !== 429;
+  }
   if (axios.isAxiosError(err)) {
     const status = err.response?.status;
     if (status == null) return false; // network/timeout — retryable
@@ -399,6 +391,7 @@ function isPermanentFailure(err: unknown): boolean {
 }
 
 function describeSyncFailure(err: unknown): string {
+  if (isApiError(err)) return err.message;
   if (axios.isAxiosError(err)) {
     return err.response?.data?.message || err.message || "Sync failed.";
   }
