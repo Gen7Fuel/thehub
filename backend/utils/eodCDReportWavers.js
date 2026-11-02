@@ -251,7 +251,7 @@ async function fetchChickenDelightEodDataForDate({ site, date }) {
 
   const rows = await CashSummary.find({ 
     site, 
-    date: { $gte: start, $lt: end }, 
+    businessDate: String(date),
     isChickenDelight: true 
   }).lean();
 

@@ -167,25 +167,26 @@ router.get('/tax-exempt-report', async (req, res) => {
       return res.status(400).json({ error: 'site, from, and to dates are required' });
     }
 
-    const startDate = new Date(from);
-    const endDate = new Date(to);
-    // Ensure endDate covers the full day
-    endDate.setHours(23, 59, 59, 999);
+    const fromBusinessDate = String(from);
+    const toBusinessDate = String(to);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fromBusinessDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toBusinessDate)) {
+      return res.status(400).json({ error: 'from and to must use YYYY-MM-DD format' });
+    }
 
     // 1. Fetch all shifts in range
     const shifts = await CashSummary.find({
       site,
-      date: { $gte: startDate, $lte: endDate }
-    }).sort({ date: 1 }).lean();
+      businessDate: { $gte: fromBusinessDate, $lte: toBusinessDate }
+    }).sort({ businessDate: 1 }).lean();
 
     // 2. Fetch submission status from CashSummaryReport
     const reports = await CashSummaryReport.find({
       site,
-      date: { $gte: startDate, $lte: endDate }
+      businessDate: { $gte: fromBusinessDate, $lte: toBusinessDate }
     }).lean();
 
     const reportMap = reports.reduce((acc, r) => {
-      const dateKey = new Date(r.date).toISOString().split('T')[0];
+      const dateKey = r.businessDate;
       acc[dateKey] = r.submitted;
       return acc;
     }, {});
@@ -194,7 +195,8 @@ router.get('/tax-exempt-report', async (req, res) => {
     const dailyData = {};
 
     shifts.forEach(shift => {
-      const dateKey = new Date(shift.date).toISOString().split('T')[0];
+      const dateKey = shift.businessDate;
+      if (!dateKey) return;
 
       if (!dailyData[dateKey]) {
         dailyData[dateKey] = {
@@ -217,9 +219,10 @@ router.get('/tax-exempt-report', async (req, res) => {
 
     // 4. Ensure every date in the range exists in the response
     const results = [];
-    let current = new Date(startDate);
-    while (current <= endDate) {
-      const key = current.toISOString().split('T')[0];
+    let current = DateTime.fromISO(fromBusinessDate, { zone: 'UTC' }).startOf('day');
+    const last = DateTime.fromISO(toBusinessDate, { zone: 'UTC' }).startOf('day');
+    while (current <= last) {
+      const key = current.toFormat('yyyy-MM-dd');
       if (dailyData[key]) {
         results.push(dailyData[key]);
       } else {
@@ -233,7 +236,7 @@ router.get('/tax-exempt-report', async (req, res) => {
           isSubmitted: !!reportMap[key]
         });
       }
-      current.setDate(current.getDate() + 1);
+      current = current.plus({ days: 1 });
     }
 
     res.json(results);
@@ -309,27 +312,33 @@ router.get('/over-short', async (req, res) => {
     // end.setHours(0, 0, 0, 0);
     // const start = new Date(end);
     // start.setDate(start.getDate() - 20);
-    // 2️⃣ Date range setup - NEW LOGIC
-    let start, end;
-    if (from && to) {
-      start = new Date(from);
-      end = new Date(to);
-    } else {
-      // Fallback to your original default
-      end = new Date();
-      end.setHours(0, 0, 0, 0);
-      start = new Date(end);
-      start.setDate(start.getDate() - 20);
+    // 2️⃣ Date range setup uses business-date strings for Mongo queries.
+    const ymdPattern = /^\d{4}-\d{2}-\d{2}$/;
+    let fromBusinessDate = String(from || '');
+    let toBusinessDate = String(to || '');
+    if (!ymdPattern.test(fromBusinessDate) || !ymdPattern.test(toBusinessDate)) {
+      const dashboardTimezone = location?.timezone || 'America/Toronto';
+      const endDate = DateTime.now().setZone(dashboardTimezone).minus({ days: 1 });
+      toBusinessDate = endDate.toFormat('yyyy-MM-dd');
+      fromBusinessDate = endDate.minus({ days: 20 }).toFormat('yyyy-MM-dd');
     }
 
-    // Set hours to ensure full day coverage
-    start.setHours(0, 0, 0, 0);
-    end.setHours(23, 59, 59, 999);
+    // SQL employee data still requires Date bounds; these are only transport
+    // bounds and are not used to classify CashSummary shifts.
+    const start = new Date(`${fromBusinessDate}T00:00:00.000Z`);
+    const end = new Date(`${toBusinessDate}T23:59:59.999Z`);
 
     // 1. Parallel Fetch: Mongo Data + SQL Employee Data
     const [reports, shifts, employeeRecords] = await Promise.all([
-      CashSummaryReport.find({ site, submitted: true, date: { $gte: start, $lte: end } }).sort({ date: 1 }).lean(),
-      CashSummary.find({ site, date: { $gte: start, $lte: new Date(end.getTime() + 86400000) } }).lean(),
+      CashSummaryReport.find({
+        site,
+        submitted: true,
+        businessDate: { $gte: fromBusinessDate, $lte: toBusinessDate },
+      }).sort({ businessDate: 1 }).lean(),
+      CashSummary.find({
+        site,
+        businessDate: { $gte: fromBusinessDate, $lte: toBusinessDate },
+      }).lean(),
       csoCode ? getShiftEmployees(csoCode, start, end) : Promise.resolve([])
     ]);
 
@@ -370,8 +379,8 @@ router.get('/over-short', async (req, res) => {
       const lotteryDocs = await Lottery.find({
         site,
         date: {
-          $gte: start.toISOString().split('T')[0],
-          $lte: end.toISOString().split('T')[0]
+          $gte: fromBusinessDate,
+          $lte: toBusinessDate
         }
       }).lean();
       lotteryMap = lotteryDocs.reduce((acc, curr) => {
@@ -384,9 +393,7 @@ router.get('/over-short', async (req, res) => {
     const byDate = {};
     for (const shift of shifts) {
       if (shift.isChickenDelight) continue
-      const d = new Date(shift.date);
-      d.setHours(0, 0, 0, 0);
-      const key = d.toISOString();
+      const key = shift.businessDate;
 
       if (!byDate[key]) {
         byDate[key] = {
@@ -409,9 +416,8 @@ router.get('/over-short', async (req, res) => {
 
     // 7️⃣ Final Calculation logic
     const data = reports.map(r => {
-      const isoKey = r.date.toISOString();
-      const dateStr = isoKey.split('T')[0];
-      const totals = byDate[isoKey] || {
+      const dateStr = r.businessDate;
+      const totals = byDate[dateStr] || {
         canadian_cash_collected: 0,
         chequesCashedOut: 0,
         report_canadian_cash: 0,
@@ -587,31 +593,29 @@ router.get('/payables-comparison', async (req, res) => {
     const locationInfo = await Location.findOne({ site }).lean();
     const sellsLottery = locationInfo?.sellsLottery || false;
 
-    const end = new Date();
-    end.setHours(0, 0, 0, 0);
-    const start = new Date(end);
-    start.setDate(start.getDate() - 20);
-
-    const startStr = start.toISOString().split('T')[0];
-    const endStr = end.toISOString().split('T')[0];
+    const timezone = locationInfo?.timezone || 'America/Toronto';
+    const endBusinessDate = DateTime.now().setZone(timezone).minus({ days: 1 }).toFormat('yyyy-MM-dd');
+    const startBusinessDate = DateTime.fromISO(endBusinessDate, { zone: timezone })
+      .minus({ days: 20 })
+      .toFormat('yyyy-MM-dd');
 
     const reports = await CashSummaryReport.find({
       site,
       submitted: true,
-      date: { $gte: start, $lte: end },
-    }).sort({ date: 1 }).lean();
+      businessDate: { $gte: startBusinessDate, $lte: endBusinessDate },
+    }).sort({ businessDate: 1 }).lean();
 
     if (!reports.length) return res.json([]);
 
     const shifts = await CashSummary.find({
       site,
-      date: { $gte: start, $lt: new Date(end.getTime() + 24 * 60 * 60 * 1000) },
+      businessDate: { $gte: startBusinessDate, $lte: endBusinessDate },
     }).lean();
 
     const payables = await Payable.find({
       location: locationInfo?._id,
       paymentMethod: 'till',
-      date: { $gte: startStr, $lte: endStr },
+      date: { $gte: startBusinessDate, $lte: endBusinessDate },
     }).lean();
 
     let lotteryMap = {};
@@ -619,8 +623,8 @@ router.get('/payables-comparison', async (req, res) => {
       const lotteryDocs = await Lottery.find({
         site,
         date: {
-          $gte: start.toISOString().split('T')[0],
-          $lte: end.toISOString().split('T')[0]
+          $gte: startBusinessDate,
+          $lte: endBusinessDate
         }
       }).lean();
       lotteryMap = lotteryDocs.reduce((acc, curr) => {
@@ -632,9 +636,8 @@ router.get('/payables-comparison', async (req, res) => {
     // 1️⃣ Aggregate Raw POS Payouts (Direct from shifts)
     const posByDate = {};
     for (const shift of shifts) {
-      const d = new Date(shift.date);
-      d.setHours(0, 0, 0, 0);
-      const key = d.toISOString();
+      const key = shift.businessDate;
+      if (!key) continue;
 
       // Use lottoPayout for sites that sell lottery, otherwise use payouts
       const payoutValue = sellsLottery 
@@ -653,10 +656,9 @@ router.get('/payables-comparison', async (req, res) => {
 
     // 3️⃣ Build Final Data
     const data = reports.map(r => {
-      const isoKey = r.date.toISOString();
-      const dateStr = isoKey.split('T')[0];
+      const dateStr = r.businessDate;
 
-      const rawPosPayout = posByDate[isoKey] || 0;
+      const rawPosPayout = posByDate[dateStr] || 0;
       let internalTotal = payablesModuleByDate[dateStr] || 0;
 
       // Add Lottery Actuals to the Internal side
@@ -681,30 +683,27 @@ router.get('/payables-comparison', async (req, res) => {
   }
 });
 
-// 1. GET shifts by site & date (Local midnight bounds)
+// 1. GET shifts by site & business date (YYYY-MM-DD)
 router.get('/by-date', async (req, res) => {
   try {
     const { site, date } = req.query;
-    if (!site || !date) {
+    if (!site || !date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
       return res.status(400).json({ error: 'site and date parameters are required' });
     }
 
-    const targetDate = new Date(date);
-    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 0, 0, 0, 0);
-    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate(), 23, 59, 59, 999);
+    const businessDate = String(date);
 
-    // Check if Cash Summary Report is submitted for this day
-    const report = await CashSummaryReport.findOne({
-      site,
-      date: { $gte: startOfDay,$lte: endOfDay }
-    }).lean();
-
-    const isSubmitted = !!(report && report.submitted);
-
+    // CashSummary.businessDate is the store-local calendar date. Query it
+    // directly so this form does not depend on the browser or Linux UTC zone.
     const shifts = await CashSummary.find({
       site,
-      date: { $gte: startOfDay,$lte: endOfDay }
+      businessDate,
     }).sort({ shift_number: 1 }).lean();
+
+    // Check if Cash Summary Report is submitted for this business day.
+    const report = await CashSummaryReport.findOne({ site, businessDate }).lean();
+
+    const isSubmitted = !!(report && report.submitted);
 
     res.json({
       isSubmitted,
@@ -720,42 +719,35 @@ router.get('/by-date', async (req, res) => {
 router.get('/by-range', async (req, res) => {
   try {
     const { site, from, to } = req.query;
-    if (!site || !from || !to) {
+    if (!site || !from || !to || !/^\d{4}-\d{2}-\d{2}$/.test(String(from)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to))) {
       return res.status(400).json({ error: 'site, from, and to parameters are required' });
     }
 
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
+    const fromBusinessDate = String(from);
+    const toBusinessDate = String(to);
 
-    const startOfRange = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 0, 0, 0, 0);
-    const endOfRange = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999);
-
-    // 1. Fetch submitted CashSummaryReports in date range for site
+    // 1. Fetch submitted CashSummaryReports by their explicit business date.
     const reports = await CashSummaryReport.find({
       site,
-      date: { $gte: startOfRange, $lte: endOfRange },
+      businessDate: { $gte: fromBusinessDate, $lte: toBusinessDate },
       submitted: true
     }).lean();
 
     const submittedDatesSet = new Set(
-      reports.map(r => {
-        const d = new Date(r.date);
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      })
+      reports.map(r => r.businessDate)
     );
 
-    // 2. Fetch shifts in date range
+    // 2. Fetch shifts by their explicit store-local business date
     const shifts = await CashSummary.find({
       site,
-      date: { $gte: startOfRange, $lte: endOfRange }
-    }).sort({ date: -1, shift_number: 1 }).lean();
+      businessDate: { $gte: fromBusinessDate, $lte: toBusinessDate }
+    }).sort({ businessDate: -1, shift_number: 1 }).lean();
 
-    // 3. Group shifts by local ISO Date string (YYYY-MM-DD)
+    // 3. Group shifts by their explicit business date
     const groupedMap = new Map();
 
     for (const shift of shifts) {
-      const d = new Date(shift.date);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const dateKey = shift.businessDate;
 
       if (!groupedMap.has(dateKey)) {
         groupedMap.set(dateKey, {
@@ -907,26 +899,34 @@ router.post('/batch', async (req, res) => {
     // 2. Resolve Site and Date context for Safesheet entry & CashSummaryReport
     let targetSite = items[0]?.site;
     let targetDateRaw = items[0]?.date;
+    let targetBusinessDate = items[0]?.businessDate;
 
-    if (!targetSite || !targetDateRaw) {
+    if (!targetSite || !targetDateRaw || !targetBusinessDate) {
       const dbDoc = existingDocsMap.get(String(items[0]._id));
       if (dbDoc) {
         targetSite = targetSite || dbDoc.site;
         targetDateRaw = targetDateRaw || dbDoc.date;
+        targetBusinessDate = targetBusinessDate || dbDoc.businessDate;
       }
     }
 
-    if (targetSite && targetDateRaw) {
-      // Parse local date (supports "YYYY-MM-DD" strings or ISO Date objects)
-      let dateStr = '';
-      if (typeof targetDateRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(targetDateRaw)) {
+    if (targetSite && (targetBusinessDate || targetDateRaw)) {
+      // Prefer the explicit store-local business date. The timestamp fallback
+      // is retained only for pre-migration payloads that do not have it yet.
+      let dateStr = typeof targetBusinessDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(targetBusinessDate)
+        ? targetBusinessDate
+        : '';
+      if (!dateStr && typeof targetDateRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(targetDateRaw)) {
         dateStr = targetDateRaw;
       } else {
-        const d = new Date(targetDateRaw);
+        const d = dateStr ? null : new Date(targetDateRaw);
+        if (d && Number.isNaN(d.getTime())) dateStr = '';
+        if (d) {
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         dateStr = `${y}-${m}-${day}`;
+        }
       }
 
       const [yy, mm, dd] = dateStr.split('-').map(Number);
@@ -938,11 +938,12 @@ router.post('/batch', async (req, res) => {
 
       // 3. Upsert CashSummaryReport document with default values
       await CashSummaryReport.findOneAndUpdate(
-        { site: targetSite, date: normalizedStart },
+        { site: targetSite, businessDate: dateStr },
         {
           $setOnInsert: {
             site: targetSite,
             date: normalizedStart,
+            businessDate: dateStr,
             submitted: false,
             notes: '',
           },
@@ -952,7 +953,7 @@ router.post('/batch', async (req, res) => {
 
       // 4. Aggregate total canadian_cash_collected for the entire site & day from DB
       const agg = await CashSummary.aggregate([
-        { $match: { site: targetSite, date: { $gte: start, $lt: end } } },
+        { $match: { site: targetSite, businessDate: dateStr } },
         {
           $group: {
             _id: null,
@@ -1270,11 +1271,10 @@ router.get('/lottery', async (req, res) => {
       return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
     }
 
-    const [yy, mm, dd] = String(date).split('-').map(Number)
-    const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
-    const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
-
-    const csRows = await CashSummary.find({ site, date: { $gte: start, $lt: end } }).lean()
+    const businessDate = String(date)
+    // Lottery and lottery-list both consume this endpoint. Use the explicit
+    // store-local business date instead of reconstructing a server-local day.
+    const csRows = await CashSummary.find({ site, businessDate }).lean()
 
     // Check for a user-saved Lottery entry for this site+date (YYYY-MM-DD)
     const ymdStr = String(date)
@@ -1405,6 +1405,7 @@ router.post('/lottery', async (req, res) => {
   }
 })
 
+/* RETIRED: no local frontend caller. Kept commented for historical reference.
 router.post('/submit/to/safesheet', async (req, res) => {
   try {
     const userId = req.user._id;
@@ -1482,7 +1483,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
 
     await CashSummaryReport.findOneAndUpdate(
       { site, date: start }, // normalized day start
-      { $set: { site, date: start, submitted: true, submittedAt: new Date(), submittedBy: userId } },
+      { $set: { site, date: start, businessDate: String(date), submitted: true, submittedAt: new Date(), submittedBy: userId } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     )
 
@@ -1617,6 +1618,7 @@ router.post('/submit/to/safesheet', async (req, res) => {
     return res.status(500).json({ error: 'Failed to submit' })
   }
 })
+*/
 
 function startEndOfYmd(ymd) {
   const [yy, mm, dd] = String(ymd).split('-').map(Number)
@@ -1650,11 +1652,9 @@ router.get('/report', async (req, res) => {
       return res.status(400).json({ error: 'date (YYYY-MM-DD) is required' })
     }
 
-    const { start, end } = startEndOfYmd(date)
-
     const rows = await CashSummary.find({
       site,
-      date: { $gte: start, $lt: end },
+      businessDate: String(date),
     })
       .sort({ shift_number: 1 })
       .lean()
@@ -1707,8 +1707,7 @@ router.get('/report', async (req, res) => {
     }
 
     // Fetch or create the single report for site+day (normalized date)
-    const reportDate = start // store normalized day start
-    const reportDoc = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
+    const reportDoc = await CashSummaryReport.findOne({ site, businessDate: String(date) }).lean()
 
     res.json({
       site,
@@ -1738,10 +1737,11 @@ async function saveCashSummaryReportFields({ site, date, fields }) {
   }
 
   const { start } = startEndOfYmd(date)
-  const before = await CashSummaryReport.findOne({ site, date: start }).lean()
+  const businessDate = String(date)
+  const before = await CashSummaryReport.findOne({ site, businessDate }).lean()
   const doc = await CashSummaryReport.findOneAndUpdate(
-    { site, date: start },
-    { $set: { site, date: start, ...fields } },
+    { site, businessDate },
+    { $set: { site, date: start, businessDate, ...fields } },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   ).lean()
   return { before, doc }
@@ -1838,7 +1838,7 @@ router.put('/report', async (req, res) => {
     const { start } = startEndOfYmd(date)
     const before = await CashSummaryReport.findOne({ site, date: start }).lean()
     // Build $set payload only for provided fields
-    const setPayload = { site, date: start }
+    const setPayload = { site, date: start, businessDate: String(date) }
     if (typeof notes === 'string') setPayload.notes = notes
     const prepayNum = norm(unsettledPrepays)
     if (prepayNum !== undefined) setPayload.unsettledPrepays = prepayNum
@@ -1867,6 +1867,7 @@ router.put('/report', async (req, res) => {
   }
 })
 
+/* RETIRED: no local frontend caller. Kept commented for historical reference.
 router.post('/submit', async (req, res) => {
   try {
     const { site, date } = req.body || {}
@@ -1903,19 +1904,22 @@ router.post('/submit', async (req, res) => {
     res.status(500).json({ error: 'Failed to submit' })
   }
 })
+*/
 
 router.get('/payouts-check', async (req, res) => {
   const { site, date } = req.query
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
 
   try {
-    const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
-    const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      return res.status(400).json({ error: 'date must use YYYY-MM-DD format' })
+    }
+    const businessDate = String(date)
 
     const location = await Location.findOne({ site }).lean()
 
     const [shiftAgg] = await CashSummary.aggregate([
-      { $match: { site, date: { $gte: start, $lte: end } } },
+      { $match: { site, businessDate } },
       { $group: { _id: null, total: { $sum: { $ifNull: ['$payouts', 0] } } } },
     ])
 
@@ -1938,6 +1942,7 @@ router.get('/payouts-check', async (req, res) => {
   }
 })
 
+/* RETIRED: no local frontend caller. Kept commented for historical reference.
 router.get('/ar-check-range', async (req, res) => {
   const { site, from, to } = req.query
   if (!site || !from || !to) return res.status(400).json({ error: 'site, from, and to are required' })
@@ -2003,6 +2008,7 @@ router.get('/ar-check-range', async (req, res) => {
     res.status(500).json({ error: 'Failed to check AR totals' })
   }
 })
+*/
 
 // router.get('/ar-check', async (req, res) => {
 //   const { site, date } = req.query
@@ -2098,12 +2104,13 @@ router.get('/ar-check', async (req, res) => {
   if (!site || !date) return res.status(400).json({ error: 'site and date required' })
 
   try {
-    const start = new Date(date); start.setUTCHours(0, 0, 0, 0)
-    const end = new Date(date); end.setUTCHours(23, 59, 59, 999)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      return res.status(400).json({ error: 'date must use YYYY-MM-DD format' })
+    }
 
     // 1. Fetch POS Cash Summary documents
     const cashSummaries = await CashSummary.find(
-      { site, date: { $gte: start, $lte: end } },
+      { site, businessDate: String(date) },
       { shift_number: 1, arCustomers: 1, arIncurred: 1 }
     ).lean()
 
@@ -2268,6 +2275,7 @@ router.get('/ar-check', async (req, res) => {
   }
 })
 
+/* RETIRED: no local frontend caller. Kept commented for historical reference.
 router.get('/ar-paid-report', async (req, res) => {
   try {
     const month = String(req.query.month || '')
@@ -2305,6 +2313,7 @@ router.get('/ar-paid-report', async (req, res) => {
     res.status(500).json({ error: 'Failed to build A/R paid report' })
   }
 })
+*/
 
 router.get('/:id', async (req, res) => {
   try {

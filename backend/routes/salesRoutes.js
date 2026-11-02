@@ -110,13 +110,16 @@ router.get('/all-data', async (req, res) => {
     }
 
     // 2. Date Range Setup (Past 10 Months)
-    const targetEndDate = timesheetEnd ? new Date(timesheetEnd) : new Date();
+    const targetEndDate = timesheetEnd ? new Date(`${timesheetEnd}T00:00:00.000Z`) : new Date();
     const targetStartDate = new Date(targetEndDate);
     targetStartDate.setMonth(targetStartDate.getMonth() - 10);
     targetStartDate.setDate(1);
 
     targetStartDate.setHours(0, 0, 0, 0);
     targetEndDate.setHours(23, 59, 59, 999);
+
+    const targetStartBusinessDate = targetStartDate.toISOString().slice(0, 10);
+    const targetEndBusinessDate = targetEndDate.toISOString().slice(0, 10);
 
     console.log(`\n🔍 [DEBUG] Fetching Mongo shifts for site: "${siteParam}"`);
     console.log(`📅 [DEBUG] Range: ${targetStartDate.toISOString()} to ${targetEndDate.toISOString()}`);
@@ -132,7 +135,7 @@ router.get('/all-data', async (req, res) => {
       }),
       CashSummary.find({ 
         site: siteParam, 
-        date: { $gte: targetStartDate, $lte: targetEndDate } 
+        businessDate: { $gte: targetStartBusinessDate, $lte: targetEndBusinessDate }
       }).lean(),
     ]);
 
@@ -144,10 +147,8 @@ router.get('/all-data', async (req, res) => {
     const dispenserSalesByDate = {};
 
     shifts.forEach((shift) => {
-      if (!shift.date) return;
-
-      // Extract raw YYYY-MM-DD cleanly regardless of timezone offset
-      const dateStr = String(shift.date).slice(0, 10);
+      const dateStr = shift.businessDate;
+      if (!dateStr) return;
 
       const afdCredit = Number(shift.afdCredit) || 0;
       const afdDebit = Number(shift.afdDebit) || 0;

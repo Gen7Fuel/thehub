@@ -781,11 +781,8 @@ function AdjustedTotalsCards({ totals, lottery, bullock, unsettledPrepays, handh
 }
 
 async function loadReportData(site, date) {
-  const [yy, mm, dd] = String(date).split('-').map(Number)
-  const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
-  const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
-
-  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end } })
+  const businessDate = String(date)
+  const rows = await CashSummary.find({ site, businessDate })
     .sort({ shift_number: 1 })
     .lean()
 
@@ -1121,18 +1118,16 @@ function ReportDoc({ site, date, rows, totals, notes, lottery, bullock, unsettle
 async function generateCashSummaryPdf({ site, date, notes = '', isManitoba = false }) {
   if (!site || !date) throw new Error('site and date are required')
 
-  const [yy, mm, dd] = String(date).split('-').map(Number)
-  const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
-  const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
+  const businessDate = String(date)
 
   let reportDocForExtras = null
   if (!notes) {
-    const reportDoc = await CashSummaryReport.findOne({ site, date: start }).lean()
+    const reportDoc = await CashSummaryReport.findOne({ site, businessDate }).lean()
     notes = reportDoc?.notes || ''
     reportDocForExtras = reportDoc
   }
 
-  const rows = await CashSummary.find({ site, date: { $gte: start, $lt: end }, isChickenDelight: false })
+  const rows = await CashSummary.find({ site, businessDate, isChickenDelight: false })
     .sort({ shift_number: 1 })
     .lean()
   const bullock = aggregateBullock(rows)
@@ -1159,7 +1154,7 @@ async function generateCashSummaryPdf({ site, date, notes = '', isManitoba = fal
   // Fetch report again if needed to read optional extras
   if (!reportDocForExtras) {
     try {
-      reportDocForExtras = await CashSummaryReport.findOne({ site, date: start }).lean()
+      reportDocForExtras = await CashSummaryReport.findOne({ site, businessDate }).lean()
     } catch (_) { /* ignore */ }
   }
   const unsettledPrepays = reportDocForExtras?.unsettledPrepays

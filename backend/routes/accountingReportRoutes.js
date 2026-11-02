@@ -586,18 +586,16 @@ router.post("/ar-customer-report", async (req, res) => {
     if (includeArPaidReport) {
       const paidRecords = await CashSummary.find({
         $or: [{ site: site }, { stationName: site }],
-        date: { $gte: startBoundary, $lte: endBoundary },
+        businessDate: { $gte: String(startDate).slice(0, 10), $lte: String(endDate).slice(0, 10) },
         "arCustomers.paid": { $exists: true, $ne: null, $gt: 0 },
       })
-        .sort({ date: 1, shift_number: 1 })
+        .sort({ businessDate: 1, shift_number: 1 })
         .lean();
 
       const paidCustomerMap = {};
 
       paidRecords.forEach((doc) => {
-        const formattedDate = doc.date
-          ? new Date(doc.date).toISOString().split("T")[0]
-          : "N/A";
+        const formattedDate = doc.businessDate || "N/A";
 
         if (Array.isArray(doc.arCustomers)) {
           doc.arCustomers.forEach((cust) => {

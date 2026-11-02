@@ -51,15 +51,16 @@ async function buildDashboardData(csoCode, siteName) {
     timesheetEnd: fmt(end),              // <--- Included
   };
 
-  const startDate = new Date(dates.shiftStart);
-  startDate.setHours(0, 0, 0, 0);
-  const endDate = new Date(dates.shiftEnd);
-  endDate.setHours(23, 59, 59, 999);
-
   const [sqlResponse, reports, shifts] = await Promise.all([
     getAllSQLData(csoCode, dates),
-    CashSummaryReport.find({ site: siteName, date: { $gte: startDate, $lte: endDate } }).lean(),
-    CashSummary.find({ site: siteName, date: { $gte: startDate, $lte: endDate } }).lean(),
+    CashSummaryReport.find({
+      site: siteName,
+      businessDate: { $gte: dates.shiftStart, $lte: dates.shiftEnd },
+    }).lean(),
+    CashSummary.find({
+      site: siteName,
+      businessDate: { $gte: dates.shiftStart, $lte: dates.shiftEnd },
+    }).lean(),
   ]);
 
   const { _failedQueries: failedQueries, ...sqlData } = sqlResponse;
@@ -67,7 +68,8 @@ async function buildDashboardData(csoCode, siteName) {
   // Aggregate Mongo Shifts
   const mongoDailyTimings = {};
   shifts.forEach((s) => {
-    const dayKey = new Date(s.date).toISOString().split("T")[0];
+    const dayKey = s.businessDate;
+    if (!dayKey) return;
     if (!mongoDailyTimings[dayKey]) {
       mongoDailyTimings[dayKey] = { stationOpen: s.stationStart, stationClose: s.stationEnd };
     } else {
@@ -82,14 +84,15 @@ async function buildDashboardData(csoCode, siteName) {
 
   // Merge & compute operational timings
   const operationalTimings = [];
-  let current = new Date(startDate);
+  let current = new Date(`${dates.shiftStart}T00:00:00.000Z`);
+  const endDate = new Date(`${dates.shiftEnd}T23:59:59.999Z`);
 
   while (current <= endDate) {
     const dateStr = current.toISOString().split("T")[0];
     const sqlDateSK = dateStr.replace(/-/g, "");
     const sqlRow = sqlData.shiftTransactionTimings.find((row) => row.Date_SK === sqlDateSK) || {};
     const mongoRow = mongoDailyTimings[dateStr] || {};
-    const reportEntry = reports.find((r) => new Date(r.date).toISOString().split("T")[0] === dateStr);
+    const reportEntry = reports.find((r) => r.businessDate === dateStr);
 
     const normOpen = mongoRow.stationOpen ? new Date(mongoRow.stationOpen) : null;
     const normClose = mongoRow.stationClose ? new Date(mongoRow.stationClose) : null;

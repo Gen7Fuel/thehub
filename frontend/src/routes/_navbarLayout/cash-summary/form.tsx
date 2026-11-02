@@ -932,8 +932,7 @@ function RouteComponent() {
       setFetchingShifts(true)
       setError(null)
       try {
-        const dateISO = pickerDate.toISOString()
-        const resData = await cashSummaryService.getFormShifts<any>(site, dateISO)
+        const resData = await cashSummaryService.getFormShifts<any>(site, activeDateString)
         const data: ShiftDoc[] = resData.shifts || (Array.isArray(resData) ? resData : [])
         const submittedStatus = !!resData.isSubmitted
 
