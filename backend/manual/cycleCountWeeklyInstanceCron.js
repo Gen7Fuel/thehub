@@ -7,6 +7,14 @@ const { runWeeklyInstanceCalculations } = require('../cron_jobs/cycleCountWeekly
 
 async function run() {
   try {
+    const startDate = process.argv[2] || null;
+
+    if (startDate) {
+      console.log(`Manual cycle count generation requested for week starting: ${startDate}`);
+    } else {
+      console.log("No start date supplied; using the normal next Monday logic.");
+    }
+
     await mongoose.connect(process.env.MONGO_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true
@@ -17,7 +25,7 @@ async function run() {
     const server = http.createServer();
     const io = setupSocket(server);
 
-    await runWeeklyInstanceCalculations(io);
+    await runWeeklyInstanceCalculations(io, startDate);
 
     console.log("Done generating weekly cycle count instances.");
     process.exit(0);
