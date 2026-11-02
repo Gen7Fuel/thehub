@@ -265,10 +265,10 @@ const autoSubmitCashSummaryReports = async () => {
         const startOfDay = getNormalizedDate(currentDt)
         const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1)
 
-        // Check if report is already submitted
+        // Cash Summary reports are keyed by the store-local business date.
         const existingReport = await CashSummaryReport.findOne({
           site,
-          date: startOfDay
+          businessDate: dateStr
         }).lean()
 
         if (existingReport && existingReport.submitted) {
@@ -279,7 +279,7 @@ const autoSubmitCashSummaryReports = async () => {
         // 2. Fetch all shifts submitted for this site and date
         const shifts = await CashSummary.find({
           site,
-          date: { $gte: startOfDay, $lte: endOfDay }
+          businessDate: dateStr
         }).lean()
 
         // If no shifts exist or ANY shift is NOT reviewed, skip submission
@@ -311,11 +311,12 @@ const autoSubmitCashSummaryReports = async () => {
 
         // 4. Mark the record as submitted (locks the record)
         await CashSummaryReport.findOneAndUpdate(
-          { site, date: startOfDay },
+          { site, businessDate: dateStr },
           {
             $set: {
               site,
               date: startOfDay,
+              businessDate: dateStr,
               submitted: true,
               submittedAt: new Date(),
               submittedBy: systemUserObjectId

@@ -25,6 +25,13 @@ const CashSummarySchema = new mongoose.Schema(
     site: { type: String, required: true },
     shift_number: { type: String, required: true, index: true },
     date: { type: Date, required: true },
+    // Store-local business calendar date (YYYY-MM-DD). This is populated by
+    // the SFTP ingestion path and will become the stable day-level query key.
+    businessDate: {
+      type: String,
+      match: /^\d{4}-\d{2}-\d{2}$/,
+      index: true,
+    },
     // Station times parsed from SFT header (stored as raw strings "YYYY-MM-DD HH:mm")
     stationStart: { type: String },
     stationEnd: { type: String },
@@ -109,6 +116,7 @@ CashSummarySchema.index({ site: 1, shift_number: 1, date: 1 }, { unique: true })
 // { site, date-range } without a shift_number, since shift_number sits between
 // them. Equality field first, range field second.
 CashSummarySchema.index({ site: 1, date: 1 })
+CashSummarySchema.index({ site: 1, businessDate: 1 })
 
 const CashSummary = mongoose.model('CashSummary', CashSummarySchema)
 
@@ -118,6 +126,12 @@ const CashSummaryReportSchema = new mongoose.Schema(
     site: { type: String, required: true, index: true },
     // Store normalized local start-of-day for the report date
     date: { type: Date, required: true, index: true },
+    // Store-local business calendar date (YYYY-MM-DD).
+    businessDate: {
+      type: String,
+      match: /^\d{4}-\d{2}-\d{2}$/,
+      index: true,
+    },
     notes: { type: String, default: '' },
     // Additional daily adjustment fields (optional)
     unsettledPrepays: { type: Number },
@@ -131,6 +145,7 @@ const CashSummaryReportSchema = new mongoose.Schema(
 
 // Enforce one report per site+day
 CashSummaryReportSchema.index({ site: 1, date: 1 }, { unique: true })
+CashSummaryReportSchema.index({ site: 1, businessDate: 1 })
 
 const CashSummaryReport = mongoose.model('CashSummaryReport', CashSummaryReportSchema)
 

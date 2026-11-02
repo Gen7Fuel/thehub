@@ -623,12 +623,12 @@ async function fetchEodDataForDate({ site, date, isManitoba = false }) {
 
   const rows = await CashSummary.find({
     site,
-    date: { $gte: start, $lt: end },
+    businessDate: String(date),
     isChickenDelight: false,
   }).lean();
   const reportDoc = await CashSummaryReport.findOne({
     site,
-    date: start,
+    businessDate: String(date),
   }).lean();
 
   let lottery = null;

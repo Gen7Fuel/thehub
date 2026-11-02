@@ -189,6 +189,9 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
             : new Date());
 
         const shiftDate = normalizeDateToStoreTimezone(rawShiftDate, timezone);
+        // Keep the store's business date explicitly so downstream day-level
+        // queries do not need to reconstruct a local day from a UTC Date.
+        const businessDate = moment(shiftDate).tz(timezone).format("YYYY-MM-DD");
 
         // Check for specific brand variations (e.g., Chicken Delight / Wavers West)
         const isWaversWest4x =
@@ -202,6 +205,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
           site,
           shift_number: shiftNumStr,
           date: shiftDate,
+          businessDate,
           stationStart: parsed.stationStart,
           stationEnd: parsed.stationEnd,
           isChickenDelight,
@@ -317,7 +321,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
         );
 
         console.log(
-          `[SFT Sync] [UPSERT SUCCESS] Site: "${site}", Shift #${shiftNumStr} | totalSales: $${salesTotal} | Date: ${shiftDate.toISOString()}`
+          `[SFT Sync] [UPSERT SUCCESS] Site: "${site}", Shift #${shiftNumStr} | totalSales: $${salesTotal} | Date: ${businessDate} (${shiftDate.toISOString()})`
         );
       } catch (shiftErr) {
         console.error(

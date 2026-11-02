@@ -573,10 +573,8 @@ async function computeBankRecForDate(site, date) {
   const nextDate = addDaysYmd(date, 1)
   const bank = nextDate ? await BankStatement.findOne({ site, date: nextDate }).lean() : null
 
-  const start = startOfUtcDay(date)
-  const end = endOfUtcDay(date)
   const [agg] = await CashSummary.aggregate([
-    { $match: { site, date: { $gte: start, $lte: end } } },
+    { $match: { site, businessDate: date } },
     {
       $group: {
         _id: null,
@@ -590,8 +588,7 @@ async function computeBankRecForDate(site, date) {
   let handheldDebit = 0
   try {
     const { CashSummaryReport } = require('../models/CashSummaryNew')
-    const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
-    const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
+    const report = await CashSummaryReport.findOne({ site, businessDate: date }).lean()
     if (report && typeof report.handheldDebit === 'number') {
       handheldDebit = report.handheldDebit
     }
@@ -962,7 +959,7 @@ router.get('/entries', async (req, res) => {
     }
 
     const [agg] = await CashSummary.aggregate([
-      { $match: { site, date: { $gte: start,$lte: end } } },
+      { $match: { site, businessDate: date } },
       { $group: { _id: null, ...groupStage } },
       { $project: { _id: 0 } },
     ])
@@ -989,8 +986,7 @@ router.get('/entries', async (req, res) => {
     const aggUnsettledPrepays = agg?.unsettledPrepays
     try {
       const { CashSummaryReport } = require('../models/CashSummaryNew')
-      const reportDate = new Date(`${date}T00:00:00.000Z`) // CashSummaryReport stores date as UTC midnight
-      const report = await CashSummaryReport.findOne({ site, date: reportDate }).lean()
+      const report = await CashSummaryReport.findOne({ site, businessDate: date }).lean()
       if (report) {
         cashSummary.unsettledPrepays = aggUnsettledPrepays || (typeof report.unsettledPrepays === 'number' ? report.unsettledPrepays : undefined)
         cashSummary.handheldDebit = typeof report.handheldDebit === 'number' ? report.handheldDebit : undefined

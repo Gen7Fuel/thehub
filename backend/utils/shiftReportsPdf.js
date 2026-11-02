@@ -16,10 +16,8 @@ async function fetchWithTimeout(url, opts = {}, ms = 15000) {
 }
 
 async function getShiftNumbersForDate(site, dateYmd) {
-  const [yy, mm, dd] = String(dateYmd).split('-').map(Number)
-  const start = new Date(yy, mm - 1, dd, 0, 0, 0, 0)
-  const end = new Date(yy, mm - 1, dd + 1, 0, 0, 0, 0)
-  const docs = await CashSummary.find({ site, date: { $gte: start, $lt: end } }, { shift_number: 1 }).lean()
+  const businessDate = String(dateYmd)
+  const docs = await CashSummary.find({ site, businessDate }, { shift_number: 1 }).lean()
   return Array.from(new Set(docs.map(d => String(d.shift_number)))).sort((a,b)=>Number(a)-Number(b))
 }
 
