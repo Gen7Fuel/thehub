@@ -4,7 +4,7 @@ const ItemBk = require("../pg/models/itemBk"); // Assumed structure
 const Event = require("../models/Event");
 const { pushNotification } = require('../services/notificationService');
 const { getPg } = require("../config/pg");
-const { format, addDays, nextMonday, getMonth } = require("date-fns");
+const { format, addDays, nextMonday, getMonth, parseISO, isValid, startOfDay } = require("date-fns");
 const cron = require("node-cron");
 
 // ----------------------------------------------------------------------
@@ -49,13 +49,29 @@ function isLastDayOfWeekInMonth(targetDate) {
   return getMonth(nextWeekSameDay) !== currentMonth;
 }
 
-async function runWeeklyInstanceCalculations(io = null) {
+async function runWeeklyInstanceCalculations(io = null, startDateOverride = null) {
   const db = getPg();
   console.log("--- Starting Weekly Cycle Count Generation ---");
 
   try {
     const stores = await Location.find({ type: "store" });
-    const startDate = nextMonday(new Date());
+    let startDate;
+
+    if (startDateOverride) {
+      const parsedStartDate = startDateOverride instanceof Date
+        ? startDateOverride
+        : parseISO(startDateOverride);
+
+      if (!isValid(parsedStartDate)) {
+        throw new Error(`Invalid start date: ${startDateOverride}. Expected YYYY-MM-DD.`);
+      }
+
+      startDate = startOfDay(parsedStartDate);
+      console.log(`Using manually supplied cycle count start date: ${format(startDate, "yyyy-MM-dd")}`);
+    } else {
+      startDate = nextMonday(new Date());
+      console.log(`Using next Monday as cycle count start date: ${format(startDate, "yyyy-MM-dd")}`);
+    }
 
     for (const store of stores) {
       const siteId = store._id.toString();
