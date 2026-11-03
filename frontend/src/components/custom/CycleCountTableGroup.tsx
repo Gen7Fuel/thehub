@@ -17,6 +17,7 @@ interface Props {
   onInputBlur: (id: string, field: "foh" | "boh", value: string) => void;
   getVarianceForItem: (catNum?: number) => number;
   isScheduled?: boolean;
+  disabled?: boolean;
 }
 
 const CycleCountTableGroup: React.FC<Props> = ({
@@ -26,7 +27,8 @@ const CycleCountTableGroup: React.FC<Props> = ({
   onInputChange,
   onInputBlur,
   getVarianceForItem,
-  isScheduled = false
+  isScheduled = false,
+  disabled = false
 }) => {
   const [activeBarcodeItem, setActiveBarcodeItem] = useState<{ name: string, upc: string, image: string } | null>(null);
   const [openVarianceId, setOpenVarianceId] = useState<string | null>(null);
@@ -123,6 +125,7 @@ const CycleCountTableGroup: React.FC<Props> = ({
                       pkInCrt={item.pk_in_crt}
                       // crtInCase={item.crt_in_case}
                       initialData={entryCounts}
+                      disabled={disabled}
                       // Changed "boh_multi" to "boh" to match parent handler signature
                       onSave={(payload: any) => onInputBlur(item.entryId, "boh", payload)}
                       statusColor={hasBoh ? 'border-green-500 bg-green-50' : 'border-red-200 bg-red-50/50'}
@@ -138,6 +141,7 @@ const CycleCountTableGroup: React.FC<Props> = ({
                       value={bohStr}
                       onChange={(e) => onInputChange(item.entryId, "boh", e.target.value)}
                       onBlur={(e) => onInputBlur(item.entryId, "boh", e.target.value)}
+                      disabled={disabled}
                     />
                   )}
                 </td>
@@ -151,6 +155,7 @@ const CycleCountTableGroup: React.FC<Props> = ({
                       pkInCrt={item.pk_in_crt}
                       // crtInCase={item.crt_in_case}
                       initialData={entryCounts}
+                      disabled={disabled}
                       // Changed "foh_multi" to "foh" to match parent handler signature
                       onSave={(payload: any) => onInputBlur(item.entryId, "foh", payload)}
                       statusColor={hasFoh ? 'border-green-500 bg-green-50' : 'border-red-200 bg-red-50/50'}
@@ -164,6 +169,7 @@ const CycleCountTableGroup: React.FC<Props> = ({
                       value={fohStr}
                       onChange={(e) => onInputChange(item.entryId, "foh", e.target.value)}
                       onBlur={(e) => onInputBlur(item.entryId, "foh", e.target.value)}
+                      disabled={disabled}
                     />
                   )}
                 </td>
@@ -282,7 +288,8 @@ const MultiUnitInput = ({
   // crtInCase,
   onSave,
   statusColor,
-  initialData
+  initialData,
+  disabled = false
 }: any) => {
   const showCartons = !!pkInCrt;
   // const showCases = !!(pkInCrt && crtInCase);
@@ -318,6 +325,8 @@ const MultiUnitInput = ({
     if (pks === "" && crts === "") return;
 
     // Send individual keys back to parent to save to state and database
+    if (disabled) return;
+
     onSave({
       [`${label}`]: pks === "" ? 0 : pks,
       [`${label}_crt`]: crts === "" ? 0 : crts,
@@ -352,6 +361,7 @@ const MultiUnitInput = ({
             value={val.cartons}
             onChange={(e) => setVal({ ...val, cartons: e.target.value })}
             onBlur={handleBlur}
+            disabled={disabled}
           />
         </div>
       )}
@@ -365,6 +375,7 @@ const MultiUnitInput = ({
           value={val.packs}
           onChange={(e) => setVal({ ...val, packs: e.target.value })}
           onBlur={handleBlur}
+          disabled={disabled}
         />
       </div>
     </div>

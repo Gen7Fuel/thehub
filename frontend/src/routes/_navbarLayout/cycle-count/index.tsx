@@ -4,18 +4,20 @@ import { useAuth } from "@/context/AuthContext";
 import { getSocket } from "@/lib/websocket";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import CycleCountTableGroup from "@/components/custom/CycleCountTableGroup"; // Our new helper
-import { Check, CheckCircle2, Star, ArrowDownToLine } from "lucide-react";
+import { Check, CheckCircle2, Star, ArrowDownToLine, LockKeyhole } from "lucide-react";
 import { useSite } from '@/context/SiteContext';
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { productCategoriesService } from '@/api/product-categories/product-categories.service';
 import { cycleCountService } from '@/api/cycle-count/cycle-count.service';
 import { isApiError } from '@/api/core/errors';
-// import {
-//   Dialog,
-//   DialogContent,
-//   DialogHeader,
-//   DialogTitle,
-// } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute('/_navbarLayout/cycle-count/')({
   component: RouteComponent,
@@ -35,6 +37,8 @@ function RouteComponent() {
   const [varianceMap, setVarianceMap] = useState<{ [key: number]: number }>({});
   const [syncing, setSyncing] = useState(false);
   const [isScheduled, setIsScheduled] = useState<boolean>(false);
+  const [countFinalized, setCountFinalized] = useState(false);
+  const [showFinalizeDialog, setShowFinalizeDialog] = useState(false);
   // const [showWelcomeModal, setShowWelcomeModal] = useState(true);
 
   interface CycleCountFieldUpdateV2 {
@@ -58,6 +62,7 @@ function RouteComponent() {
       const fetchedItems = data.items || [];
       setItems(fetchedItems);
       setIsScheduled(Boolean(data.isScheduled));
+      setCountFinalized(Boolean(data.countFinalized));
 
       // 1. Prepare initial counts
       const initial: any = {};
@@ -112,6 +117,7 @@ function RouteComponent() {
   useEffect(() => { fetchData(); }, [site]);
 
   const handleInputChange = (id: string, field: "foh" | "boh", value: string) => {
+    if (countFinalized) return;
     setCounts(prev => ({
       ...prev,
       [id]: { ...prev[id], [field]: value }
@@ -146,6 +152,7 @@ function RouteComponent() {
     field: "foh" | "boh",
     data: string | Record<string, string | number>
   ) => {
+    if (countFinalized) return;
     let numericValue: number;
     let breakdown = null;
 
@@ -337,12 +344,11 @@ function RouteComponent() {
 
   // 🚀 Dedicated sync handler function
   const handleFinalizeAndSync = async () => {
-    const confirmation = window.confirm(
-      "Make sure all the counts are correct and submit only when all counts for the day have been completed. This will create tickets for all the items which have been counted on the hub. Proceed with completion of the count?"
-    );
-    if (!confirmation) return;
-
+    setShowFinalizeDialog(false);
     setSyncing(true);
+    // Lock immediately while the request is in flight. The backend also
+    // claims the instance atomically before starting the external sync.
+    setCountFinalized(true);
     try {
       // // Captures today's date formatted as 'YYYY-MM-DD'
       // const todayStr = new Date().toISOString().split("T")[0];
@@ -357,6 +363,9 @@ function RouteComponent() {
     } catch (err: any) {
       console.error("Pipeline Sync Fault:", err);
       alert(err.message || "❌ CRITICAL Exception running automated data transmission.");
+      // Reconcile with the database in case the request completed but the
+      // response was lost. The server-side flag remains authoritative.
+      await fetchData();
     } finally {
       setSyncing(false);
     }
@@ -430,14 +439,16 @@ function RouteComponent() {
 
             {/* Clean button calling the isolated handler function */}
             <button
-              disabled={overallPercent === 0 || syncing}
-              onClick={handleFinalizeAndSync}
+              disabled={overallPercent === 0 || syncing || countFinalized}
+              onClick={() => setShowFinalizeDialog(true)}
               className={`text-xs font-bold px-4 py-2 text-white rounded-lg shadow-md transition-all ${overallPercent === 0
                   ? "bg-gray-300 cursor-not-allowed opacity-60"
-                  : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
+                  : countFinalized
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-emerald-600 hover:bg-emerald-700 active:scale-95"
                 }`}
             >
-              {syncing ? "Processing Sync..." : "Finalize Counts"}
+              {syncing ? "Processing Sync..." : countFinalized ? "Counts Finalized" : "Finalize Counts"}
             </button>
           </div>
           <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
@@ -522,6 +533,7 @@ function RouteComponent() {
                       isScheduled={isScheduled} // <-- Pass prop here
                       counts={counts}
                       isPriority={true}
+                      disabled={countFinalized}
                       onInputChange={handleInputChange}
                       onInputBlur={handleInputBlur}
                       getVarianceForItem={getVarianceForItem}
@@ -604,6 +616,7 @@ function RouteComponent() {
                       items={group.items} 
                       counts={counts} 
                       isPriority={false} 
+                      disabled={countFinalized}
                       isScheduled={isScheduled} 
                       onInputChange={handleInputChange} 
                       onInputBlur={handleInputBlur} 
@@ -616,6 +629,36 @@ function RouteComponent() {
           );
         })}
       </Accordion>
+
+      <Dialog open={showFinalizeDialog} onOpenChange={setShowFinalizeDialog}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-gray-900">
+              <LockKeyhole className="h-5 w-5 text-amber-600" />
+              Finalize cycle counts?
+            </DialogTitle>
+            <DialogDescription className="pt-2 leading-relaxed">
+              Are you sure you want to submit these counts? The count will be locked after submission, and any changes made afterward will not be recorded.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <button
+              type="button"
+              onClick={() => setShowFinalizeDialog(false)}
+              className="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-bold text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleFinalizeAndSync}
+              className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700"
+            >
+              Yes, submit counts
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

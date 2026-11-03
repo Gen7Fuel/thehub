@@ -8,7 +8,7 @@ function setupCycleCountSocket(io, socket) {
   });
 
   socket.on("cycle-count-field-updated-v2", ({ entryId, field, value, breakdown, site }) => {
-    console.log("cycle-count-field-updated-v2", { entryId, field, value, breakdown, site });
+    // console.log("cycle-count-field-updated-v2", { entryId, field, value, breakdown, site });
 
     socket.broadcast.emit("cycle-count-field-updated-v2", {
       entryId,
@@ -18,7 +18,7 @@ function setupCycleCountSocket(io, socket) {
       site,
     });
 
-    console.log("cycle-count-field-updated-v2 broadcast sent to other clients");
+    // console.log("cycle-count-field-updated-v2 broadcast sent to other clients");
   });
 }
 
