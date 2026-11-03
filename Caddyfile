@@ -1,3 +1,14 @@
+{
+    # Production traffic may reach Caddy through an internal Azure/load-balancer
+    # hop. Trust only private proxy peers when parsing their forwarded client IP;
+    # direct public clients cannot spoof X-Forwarded-For into the audit logs.
+    servers {
+        trusted_proxies static private_ranges
+        trusted_proxies_strict
+        client_ip_headers X-Forwarded-For X-Real-IP
+    }
+}
+
 :3000 {
     # Scoped to text-like types on purpose: a compressed response can't serve
     # HTTP byte ranges, which academy video seeking (hls.js via /cdn/*) needs.
