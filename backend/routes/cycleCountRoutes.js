@@ -397,6 +397,7 @@ router.get('/daily-items-v2', async (req, res) => {
       })
       .select(
         "i.is_scheduled as isScheduled", // 👈 Selected from instance table
+        "i.count_finalized as countFinalized",
         "ci.id as entryId",
         "ci.foh",
         "ci.boh",
@@ -420,6 +421,7 @@ router.get('/daily-items-v2', async (req, res) => {
     // 4. Determine overall scheduled status for this count instance
     // If items exist, check the first row's isScheduled status (default to false if no items)
     const isScheduled = items.length > 0 ? Boolean(items[0].isScheduled) : false;
+    const countFinalized = items.length > 0 ? Boolean(items[0].countFinalized) : false;
 
     // 5. Attach Category Names
     const enrichedItems = items.map(item => ({
@@ -431,6 +433,7 @@ router.get('/daily-items-v2', async (req, res) => {
     // Return both the root flag and enriched item payload
     res.json({
       isScheduled,
+      countFinalized,
       items: enrichedItems
     });
   } catch (err) {
@@ -1137,8 +1140,33 @@ router.post('/finalize-and-sync', async (req, res) => {
     const db = getPg();
     const instance = await db('public.cycle_count_instance')
       .where({ site_mongo_id: locationIdStr, date: finalizedDate })
-      .select('id', 'date', 'site_mongo_id', 'is_scheduled')
+      .select('id', 'date', 'site_mongo_id', 'is_scheduled', 'count_finalized')
       .first();
+
+    if (!instance) {
+      return res.status(404).json({
+        success: false,
+        message: `No cycle count instance found for ${siteName} on ${finalizedDate}.`
+      });
+    }
+
+    // Claim the instance before starting the external sync. The conditional
+    // update makes concurrent finalize requests idempotent.
+    const claimedRows = await db('public.cycle_count_instance')
+      .where({ id: instance.id, count_finalized: false })
+      .update({
+        count_finalized: true,
+        updated_at: db.fn.now()
+      });
+
+    if (claimedRows === 0) {
+      return res.status(409).json({
+        success: false,
+        alreadyFinalized: true,
+        message: 'This cycle count has already been finalized or is currently being submitted.'
+      });
+    }
+
     const result = await syncPostgresCountsToPetrosoft(locationIdStr, finalizedDate);
 
     await logChange(req, {
@@ -1146,7 +1174,7 @@ router.post('/finalize-and-sync', async (req, res) => {
       resourceStore: 'postgresql', success: result?.success !== false, statusCode: 200,
       source: req.headers['x-action-source'] || 'cycle-count.count',
       message: `Cycle Count for ${siteName} on ${finalizedDate} finalized and sent for inventory synchronization`,
-      before: instance, after: instance ? { ...instance, syncStatus: result?.success === false ? 'failed' : 'completed' } : { site: siteName, date: finalizedDate, syncStatus: result?.success === false ? 'failed' : 'completed' },
+      before: instance, after: { ...instance, count_finalized: true, syncStatus: result?.success === false ? 'failed' : 'completed' },
     });
 
     return res.status(200).json(result);
@@ -1512,6 +1540,7 @@ router.post('/save-item-v2', async (req, res) => {
 
     const existing = await db("cycle_count_items as ci")
       .join("item_bk as ib", "ci.product_id", "ib.id")
+      .join("cycle_count_instance as cci", "ci.instance_id", "cci.id")
       .where("ci.id", entryId)
       .select(
         "ci.product_id", // ADDED: Need this to update item_bk directly
@@ -1525,10 +1554,19 @@ router.post('/save-item-v2', async (req, res) => {
         "ib.pk_in_crt",
         "ib.crt_in_case"
       )
+      .select("cci.count_finalized")
       .first();
 
     if (!existing) {
       return res.status(404).json({ message: "Cycle count item not found." });
+    }
+
+    if (existing.count_finalized) {
+      return res.status(409).json({
+        success: false,
+        alreadyFinalized: true,
+        message: "This cycle count has already been finalized and can no longer be edited."
+      });
     }
 
     // Prepare the update object
@@ -1564,9 +1602,23 @@ router.post('/save-item-v2', async (req, res) => {
     // ==========================================================
 
     // 1. Existing Transaction: Update inventory table records
-    await db("cycle_count_items")
-      .where({ id: entryId })
+    const updatedRows = await db("cycle_count_items as ci")
+      .where("ci.id", entryId)
+      .whereExists(function () {
+        this.select(db.raw('1'))
+          .from("cycle_count_instance as cci")
+          .whereRaw("cci.id = ci.instance_id")
+          .andWhere("cci.count_finalized", false);
+      })
       .update(updateData);
+
+    if (updatedRows === 0) {
+      return res.status(409).json({
+        success: false,
+        alreadyFinalized: true,
+        message: "This cycle count was finalized before the update could be saved."
+      });
+    }
 
     // ==========================================
     // NEW ADDITION: UPDATE LAST_COUNTED_AT DATE
