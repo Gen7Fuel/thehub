@@ -189,6 +189,8 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogContent: ({ children }: any) => <div data-testid="mock-dialog-content">{children}</div>,
   DialogHeader: ({ children }: any) => <div>{children}</div>,
   DialogTitle: ({ children }: any) => <h2>{children}</h2>,
+  DialogDescription: ({ children }: any) => <p>{children}</p>,
+  DialogFooter: ({ children }: any) => <div>{children}</div>,
 }))
 
 import { Route as IndexRoute } from '../cycle-count/index'
