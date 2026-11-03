@@ -119,6 +119,7 @@ export default function Navbar() {
   const isCycleCount = matchRoute({ to: '/cycle-count', fuzzy: true })
   const isVendor = matchRoute({ to: '/vendor', fuzzy: true })
   const isAudit = matchRoute({ to: '/audit', fuzzy: true })
+  const isStationAudits = matchRoute({ to: '/station-audits', fuzzy: true })
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
   const isSupport = matchRoute({ to: '/support', fuzzy: true })
   const isSafesheet = matchRoute({ to: '/safesheet', fuzzy: true })
@@ -136,6 +137,7 @@ export default function Navbar() {
     if (isOrderRec) return 'Order Rec'
     if (isCycleCount) return 'Cycle Count'
     if (isVendor) return 'Vendor Management'
+    if (isStationAudits) return 'Station Audits New'
     if (isAudit) return 'Station Audits'
     if (isDashboard) return 'Dashboard'
     if (isSupport) return 'Support'
@@ -393,6 +395,8 @@ export default function Navbar() {
     switch (slug) {
       case 'audit':
         return { title: 'Station Audits', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/station-audits-22uoVYgRfG` };
+      case 'station-audits':
+        return { title: 'Station Audits New', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/station-audits-22uoVYgRfG` };
       case 'po':
         return { title: 'Purchase Orders', url: `${DOCS_BASE_URL}/9b0j5ary4m/p/purchase-order-Jjf8hbmjcT` };
       case 'payables':
