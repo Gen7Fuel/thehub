@@ -67,8 +67,19 @@ const runSmartSync = async (targetStationId = null, retryAttempt = 1) => {
       const tanks = await FuelStationTank.find({ stationId: loc._id });
       for (const tank of tanks) {
         // Fetch from Supabase using the two-date logic (Yesterday's close, Today's open)
-        const { openingVolume: todayOpen, openingTime: todayOpenTime, closingVolume: yesterdayClose } =
+        const { openingVolume: todayOpen, openingTime: todayOpenTime, closingVolume: fetchedYesterdayClose } =
           await getTankReadingsForCron(loc.csoCode, tank.tankNo, yesterdayStr, todayStr);
+
+        // If yesterday's closing reading is missing but today's opening reading
+        // exists, use today's opening as the best available closing value for
+        // yesterday. This keeps the historical transition continuous.
+        const yesterdayClose = fetchedYesterdayClose === 0 && todayOpen !== 0
+          ? todayOpen
+          : fetchedYesterdayClose;
+
+        if (fetchedYesterdayClose === 0 && todayOpen !== 0) {
+          console.log(`   ⚠️ Tank ${tank.tankNo}: using today's opening (${todayOpen}) as yesterday's closing fallback.`);
+        }
 
         // Validation: If data is missing (0), skip update on early retries to try again later
         if (todayOpen === 0 && retryAttempt < 3) {
