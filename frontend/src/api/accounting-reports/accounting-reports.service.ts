@@ -1,6 +1,6 @@
 import { actionOptions } from '@/api/resources/action-options'
 import { accountingReportsApi } from './accounting-reports.api'
-import type { ArCustomerReportInput, DateRangeReportInput, EndOfDayReportInput } from './accounting-reports.types'
+import type { ArCustomerReportInput, DateRangeReportInput, EndOfDayReportInput, SageExportReportInput } from './accounting-reports.types'
 
 const reportOptions = (permission: string, source: string, resourceType: string, message: string) =>
   actionOptions(permission, source, 'read', resourceType, message)
@@ -41,6 +41,15 @@ export const accountingReportsService = {
       'accounting-reports.ap-customer',
       'accounting-report',
       `A/P Customer report generation requested for ${range(input)}`,
+    ))
+  },
+
+  requestSageExport(input: SageExportReportInput) {
+    return accountingReportsApi.requestSageExport(input, reportOptions(
+      'accounting.accountingReports.sageExport',
+      'accounting-reports.sage-export',
+      'accounting-report',
+      `Sage export report generation requested for ${input.stationName} (${input.date})`,
     ))
   },
 }

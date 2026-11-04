@@ -81,6 +81,7 @@ const fuelStatisticsRoutes = require("./routes/fuel/fuelStatisticsRoutes");
 const fuelPriceRoutes = require("./routes/fuel/fuelPricingRoutes");
 const fuelSettingsRoutes = require("./routes/fuel/fuelSettingsRoutes");
 const accountingReportRoutes = require("./routes/accountingReportRoutes");
+const sageAccountMapRoutes = require("./routes/sageAccountMapRoutes");
 
 const { auth } = require("./middleware/authMiddleware");
 
@@ -195,6 +196,7 @@ app.use('/api/fuel-statistics', fuelStatisticsRoutes);
 app.use('/api/fuel-sales', fuelSaleRoutes);
 app.use('/api/fuel-settings', fuelSettingsRoutes);
 app.use('/api/accounting-reports', accountingReportRoutes);
+app.use('/api/sage-account-maps', sageAccountMapRoutes);
 // Misc
 app.use('/api', emailRoutes);
 

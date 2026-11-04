@@ -8,6 +8,9 @@ const JSZip = require("jszip");
 // Retrieve already registered model from Mongoose registry, or require file if not yet registered
 const Location = require("../models/Location");
 const Payable = require("../models/Payables");
+const SageAccountMap = require("../models/SageAccountMap");
+const { KardpollReport } = require("../models/CashRec");
+const { generateSageImportCsv } = require("../utils/generateSageImportCsv");
 const { processInfonetReport } = require("../utils/flattenInfonetReport");
 const {
   generateAdminFeePdfReports,
@@ -772,6 +775,109 @@ router.post("/ap-customer-report", async (req, res) => {
         error: "Failed to generate A/P customer report.",
         details: error.message,
       });
+  }
+});
+
+/**
+ * POST /sage-export
+ * Generates the Sage daily sales CSV and queues it as an email attachment.
+ */
+router.post("/sage-export", async (req, res) => {
+  try {
+    const { stationName, date } = req.body;
+    if (!stationName || !/^\d{4}-\d{2}-\d{2}$/.test(date || "")) {
+      return res.status(400).json({
+        error: 'Parameters "stationName" and "date" (YYYY-MM-DD) are required.',
+      });
+    }
+
+    const locationDoc = await Location.findOne({
+      $or: [
+        { stationName: new RegExp(`^${stationName}$`, "i") },
+        { site: stationName },
+      ],
+    }).lean();
+    if (!locationDoc) {
+      return res.status(404).json({ error: `Location not found for station: ${stationName}` });
+    }
+
+    const accountMap = await SageAccountMap.findOne({ site: locationDoc._id }).lean();
+    if (!accountMap) {
+      return res.status(400).json({ error: "Sage account mapping is not configured for this site." });
+    }
+
+    const resolvedSiteName = locationDoc.stationName || locationDoc.site || stationName;
+    const [cashSummaries, transactions, kardpollReports, payables] = await Promise.all([
+      CashSummary.find({
+        site: { $in: [resolvedSiteName, locationDoc.site].filter(Boolean) },
+        businessDate: date,
+      }).lean(),
+      Transaction.find({
+        stationName: resolvedSiteName,
+        dateStr: date,
+      }).lean(),
+      KardpollReport.find({
+        site: resolvedSiteName,
+        date,
+      }).lean(),
+      Payable.find({
+        location: locationDoc._id,
+        date,
+        paymentMethod: "till",
+      }).lean(),
+    ]);
+
+    const sum = (records, selector) => records.reduce((total, record) => total + (Number(selector(record)) || 0), 0);
+    const mappingAmounts = {
+      "Fuel Sales": sum(cashSummaries, (row) => row.fuelSales),
+      "CPL Discounts": sum(cashSummaries, (row) => row.fuelPriceOverrides),
+      "Store Sales": sum(cashSummaries, (row) => row.item_sales),
+      "Cash Counted": sum(cashSummaries, (row) => row.canadian_cash_collected),
+      "GC Redemption": sum(cashSummaries, (row) => (row.afdGiftCard || 0) + (row.kioskGiftCard || 0)),
+      "On Account": sum(transactions, (row) => row.amount) + sum(kardpollReports, (row) => row.ar),
+      "Cash Ov/Sh": sum(cashSummaries, (row) => (row.canadian_cash_collected || 0) - (row.report_canadian_cash || 0)),
+      "Payouts": sum(payables, (row) => row.amount),
+    };
+
+    const positiveMappings = new Set(["Fuel Sales", "Store Sales"]);
+    const entries = (accountMap.glaccount || []).map((account) => ({
+      accNo: account.accNo,
+      mappingField: account.mappingField,
+      amount: account.mappingField === "Cash Ov/Sh"
+        ? mappingAmounts[account.mappingField]
+        : positiveMappings.has(account.mappingField)
+          ? Math.abs(mappingAmounts[account.mappingField])
+          : -Math.abs(mappingAmounts[account.mappingField]),
+    }));
+    const csv = generateSageImportCsv({
+      date,
+      depositAccountName: accountMap.depositAccName,
+      depositAccountNumber: accountMap.depositAccountNumber,
+      entries,
+    });
+    const formattedDate = date.slice(5, 7) + "/" + date.slice(8, 10) + "/" + date.slice(0, 4);
+    const siteDisplayName = formatReportSiteName(resolvedSiteName);
+    const recipientEmail = req.user?.email || "daksh@gen7fuel.com";
+
+    await emailQueue.add("sendSageExportReportEmail", {
+      to: recipientEmail,
+      subject: `Sage Export Report – ${siteDisplayName} (${formattedDate})`,
+      text: `Hello,\n\nAttached is the requested Sage daily sales import for ${siteDisplayName} dated ${formattedDate}.\n\nBest regards,\nGen7 Fuel Automated System`,
+      attachments: [{
+        filename: `Sage Import ${siteDisplayName} - ${formattedDate}.csv`,
+        content: csv.toString("base64"),
+        encoding: "base64",
+        contentType: "text/csv",
+      }],
+    });
+
+    return res.json({
+      success: true,
+      message: `The Sage import report has been queued and will be emailed directly to ${recipientEmail} shortly.`,
+    });
+  } catch (error) {
+    console.error("Error generating Sage export report:", error);
+    return res.status(500).json({ error: "Failed to generate Sage export report.", details: error.message });
   }
 });
 
