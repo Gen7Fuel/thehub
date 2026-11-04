@@ -32,8 +32,8 @@ router.get("/", async (req, res) => {
     if (!periodKeys) return res.status(400).json({ error: "Invalid date" });
 
     const sections = await StationAuditSection.find({ sites: location._id, active: true })
-      .select("name description")
-      .sort({ name: 1 })
+      .select("name description sortOrder")
+      .sort({ sortOrder: 1, name: 1 })
       .lean();
     const sectionIds = sections.map((section) => section._id);
 

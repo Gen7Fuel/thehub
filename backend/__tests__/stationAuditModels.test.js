@@ -49,6 +49,30 @@ describe("station audit models", () => {
     expect(department.validateSync()).toBeUndefined();
     expect(optionSet.validateSync()).toBeUndefined();
     expect(checklist.validateSync()).toBeUndefined();
+    expect(section.sortOrder).toBe(0);
+    expect(checklist.sortOrder).toBe(0);
+  });
+
+  it("rejects negative section and checklist sort orders", () => {
+    const userId = id();
+    const section = new StationAuditSection({
+      name: "Operations",
+      sites: [id()],
+      createdBy: userId,
+      sortOrder: -1,
+    });
+    const checklist = new StationAuditChecklist({
+      section: id(),
+      item: "Inspect fuel pumps",
+      frequency: "daily",
+      department: id(),
+      statusOptionSet: id(),
+      createdBy: userId,
+      sortOrder: -1,
+    });
+
+    expect(section.validateSync()?.errors.sortOrder).toBeDefined();
+    expect(checklist.validateSync()?.errors.sortOrder).toBeDefined();
   });
 
   it("rejects duplicate status keys and site overrides", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { ArrowRight, CheckCircle2, CircleDashed, ClipboardCheck, Loader2 } from 'lucide-react'
 import { SitePicker } from '@/components/custom/sitePicker'
@@ -52,6 +52,12 @@ function SectionNavigationPage() {
   const completion = data?.summary.total
     ? Math.round((data.summary.completed / data.summary.total) * 100)
     : 0
+  const sortedSections = useMemo(
+    () => [...(data?.sections || [])].sort((left, right) =>
+      (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
+      || left.name.localeCompare(right.name, undefined, { sensitivity: 'base' })),
+    [data?.sections],
+  )
 
   return (
     <div className="mx-auto w-full max-w-6xl px-3 pb-10 sm:px-5">
@@ -93,7 +99,7 @@ function SectionNavigationPage() {
 
       {!loading && !error && data && (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {data.sections.map((section) => {
+          {sortedSections.map((section) => {
             const percent = section.summary.total ? Math.round((section.summary.completed / section.summary.total) * 100) : 0
             return (
               <Link key={section._id} to="/station-audits/checklist/$sectionId" params={{ sectionId: section._id }} search={{ site, frequency: 'all' }} className="group">

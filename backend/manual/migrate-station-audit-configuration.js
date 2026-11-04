@@ -191,6 +191,7 @@ function buildMigrationDocuments(source) {
     sections.push({
       name: normalize(template.name),
       description: normalize(template.description),
+      sortOrder: 0,
       sites: [...new Map(sites.map((id) => [id.toString(), id])).values()],
       active: true,
       createdBy: template.createdBy || fallbackCreator,
@@ -232,6 +233,7 @@ function buildMigrationDocuments(source) {
         departmentLegacyName: department?.legacySelectOptionText,
         item: normalize(item.item),
         description: "",
+        sortOrder: 0,
         category: normalize(item.category),
         frequency: item.frequency || "daily",
         followUpInstructions: normalize(item.followUpTemplate),
@@ -243,6 +245,26 @@ function buildMigrationDocuments(source) {
         createdBy: template.createdBy || fallbackCreator,
       });
     }
+  }
+
+  sections
+    .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: "base" }))
+    .forEach((section, index) => {
+      section.sortOrder = index;
+    });
+
+  const checklistsBySection = new Map();
+  for (const checklist of checklists) {
+    const sectionKey = checklist.sectionLegacyId.toString();
+    if (!checklistsBySection.has(sectionKey)) checklistsBySection.set(sectionKey, []);
+    checklistsBySection.get(sectionKey).push(checklist);
+  }
+  for (const sectionChecklists of checklistsBySection.values()) {
+    sectionChecklists
+      .sort((left, right) => left.item.localeCompare(right.item, undefined, { sensitivity: "base" }))
+      .forEach((checklist, index) => {
+        checklist.sortOrder = index;
+      });
   }
 
   return { statusSets, departments, sections, checklists, errors, warnings };

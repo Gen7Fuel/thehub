@@ -89,8 +89,8 @@ router.get("/:sectionId", async (req, res) => {
       sites: location._id,
       active: true,
     })
-      .select("name description")
-      .sort({ name: 1 })
+      .select("name description sortOrder")
+      .sort({ sortOrder: 1, name: 1 })
       .lean();
 
     if (!sections.length) {
@@ -108,11 +108,11 @@ router.get("/:sectionId", async (req, res) => {
         active: true,
       })
         .select(
-          "section item description category frequency department statusOptionSet followUpInstructions commentRequired requestOrderEnabled suppliesVendor"
+          "section item description sortOrder category frequency department statusOptionSet followUpInstructions commentRequired requestOrderEnabled suppliesVendor"
         )
         .populate("department", "name departmentHead")
         .populate("statusOptionSet", "name options")
-        .sort({ item: 1 })
+        .sort({ sortOrder: 1, item: 1 })
         .lean(),
       StationAuditRun.find({
         section: { $in: sectionIds },

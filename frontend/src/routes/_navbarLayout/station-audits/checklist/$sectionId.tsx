@@ -23,6 +23,7 @@ export const Route = createFileRoute('/_navbarLayout/station-audits/checklist/$s
 })
 
 const labels: Record<StationAuditFrequency, string> = { all: 'All frequencies', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }
+const frequencyOrder = { daily: 0, weekly: 1, monthly: 2 } as const
 
 function SectionChecklistPage() {
   const { sectionId } = Route.useParams()
@@ -56,7 +57,18 @@ function SectionChecklistPage() {
 
   const section = data?.sections[0]
   const progress = section?.summary.total ? Math.round((section.summary.completed / section.summary.total) * 100) : 0
-  const sortedItems = useMemo(() => section?.checklists || [], [section])
+  const sortedItems = useMemo(
+    () => [...(section?.checklists || [])].sort((left, right) => {
+      const frequencyDifference = search.frequency === 'all'
+        ? frequencyOrder[left.frequency] - frequencyOrder[right.frequency]
+        : 0
+
+      return frequencyDifference
+        || (left.sortOrder ?? 0) - (right.sortOrder ?? 0)
+        || left.item.localeCompare(right.item, undefined, { sensitivity: 'base' })
+    }),
+    [search.frequency, section?.checklists],
+  )
 
   return (
     <div className="mx-auto w-full max-w-5xl px-3 pb-10 sm:px-5">
@@ -87,18 +99,18 @@ function SectionChecklistPage() {
           {sortedItems.length === 0 ? (
             <div className="rounded-xl border border-dashed bg-white p-8 text-center text-sm text-slate-500">No {labels[search.frequency as StationAuditFrequency].toLowerCase()} items are assigned.</div>
           ) : (
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               {sortedItems.map((checklist) => (
-                <Card key={checklist._id} className={checklist.completed ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}>
+                <Card key={checklist._id} className={`flex h-full flex-col transition-all hover:-translate-y-0.5 hover:shadow-md ${checklist.completed ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-200'}`}>
                   <CardHeader className="p-4 pb-2 sm:p-5 sm:pb-2">
                     <div className="flex items-start justify-between gap-3">
                       <div><div className="mb-2 flex flex-wrap gap-1.5"><Badge variant="secondary" className="capitalize">{checklist.frequency}</Badge>{checklist.category && <Badge variant="outline">{checklist.category}</Badge>}<Badge variant="outline">{checklist.department?.name || 'Unassigned'}</Badge></div><CardTitle className="text-base sm:text-lg">{checklist.item}</CardTitle></div>
                       {checklist.completed ? <CheckCircle2 className="h-6 w-6 text-emerald-600" /> : <CircleDashed className="h-6 w-6 text-slate-300" />}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-4 pt-2 sm:p-5 sm:pt-2">
+                  <CardContent className="flex flex-1 flex-col p-4 pt-2 sm:p-5 sm:pt-2">
                     <div className="mb-4 flex flex-wrap gap-3 text-xs text-slate-500"><span>{checklist.statusOptionSet?.options?.length || 0} status options</span>{checklist.commentRequired && <span className="flex items-center gap-1"><MessageSquareText className="h-3.5 w-3.5" /> Comment required</span>}{checklist.requestOrderEnabled && <span className="flex items-center gap-1"><ShoppingCart className="h-3.5 w-3.5" /> Ordering available</span>}</div>
-                    <Button className="h-11 w-full sm:w-auto" variant={checklist.completed ? 'outline' : 'default'} onClick={() => toast.info(`${checklist.item} submission will be connected next.`)}>{checklist.completed ? 'Update response' : 'Complete checklist'}</Button>
+                    <Button className="mt-auto h-11 w-full" variant={checklist.completed ? 'outline' : 'default'} onClick={() => toast.info(`${checklist.item} submission will be connected next.`)}>{checklist.completed ? 'Update response' : 'Complete checklist'}</Button>
                   </CardContent>
                 </Card>
               ))}

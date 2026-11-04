@@ -5,6 +5,7 @@ const StationAuditChecklistSchema = new mongoose.Schema(
     section: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditSection", required: true },
     item: { type: String, required: true, trim: true },
     description: { type: String, trim: true, default: "" },
+    sortOrder: { type: Number, default: 0, min: 0 },
     category: { type: String, trim: true, default: "" },
     frequency: {
       type: String,
@@ -30,7 +31,7 @@ const StationAuditChecklistSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-StationAuditChecklistSchema.index({ section: 1, active: 1, frequency: 1, item: 1 });
+StationAuditChecklistSchema.index({ section: 1, active: 1, frequency: 1, sortOrder: 1, item: 1 });
 StationAuditChecklistSchema.index({ assignedSites: 1, active: 1 });
 StationAuditChecklistSchema.index({ department: 1, active: 1 });
 StationAuditChecklistSchema.index(

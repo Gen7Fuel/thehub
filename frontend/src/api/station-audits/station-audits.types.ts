@@ -10,6 +10,7 @@ export interface StationAuditChecklistItem {
   _id: string
   item: string
   description: string
+  sortOrder: number
   category: string
   frequency: Exclude<StationAuditFrequency, 'all'>
   commentRequired: boolean
@@ -39,6 +40,7 @@ export interface StationAuditChecklistSection {
   _id: string
   name: string
   description: string
+  sortOrder: number
   summary: { total: number; completed: number; pending: number }
   checklists: StationAuditChecklistItem[]
 }
@@ -56,6 +58,7 @@ export interface StationAuditSectionSummary {
   _id: string
   name: string
   description: string
+  sortOrder: number
   summary: { total: number; completed: number; pending: number }
   frequencies: Record<'daily' | 'weekly' | 'monthly', { total: number; completed: number; pending: number }>
 }
