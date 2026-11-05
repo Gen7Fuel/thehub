@@ -20,6 +20,7 @@ function RouteComponent() {
     to: "/accounting-reports/ar-customer-report",
   });
   const isApCustomerActive = matchRoute({ to: "/accounting-reports/ap-customer-report" });
+  const isSageExportActive = matchRoute({ to: "/accounting-reports/sage-export" });
 
   const { user } = useAuth();
   const access = user?.access || {};
@@ -32,6 +33,9 @@ function RouteComponent() {
     access?.accounting?.accountingReports?.arCustomerReport
   );
   const hasApCustomer = Boolean(access?.accounting?.accountingReports?.apCustomerReport);
+  const hasSageExport = Boolean(
+    access?.accounting?.accountingReports?.sageExport
+  );
 
   return (
     <div className="pt-5 flex flex-col items-center">
@@ -45,7 +49,7 @@ function RouteComponent() {
           >
             <Button
               {...(!isInfonetActive && ({ variant: "outline" } as object))}
-              className={hasEOD || hasArCustomer || hasApCustomer ? "rounded-r-none" : ""}
+              className={hasEOD || hasArCustomer || hasApCustomer || hasSageExport ? "rounded-r-none" : ""}
             >
               Infonet Reports
             </Button>
@@ -62,7 +66,7 @@ function RouteComponent() {
               {...(!idEODActive && ({ variant: "outline" } as object))}
               className={`
                 ${hasInfonet ? "rounded-l-none" : ""} 
-                ${hasArCustomer || hasApCustomer ? "rounded-r-none" : ""}
+                ${hasArCustomer || hasApCustomer || hasSageExport ? "rounded-r-none" : ""}
               `.trim()}
             >
               EOD Reports
@@ -78,7 +82,7 @@ function RouteComponent() {
           >
             <Button
               {...(!isArCustomerActive && ({ variant: "outline" } as object))}
-              className={`${hasInfonet || hasEOD ? "rounded-l-none" : ""} ${hasApCustomer ? "rounded-r-none" : ""}`.trim()}
+              className={`${hasInfonet || hasEOD ? "rounded-l-none" : ""} ${hasApCustomer || hasSageExport ? "rounded-r-none" : ""}`.trim()}
             >
               A/R Customer Reports
             </Button>
@@ -86,8 +90,21 @@ function RouteComponent() {
         )}
         {hasApCustomer && (
           <Link to="/accounting-reports/ap-customer-report" activeOptions={{ exact: true }}>
-            <Button {...(!isApCustomerActive && ({ variant: "outline" } as object))} className={hasInfonet || hasEOD || hasArCustomer ? "rounded-l-none" : ""}>
+            <Button
+              {...(!isApCustomerActive && ({ variant: "outline" } as object))}
+              className={`${hasInfonet || hasEOD || hasArCustomer ? "rounded-l-none" : ""} ${hasSageExport ? "rounded-r-none" : ""}`.trim()}
+            >
               A/P Vendor Reports
+            </Button>
+          </Link>
+        )}
+        {hasSageExport && (
+          <Link to="/accounting-reports/sage-export" activeOptions={{ exact: true }}>
+            <Button
+              {...(!isSageExportActive && ({ variant: "outline" } as object))}
+              className={hasInfonet || hasEOD || hasArCustomer || hasApCustomer ? "rounded-l-none" : ""}
+            >
+              Sage Export Report
             </Button>
           </Link>
         )}

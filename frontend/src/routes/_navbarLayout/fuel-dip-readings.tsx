@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Loader2, Save, Fuel } from 'lucide-react'
+import { Loader2, Save, Fuel, Info, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { SitePicker } from '@/components/custom/sitePicker'
@@ -27,6 +27,8 @@ function FuelDipReadings() {
   const [volumes, setVolumes] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
+  const [referenceImages, setReferenceImages] = useState<Record<string, string>>({})
+  const [selectedReference, setSelectedReference] = useState<{ tankNo: number; url: string } | null>(null)
 
   const fetchTanks = async () => {
     setLoading(true)
@@ -50,6 +52,34 @@ function FuelDipReadings() {
     () => tanks.filter((tank) => tank.stationName === site),
     [tanks, site],
   )
+
+  useEffect(() => {
+    let cancelled = false
+    setReferenceImages({})
+
+    const findReferenceImages = async () => {
+      await Promise.all(visibleTanks.map(async (tank) => {
+        const sitePath = encodeURIComponent(site)
+        // const url = `/public/fueltankcharts/${sitePath}/tank${tank.tankNo}.jpg`
+        const url = `/fueltankcharts/${sitePath}/tank${tank.tankNo}.jpg`
+
+        await new Promise<void>((resolve) => {
+          const image = new Image()
+          image.onload = () => {
+            if (!cancelled) {
+              setReferenceImages((current) => ({ ...current, [tank._id]: url }))
+            }
+            resolve()
+          }
+          image.onerror = () => resolve()
+          image.src = url
+        })
+      }))
+    }
+
+    if (site && visibleTanks.length > 0) findReferenceImages()
+    return () => { cancelled = true }
+  }, [site, visibleTanks])
 
   const isEditable = (tank: Tank) => {
     const reading = tank.lastUpdatedVolumeReadingDateTime || ''
@@ -120,7 +150,19 @@ function FuelDipReadings() {
                     <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">Tank #{tank.tankNo}</p>
                     <h2 className="mt-1 text-lg font-bold text-slate-900">{tank.grade}</h2>
                   </div>
-                  {!editable && <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700">Automatic reading</span>}
+                  <div className="flex flex-col items-end gap-2">
+                    {referenceImages[tank._id] && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReference({ tankNo: tank.tankNo, url: referenceImages[tank._id] })}
+                        className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-3 text-xs font-semibold text-sky-700 transition hover:bg-sky-100"
+                        aria-label={`Open tank ${tank.tankNo} reference chart`}
+                      >
+                        <Info className="size-4" /> Reference image
+                      </button>
+                    )}
+                    {!editable && <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700">Automatic reading</span>}
+                  </div>
                 </div>
                 {editable ? (
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -145,6 +187,26 @@ function FuelDipReadings() {
             )
           })}
         </section>
+      )}
+
+      {selectedReference && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-3 sm:p-6" role="dialog" aria-modal="true" aria-label={`Tank ${selectedReference.tankNo} reference image`}>
+          <div className="relative flex h-full w-full items-center justify-center">
+            <button
+              type="button"
+              onClick={() => setSelectedReference(null)}
+              className="absolute right-0 top-0 z-10 inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-white text-slate-700 shadow-lg"
+              aria-label="Close reference image"
+            >
+              <X className="size-5" />
+            </button>
+            <img
+              src={selectedReference.url}
+              alt={`Tank ${selectedReference.tankNo} centimetres to litres reference chart`}
+              className="max-h-full max-w-full rounded-lg object-contain"
+            />
+          </div>
+        </div>
       )}
     </main>
   )

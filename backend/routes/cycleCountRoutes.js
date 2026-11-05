@@ -1103,7 +1103,7 @@ router.put('/schedules/details/:id/items', async (req, res) => {
 router.post('/finalize-and-sync', async (req, res) => {
   try {
     // 💡 targetDate is now optional in the destructuring
-    const { siteName, targetDate } = req.body;
+    const { siteName, targetDate, overrideFinalized } = req.body;
 
     if (!siteName) {
       return res.status(400).json({ 
@@ -1136,6 +1136,17 @@ router.post('/finalize-and-sync', async (req, res) => {
     const locationIdStr = locationDoc._id.toString();
     console.log(`📡 Instantiating database-to-browser push pipeline hook for ${siteName} (${locationIdStr}) on target date: ${finalizedDate}`);
 
+    const isAuthorizedOverride =
+      overrideFinalized === true &&
+      req.header('X-Required-Permission') === 'cycleCount.report.generateCsoTicket';
+
+    if (overrideFinalized === true && !isAuthorizedOverride) {
+      return res.status(403).json({
+        success: false,
+        message: 'The finalized count override is only available from the authorized cycle count report action.'
+      });
+    }
+
     // 2. Direct-invoke our orchestrator processing helper sequence using the resolved date string
     const db = getPg();
     const instance = await db('public.cycle_count_instance')
@@ -1150,14 +1161,16 @@ router.post('/finalize-and-sync', async (req, res) => {
       });
     }
 
-    // Claim the instance before starting the external sync. The conditional
-    // update makes concurrent finalize requests idempotent.
-    const claimedRows = await db('public.cycle_count_instance')
-      .where({ id: instance.id, count_finalized: false })
-      .update({
-        count_finalized: true,
-        updated_at: db.fn.now()
-      });
+    // The report page has an explicit permission to re-run the external sync
+    // after manager recount changes. Normal count-page requests must remain
+    // idempotently locked after the first submission.
+    const claimedRows = isAuthorizedOverride
+      ? await db('public.cycle_count_instance')
+        .where({ id: instance.id })
+        .update({ count_finalized: true })
+      : await db('public.cycle_count_instance')
+        .where({ id: instance.id, count_finalized: false })
+        .update({ count_finalized: true });
 
     if (claimedRows === 0) {
       return res.status(409).json({
