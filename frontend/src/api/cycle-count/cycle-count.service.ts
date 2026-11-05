@@ -7,6 +7,7 @@ const permissions = {
   lookup: 'cycleCount.lookup',
   writeOff: 'writeOff.create',
   dashboard: 'dashboard',
+  reportGenerateCsoTicket: 'cycleCount.report.generateCsoTicket',
 } as const
 
 const read = (permission: string, source: string, resource: string, message: string) =>
@@ -26,9 +27,10 @@ export const cycleCountService = {
   saveItem<T = unknown>(input: { entryId: string; field: 'foh' | 'boh'; value: number; breakdown?: unknown; site?: string }) {
     return cycleCountApi.post<T>('/save-item-v2', input, mutate(permissions.count, 'cycle-count.count', 'update', 'cycle-count-item', `Cycle Count ${input.field.toUpperCase()} update requested for item ${input.entryId}`))
   },
-  finalize<T = unknown>(siteName: string, targetDate?: string, source = 'cycle-count.count') {
+  finalize<T = unknown>(siteName: string, targetDate?: string, source = 'cycle-count.count', overrideFinalized = false) {
     const dateLabel = targetDate ? ` for ${targetDate}` : ''
-    return cycleCountApi.post<T>('/finalize-and-sync', { siteName, targetDate }, mutate(permissions.count, source, 'update', 'cycle-count-instance', `Cycle Count finalization and inventory sync requested for ${siteName}${dateLabel}`))
+    const permission = overrideFinalized ? permissions.reportGenerateCsoTicket : permissions.count
+    return cycleCountApi.post<T>('/finalize-and-sync', { siteName, targetDate, overrideFinalized }, mutate(permission, source, 'update', 'cycle-count-instance', `Cycle Count finalization and inventory sync requested for ${siteName}${dateLabel}`))
   },
   getDailyReport<T = unknown>(site: string, date: string) {
     return cycleCountApi.get<T>('/daily-report', { site, date }, read(permissions.count, 'cycle-count.report', 'cycle-count-report', `Cycle Count report viewed for ${site} on ${date}`))

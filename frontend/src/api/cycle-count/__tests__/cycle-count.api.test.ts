@@ -45,7 +45,7 @@ describe('cycleCountService request metadata', () => {
     await cycleCountService.getDailyReport('Rankin', '2026-10-29')
     await cycleCountService.addInstanceNote(81, 'Count verified')
     await cycleCountService.updateManagerCount(902, { manager_foh: 4 })
-    await cycleCountService.finalize('Rankin', '2026-10-29', 'cycle-count.report')
+    await cycleCountService.finalize('Rankin', '2026-10-29', 'cycle-count.report', true)
 
     expect(mocks.get.mock.calls[0][1].headers).toEqual(expect.objectContaining({
       'X-Action-Source': 'cycle-count.report',
@@ -54,6 +54,12 @@ describe('cycleCountService request metadata', () => {
     expect(mocks.post.mock.calls[0][2].headers['X-Action-Resource']).toBe('cycle-count-note')
     expect(mocks.put.mock.calls[0][2].headers['X-Action-Message']).toBe('Manager recount update requested for Cycle Count item 902')
     expect(mocks.post.mock.calls[1][2].headers['X-Action-Message']).toBe('Cycle Count finalization and inventory sync requested for Rankin for 2026-10-29')
+    expect(mocks.post.mock.calls[1][1]).toEqual({
+      siteName: 'Rankin',
+      targetDate: '2026-10-29',
+      overrideFinalized: true,
+    })
+    expect(mocks.post.mock.calls[1][2].headers['X-Required-Permission']).toBe('cycleCount.report.generateCsoTicket')
   })
 
   it('annotates schedule and group administration with manage permission', async () => {
