@@ -166,6 +166,11 @@ function buildMigrationDocuments(source) {
       name: normalize(option.text),
       description: "",
       departmentHead,
+      members: [],
+      defaultIssueAssignees: departmentHead ? [departmentHead] : [],
+      assignmentStrategy: lookupKey(option.text) === "station manager"
+        ? "station_manager"
+        : "department_head",
       notificationEmails: defaultEmails,
       siteNotifications,
       active: Boolean(departmentHead),
@@ -181,6 +186,7 @@ function buildMigrationDocuments(source) {
   const checklists = [];
 
   for (const template of source.templates) {
+    const sectionType = lookupKey(template.name) === "orders" ? "order" : "checklist";
     const sites = [];
     for (const siteName of template.sites || []) {
       const location = source.locationByName.get(lookupKey(siteName));
@@ -192,6 +198,7 @@ function buildMigrationDocuments(source) {
       name: normalize(template.name),
       description: normalize(template.description),
       sortOrder: 0,
+      sectionType,
       sites: [...new Map(sites.map((id) => [id.toString(), id])).values()],
       active: true,
       createdBy: template.createdBy || fallbackCreator,
@@ -236,6 +243,7 @@ function buildMigrationDocuments(source) {
         sortOrder: 0,
         category: normalize(item.category),
         frequency: item.frequency || "daily",
+        auditTypes: sectionType === "order" ? ["store"] : ["store", "visitor"],
         followUpInstructions: normalize(item.followUpTemplate),
         commentRequired: item.commentRequired === true,
         requestOrderEnabled: Boolean(item.suppliesVendor),
@@ -327,6 +335,25 @@ async function upsertDocuments(documents) {
   }
 }
 
+async function removeObsoleteChecklistIndexes() {
+  let indexes;
+  try {
+    indexes = await StationAuditChecklist.collection.indexes();
+  } catch (error) {
+    // A completely fresh database may not have created the collection yet.
+    if (error?.code === 26 || error?.codeName === "NamespaceNotFound") return;
+    throw error;
+  }
+
+  const parallelArrayIndexes = indexes.filter(
+    (index) => index.key?.assignedSites && index.key?.auditTypes
+  );
+  for (const index of parallelArrayIndexes) {
+    await StationAuditChecklist.collection.dropIndex(index.name);
+    console.log(`Removed obsolete checklist index: ${index.name}`);
+  }
+}
+
 async function run() {
   if (!process.env.MONGO_URI) throw new Error("MONGO_URI is not configured");
   await mongoose.connect(process.env.MONGO_URI);
@@ -357,6 +384,7 @@ async function run() {
     return;
   }
 
+  await removeObsoleteChecklistIndexes();
   await upsertDocuments(documents);
   console.log("\nConfiguration migration complete. Legacy collections were not modified.");
 }

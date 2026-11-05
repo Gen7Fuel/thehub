@@ -1,12 +1,23 @@
 const mongoose = require("mongoose");
 
+const IssueAssigneeSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    role: { type: String, enum: ["owner", "collaborator"], default: "collaborator" },
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    assignedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const StationAuditIssueSchema = new mongoose.Schema(
   {
     response: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditResponse", required: true },
     run: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditRun", required: true },
     checklist: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditChecklist", required: true },
     section: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditSection", required: true },
-    department: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditDepartment", required: true },
+    originDepartment: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditDepartment", required: true },
+    currentDepartment: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditDepartment", required: true },
     site: { type: mongoose.Schema.Types.ObjectId, ref: "Location", required: true },
     snapshot: {
       sectionName: { type: String, required: true },
@@ -24,7 +35,27 @@ const StationAuditIssueSchema = new mongoose.Schema(
       default: "created",
       required: true,
     },
-    assignee: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    assignees: {
+      type: [IssueAssigneeSchema],
+      default: [],
+      validate: {
+        validator(entries) {
+          const users = entries.map((entry) => entry.user.toString());
+          return users.length === new Set(users).size;
+        },
+        message: "A user can only be assigned to an issue once",
+      },
+    },
+    escalation: {
+      level: {
+        type: String,
+        enum: ["none", "department", "head_office"],
+        default: "none",
+      },
+      escalatedAt: { type: Date, default: null },
+      escalatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      reason: { type: String, trim: true, default: "" },
+    },
     previousIssue: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditIssue", default: null },
     occurrenceNumber: { type: Number, min: 1, default: 1 },
     raisedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
@@ -35,8 +66,8 @@ const StationAuditIssueSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-StationAuditIssueSchema.index({ assignee: 1, status: 1, updatedAt: -1 });
-StationAuditIssueSchema.index({ department: 1, status: 1, updatedAt: -1 });
+StationAuditIssueSchema.index({ "assignees.user": 1, status: 1, updatedAt: -1 });
+StationAuditIssueSchema.index({ currentDepartment: 1, status: 1, updatedAt: -1 });
 StationAuditIssueSchema.index({ site: 1, status: 1, updatedAt: -1 });
 StationAuditIssueSchema.index({ checklist: 1, site: 1, raisedAt: -1 });
 StationAuditIssueSchema.index({ response: 1 }, { unique: true });

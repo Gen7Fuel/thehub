@@ -13,6 +13,7 @@ export interface StationAuditChecklistItem {
   sortOrder: number
   category: string
   frequency: Exclude<StationAuditFrequency, 'all'>
+  auditTypes: Array<'store' | 'visitor'>
   commentRequired: boolean
   requestOrderEnabled: boolean
   suppliesVendor: string
@@ -29,11 +30,28 @@ export interface StationAuditChecklistItem {
     _id: string
     checked: boolean
     checkedAt?: string | null
-    selectedStatus?: { key?: string; label?: string }
+    selectedStatus?: { optionId?: string; key?: string; label?: string }
     comment?: string
     photos?: string[]
     issueRaised?: boolean
+    issue?: string | null
   } | null
+}
+
+export interface SaveStationAuditResponseInput {
+  checked: boolean
+  statusOptionId: string
+  comment: string
+  photos: string[]
+  issueRaised: boolean
+}
+
+export interface SaveStationAuditResponseResult {
+  run: { _id: string; periodKey: string; state: string; completedAt?: string | null }
+  response: NonNullable<StationAuditChecklistItem['response']>
+  completed: boolean
+  issue: { _id: string } | null
+  summary: { total: number; completed: number; pending: number }
 }
 
 export interface StationAuditChecklistSection {
@@ -41,6 +59,7 @@ export interface StationAuditChecklistSection {
   name: string
   description: string
   sortOrder: number
+  sectionType: 'checklist' | 'order'
   summary: { total: number; completed: number; pending: number }
   checklists: StationAuditChecklistItem[]
 }
@@ -59,6 +78,7 @@ export interface StationAuditSectionSummary {
   name: string
   description: string
   sortOrder: number
+  sectionType: 'checklist' | 'order'
   summary: { total: number; completed: number; pending: number }
   frequencies: Record<'daily' | 'weekly' | 'monthly', { total: number; completed: number; pending: number }>
 }

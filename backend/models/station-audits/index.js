@@ -6,6 +6,5 @@ module.exports = {
   StationAuditRun: require("./stationAuditRun"),
   StationAuditResponse: require("./stationAuditResponse"),
   StationAuditIssue: require("./stationAuditIssue"),
-  StationAuditIssueComment: require("./stationAuditIssueComment"),
-  StationAuditIssueAssignmentEvent: require("./stationAuditIssueAssignmentEvent"),
+  StationAuditIssueActivity: require("./stationAuditIssueActivity"),
 };

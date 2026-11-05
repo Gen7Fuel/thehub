@@ -31,8 +31,11 @@ router.get("/", async (req, res) => {
     const periodKeys = periodKeysFor(location.timezone, date);
     if (!periodKeys) return res.status(400).json({ error: "Invalid date" });
 
-    const sections = await StationAuditSection.find({ sites: location._id, active: true })
-      .select("name description sortOrder")
+    const sectionFilter = { sites: location._id, active: true };
+    if (type === "visitor") sectionFilter.sectionType = "checklist";
+
+    const sections = await StationAuditSection.find(sectionFilter)
+      .select("name description sortOrder sectionType")
       .sort({ sortOrder: 1, name: 1 })
       .lean();
     const sectionIds = sections.map((section) => section._id);
@@ -51,6 +54,7 @@ router.get("/", async (req, res) => {
       StationAuditChecklist.find({
         section: { $in: sectionIds },
         assignedSites: location._id,
+        auditTypes: type,
         active: true,
       })
         .select("section frequency")

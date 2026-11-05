@@ -10,8 +10,7 @@ const {
   StationAuditRun,
   StationAuditResponse,
   StationAuditIssue,
-  StationAuditIssueComment,
-  StationAuditIssueAssignmentEvent,
+  StationAuditIssueActivity,
 } = stationAuditModels;
 
 const id = () => new mongoose.Types.ObjectId();
@@ -51,6 +50,8 @@ describe("station audit models", () => {
     expect(checklist.validateSync()).toBeUndefined();
     expect(section.sortOrder).toBe(0);
     expect(checklist.sortOrder).toBe(0);
+    expect(section.sectionType).toBe("checklist");
+    expect(checklist.auditTypes).toEqual(["store", "visitor"]);
   });
 
   it("rejects negative section and checklist sort orders", () => {
@@ -127,27 +128,33 @@ describe("station audit models", () => {
       run: run._id,
       checklist: checklistId,
       section: sectionId,
-      department: departmentId,
+      originDepartment: departmentId,
+      currentDepartment: departmentId,
       site: id(),
       snapshot: {
         sectionName: "Operations",
         checklistItem: "Inspect fuel pumps",
         departmentName: "Maintenance",
       },
-      assignee: userId,
+      assignees: [{ user: userId, role: "owner", assignedBy: userId }],
       raisedBy: userId,
     });
-    const comment = new StationAuditIssueComment({ issue: issue._id, author: userId, body: "Investigating" });
-    const assignment = new StationAuditIssueAssignmentEvent({
+    const activity = new StationAuditIssueActivity({
       issue: issue._id,
-      assignee: userId,
-      assignedBy: userId,
+      eventType: "status_changed",
+      actor: userId,
+      body: "Investigating",
+      photos: ["investigation.jpg"],
+      changes: [{
+        field: "status",
+        from: { value: "created", label: "Created" },
+        to: { value: "in_progress", label: "In Progress" },
+      }],
     });
 
     expect(run.validateSync()).toBeUndefined();
     expect(response.validateSync()).toBeUndefined();
     expect(issue.validateSync()).toBeUndefined();
-    expect(comment.validateSync()).toBeUndefined();
-    expect(assignment.validateSync()).toBeUndefined();
+    expect(activity.validateSync()).toBeUndefined();
   });
 });

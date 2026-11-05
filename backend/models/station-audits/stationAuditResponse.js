@@ -27,6 +27,7 @@ const StationAuditResponseSchema = new mongoose.Schema(
     orderCreated: { type: Boolean, default: false },
     order: { type: mongoose.Schema.Types.ObjectId, ref: "OrderRec", default: null },
     issueRaised: { type: Boolean, default: false },
+    issue: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditIssue", default: null },
   },
   { timestamps: true }
 );

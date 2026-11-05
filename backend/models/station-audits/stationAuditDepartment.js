@@ -8,11 +8,42 @@ const SiteNotificationSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const DepartmentMemberSchema = new mongoose.Schema(
+  {
+    user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    addedAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const StationAuditDepartmentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     description: { type: String, trim: true, default: "" },
     departmentHead: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    members: {
+      type: [DepartmentMemberSchema],
+      default: [],
+      validate: {
+        validator(entries) {
+          const users = entries.map((entry) => entry.user.toString());
+          return users.length === new Set(users).size;
+        },
+        message: "A user can only be listed once in a department",
+      },
+    },
+    defaultIssueAssignees: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    assignmentStrategy: {
+      type: String,
+      enum: ["department_head", "station_manager", "operations_queue"],
+      default: "department_head",
+    },
+    escalationDepartment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "StationAuditDepartment",
+      default: null,
+    },
     notificationEmails: [{ type: String, trim: true, lowercase: true }],
     siteNotifications: {
       type: [SiteNotificationSchema],
@@ -34,6 +65,7 @@ const StationAuditDepartmentSchema = new mongoose.Schema(
 
 StationAuditDepartmentSchema.index({ name: 1 }, { unique: true });
 StationAuditDepartmentSchema.index({ departmentHead: 1, active: 1 });
+StationAuditDepartmentSchema.index({ "members.user": 1, active: 1 });
 StationAuditDepartmentSchema.index({ legacySelectOptionText: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("StationAuditDepartment", StationAuditDepartmentSchema);

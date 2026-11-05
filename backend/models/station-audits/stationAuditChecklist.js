@@ -12,6 +12,16 @@ const StationAuditChecklistSchema = new mongoose.Schema(
       enum: ["daily", "weekly", "monthly"],
       required: true,
     },
+    auditTypes: {
+      type: [{ type: String, enum: ["store", "visitor"] }],
+      default: ["store", "visitor"],
+      validate: {
+        validator(values) {
+          return values.length > 0 && values.length === new Set(values).size;
+        },
+        message: "Checklist audit types must be unique and cannot be empty",
+      },
+    },
     department: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditDepartment", required: true },
     statusOptionSet: {
       type: mongoose.Schema.Types.ObjectId,
@@ -33,6 +43,9 @@ const StationAuditChecklistSchema = new mongoose.Schema(
 
 StationAuditChecklistSchema.index({ section: 1, active: 1, frequency: 1, sortOrder: 1, item: 1 });
 StationAuditChecklistSchema.index({ assignedSites: 1, active: 1 });
+// Keep array fields in separate indexes. MongoDB cannot create a compound
+// multikey index over both assignedSites and auditTypes (parallel arrays).
+StationAuditChecklistSchema.index({ auditTypes: 1, active: 1 });
 StationAuditChecklistSchema.index({ department: 1, active: 1 });
 StationAuditChecklistSchema.index(
   { legacyTemplateId: 1, legacyItemId: 1 },
