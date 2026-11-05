@@ -6,14 +6,12 @@ import { LocationPicker } from "@/components/custom/locationPicker";
 import { useSite } from "@/context/SiteContext";
 import { useAuth } from "@/context/AuthContext";
 import { loadLocations } from "@/lib/locationsCache";
-import { accountingReportsApi } from "@/api/accounting-reports/accounting-reports.api";
 import { accountingReportsService } from "@/api/accounting-reports/accounting-reports.service";
 import { SAGE_MAPPING_FIELDS, type SageAccountMap, type SageExportReportResult, type SageGlAccount } from "@/api/accounting-reports/accounting-reports.types";
 import { isApiError } from "@/api/core/errors";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_navbarLayout/accounting-reports/sage-export")({ component: RouteComponent });
-const permission = "accounting.accountingReports.sageExport";
 const emptyRows = (): SageGlAccount[] => SAGE_MAPPING_FIELDS.map((mappingField) => ({ mappingField, accName: "", accNo: "" }));
 
 const formatDateForRequest = (value: Date) => {
@@ -46,7 +44,7 @@ function RouteComponent() {
   useEffect(() => {
     if (!locationId) { setMapping(null); return; }
     setLoadingMapping(true);
-    accountingReportsApi.getSageAccountMap(locationId, { permission }).then(setMapping).catch((err) => setError(isApiError(err) ? err.message : "Unable to load Sage account mapping.")).finally(() => setLoadingMapping(false));
+    accountingReportsService.getSageAccountMap(locationId).then(setMapping).catch((err) => setError(isApiError(err) ? err.message : "Unable to load Sage account mapping.")).finally(() => setLoadingMapping(false));
   }, [locationId]);
 
   const openMapping = (isEditing: boolean) => {
@@ -59,7 +57,7 @@ function RouteComponent() {
     if (!locationId || !draft.depositAccName.trim() || !draft.depositAccountNumber.trim()) { setError("Complete the deposit account number and name before saving."); return; }
     setSaving(true); setError(null);
     try {
-      const saved = mapping ? await accountingReportsApi.updateSageAccountMap(mapping._id, { depositAccName: draft.depositAccName, depositAccountNumber: draft.depositAccountNumber, glaccount: draft.glaccount }, { permission }) : await accountingReportsApi.createSageAccountMap({ site: locationId, depositAccName: draft.depositAccName, depositAccountNumber: draft.depositAccountNumber, glaccount: draft.glaccount }, { permission });
+      const saved = mapping ? await accountingReportsService.updateSageAccountMap(mapping._id, { depositAccName: draft.depositAccName, depositAccountNumber: draft.depositAccountNumber, glaccount: draft.glaccount }) : await accountingReportsService.createSageAccountMap({ site: locationId, depositAccName: draft.depositAccName, depositAccountNumber: draft.depositAccountNumber, glaccount: draft.glaccount });
       setMapping(saved); setDialogOpen(false);
     } catch (err) { setError(isApiError(err) ? err.message : "Unable to save Sage account mapping."); } finally { setSaving(false); }
   };
