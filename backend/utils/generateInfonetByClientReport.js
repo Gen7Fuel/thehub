@@ -12,7 +12,7 @@ const {
  * Generates a single PDF report in memory supporting grouped fuel sections with subtotals and grand totals.
  * Returns a Promise resolving to a Buffer.
  */
-function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr) {
+function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr, sortBy = 'statusNumber') {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'LETTER',
@@ -121,8 +121,18 @@ function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, 
 
     // Render Each Grade Section
     groupedSections.forEach((section) => {
-      // Sort records within section by Status Number (Account #)
-      section.records.sort((a, b) => (a.statusNo || '').localeCompare(b.statusNo || '', undefined, { numeric: true }));
+      // Preserve the historical Status Number order unless Date was selected.
+      section.records.sort((a, b) => {
+        if (sortBy === 'date') {
+          const aDate = parseDateString(a.date);
+          const bDate = parseDateString(b.date);
+          if (!aDate && !bDate) return 0;
+          if (!aDate) return 1;
+          if (!bDate) return -1;
+          return aDate.getTime() - bDate.getTime();
+        }
+        return (a.statusNo || '').localeCompare(b.statusNo || '', undefined, { numeric: true });
+      });
 
       // Section Header (Only if multi-section)
       if (isMultiSection) {
@@ -231,7 +241,7 @@ function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, 
  * @param {string} [addressLine2=''] - Secondary site address line (City, Province, Postal Code).
  * @returns {Promise<Array<{ fileName: string, title: string, buffer: Buffer }>>}
  */
-async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', addressLine2 = '') {
+async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', addressLine2 = '', sortBy = 'statusNumber') {
   if (!Array.isArray(flattenData) || flattenData.length === 0) {
     throw new Error('No flatten data provided to generate PDF reports.');
   }
@@ -307,7 +317,8 @@ async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', a
       addressLine1,
       addressLine2,
       dateFromStr,
-      dateToStr
+      dateToStr,
+      sortBy
     );
 
     pdfReports.push({

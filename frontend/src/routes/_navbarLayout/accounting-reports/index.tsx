@@ -11,6 +11,7 @@ function RouteComponent() {
 
   const hasInfonet = access?.accounting?.accountingReports?.infonet;
   const hasEOD = access?.accounting?.accountingReports?.endOfDayReport?.value;
+  const hasSageExport = access?.accounting?.accountingReports?.sageExport;
 
   if (hasInfonet) {
     return <Navigate to="/accounting-reports/infonet" replace />;
@@ -18,6 +19,10 @@ function RouteComponent() {
 
   if (hasEOD) {
     return <Navigate to="/accounting-reports/end-of-day" replace />;
+  }
+
+  if (hasSageExport) {
+    return <Navigate to="/accounting-reports/sage-export" replace />;
   }
 
   return <Navigate to="/" replace />;
