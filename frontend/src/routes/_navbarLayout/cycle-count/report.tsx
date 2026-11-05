@@ -997,7 +997,7 @@ function RouteComponent() {
 
     setSyncing(true);
     try {
-      const response = await cycleCountService.finalize<any>(site, selectedDateStr, 'cycle-count.report');
+      const response = await cycleCountService.finalize<any>(site, selectedDateStr, 'cycle-count.report', true);
 
       if (response.success) {
         alert(`Ticket Generated Succefully for ${site}!`);
