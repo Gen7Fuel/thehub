@@ -44,6 +44,7 @@ function RouteComponent() {
   const [adminFee, setAdminFee] = useState<string>("");
   const [provinceStatusDiscount, setProvinceStatusDiscount] =
     useState<string>("");
+  const [sortBy, setSortBy] = useState<"statusNumber" | "date">("statusNumber");
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -87,6 +88,7 @@ function RouteComponent() {
       formData.append("site", site);
       formData.append("adminFee", adminFee);
       formData.append("provinceStatusDiscount", provinceStatusDiscount);
+      formData.append("sortBy", sortBy);
 
       const response = await accountingReportsService.requestInfonet(formData, site);
 
@@ -165,9 +167,24 @@ function RouteComponent() {
           {/* Input Controls Grid */}
           <TooltipProvider delayDuration={150}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="col-span-1 md:col-span-2">
+              <div>
                 <label className="block text-sm font-medium mb-1">Site</label>
                 <LocationPicker value="stationName" setStationName={setSite} />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1" htmlFor="infonet-sort-by">
+                  Sort by
+                </label>
+                <select
+                  id="infonet-sort-by"
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as "statusNumber" | "date")}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="statusNumber">Status Number</option>
+                  <option value="date">Date</option>
+                </select>
               </div>
 
               {/* Admin Fee Input with Tooltip */}
@@ -244,6 +261,7 @@ function RouteComponent() {
                   onChange={(e) => setProvinceStatusDiscount(e.target.value)}
                 />
               </div>
+
             </div>
           </TooltipProvider>
 

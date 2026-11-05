@@ -8,6 +8,7 @@ import type {
   ReportRequestResult,
   SageAccountMap,
   SageExportReportInput,
+  SageExportReportResult,
 } from './accounting-reports.types'
 
 export const accountingReportsApi = {
@@ -42,7 +43,7 @@ export const accountingReportsApi = {
     return (await apiClient.put(`/sage-account-maps/${id}`, input, requestConfig(options))).data
   },
 
-  async requestSageExport(input: SageExportReportInput, options: RequestOptions): Promise<ReportRequestResult> {
+  async requestSageExport(input: SageExportReportInput, options: RequestOptions): Promise<SageExportReportResult> {
     return (await apiClient.post('/accounting-reports/sage-export', input, requestConfig(options))).data
   },
 }

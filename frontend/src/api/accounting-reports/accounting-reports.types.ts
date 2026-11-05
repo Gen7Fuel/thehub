@@ -18,6 +18,15 @@ export interface SageExportReportInput {
   date: string
 }
 
+export interface SageExportReportResult {
+  success: boolean
+  message: string
+  filename: string
+  csv: string
+  headers: string[]
+  rows: string[][]
+}
+
 export interface ReportRequestResult {
   success?: boolean
   message?: string

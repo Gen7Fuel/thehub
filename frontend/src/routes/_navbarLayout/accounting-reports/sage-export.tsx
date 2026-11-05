@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Building, Calendar, FileSpreadsheet, Mail, Pencil, Plus } from "lucide-react";
+import { Building, Calendar, Download, FileSpreadsheet, Mail, Pencil, Plus } from "lucide-react";
 import { DatePicker } from "@/components/custom/datePicker";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useSite } from "@/context/SiteContext";
@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { loadLocations } from "@/lib/locationsCache";
 import { accountingReportsApi } from "@/api/accounting-reports/accounting-reports.api";
 import { accountingReportsService } from "@/api/accounting-reports/accounting-reports.service";
-import { SAGE_MAPPING_FIELDS, type SageAccountMap, type SageGlAccount } from "@/api/accounting-reports/accounting-reports.types";
+import { SAGE_MAPPING_FIELDS, type SageAccountMap, type SageExportReportResult, type SageGlAccount } from "@/api/accounting-reports/accounting-reports.types";
 import { isApiError } from "@/api/core/errors";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -38,6 +38,7 @@ function RouteComponent() {
   const [draft, setDraft] = useState({ depositAccName: "", depositAccountNumber: "", glaccount: emptyRows() });
   const [error, setError] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [preview, setPreview] = useState<SageExportReportResult | null>(null);
   const locationId = useMemo(() => locations.find((location) => location.stationName === site)?._id, [locations, site]);
 
   useEffect(() => { loadLocations<{ _id: string; stationName: string }>().then(setLocations).catch(() => setLocations([])); }, []);
@@ -75,7 +76,8 @@ function RouteComponent() {
         stationName: site,
         date: formatDateForRequest(date),
       });
-      setStatusMessage(response.message || `The Sage import report will be emailed directly to ${user?.email || "your email address"} shortly.`);
+      setPreview(response);
+      setStatusMessage(response.message);
     } catch (err) {
       setError(isApiError(err) ? err.message : "Failed to generate the Sage export report.");
     } finally {
@@ -83,9 +85,23 @@ function RouteComponent() {
     }
   };
 
+  const downloadCsv = () => {
+    if (!preview) return;
+    const blob = new Blob([preview.csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = preview.filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return <div className="p-6 max-w-5xl mx-auto space-y-6">
     <div className="flex items-start justify-between pb-4 border-b border-slate-200 dark:border-zinc-800"><div><h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Sage Export Report</h1><p className="text-sm text-slate-500 dark:text-zinc-400">Prepare a daily sales Excel import for Sage.</p></div><button type="button" onClick={() => openMapping(!mapping)} disabled={!locationId || loadingMapping} className="inline-flex items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50">{mapping ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}{mapping ? "View Sage Account Mapping" : "Add Sage Account Mapping"}</button></div>
     <div className="bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl p-6 shadow-sm"><div className="space-y-6"><div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end"><div className="space-y-1.5"><label className="text-xs font-semibold text-slate-600 dark:text-zinc-300 flex items-center gap-1"><Building className="w-3.5 h-3.5" /> Station Location</label><LocationPicker setStationName={setSite} value="stationName" defaultValue={site} /></div><div className="space-y-1.5"><label className="text-xs font-semibold text-slate-600 dark:text-zinc-300 flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> Report Date</label><DatePicker date={date} setDate={(value) => typeof value === "function" ? setDate(value(date)) : setDate(value)} /></div></div>{error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}{statusMessage && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{statusMessage}</div>}<div className="flex items-center gap-2.5 p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-lg text-amber-900 dark:text-amber-200 text-sm"><Mail className="h-4 w-4 shrink-0 text-amber-600" /><span>{mapping ? "Click to export a Sage Excel import to be emailed and uploaded to Sage for daily sales." : "Use the button above to add the Sage account information to continue."}</span></div><div className="flex justify-end pt-2"><button type="button" onClick={handleSubmit} disabled={!mapping || !date || submitting} className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-medium text-sm shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"><FileSpreadsheet className="w-4 h-4" />{submitting ? "Generating & Emailing..." : "Export Sage Excel Import"}</button></div></div></div>
+    {preview && <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"><div className="mb-4 flex items-center justify-between gap-4"><div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">CSV Preview</h2><p className="text-sm text-slate-500 dark:text-zinc-400">Review all columns and rows before downloading the Sage import.</p></div><button type="button" onClick={downloadCsv} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"><Download className="h-4 w-4" />Download CSV</button></div><div className="max-h-[32rem] overflow-auto rounded-lg border border-slate-200 dark:border-zinc-700"><table className="min-w-max border-collapse text-xs"><thead className="sticky top-0 z-10 bg-slate-100 dark:bg-zinc-800"><tr>{preview.headers.map((header, index) => <th key={`${header}-${index}`} className="whitespace-nowrap border-b border-r border-slate-200 px-3 py-2 text-left font-semibold text-slate-700 dark:border-zinc-700 dark:text-zinc-200">{header}</th>)}</tr></thead><tbody>{preview.rows.map((row, rowIndex) => <tr key={rowIndex} className="even:bg-slate-50 dark:even:bg-zinc-800/50">{preview.headers.map((_, columnIndex) => <td key={`${rowIndex}-${columnIndex}`} className="whitespace-nowrap border-b border-r border-slate-100 px-3 py-2 text-slate-700 dark:border-zinc-800 dark:text-zinc-300">{row[columnIndex] || ""}</td>)}</tr>)}</tbody></table></div></section>}
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}><DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto"><DialogHeader><DialogTitle>{editing ? (mapping ? "Edit Sage Account Mapping" : "Add Sage Account Mapping") : "Sage Account Mapping"}</DialogTitle></DialogHeader><div className="space-y-5"><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><label className="space-y-1 text-sm font-medium">Deposit Account Number<input disabled={!editing} value={draft.depositAccountNumber} onChange={(e) => setDraft({ ...draft, depositAccountNumber: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label><label className="space-y-1 text-sm font-medium">Deposit Account Name<input disabled={!editing} value={draft.depositAccName} onChange={(e) => setDraft({ ...draft, depositAccName: e.target.value })} className="mt-1 w-full rounded-md border px-3 py-2 font-normal" /></label></div><section><h2 className="mb-3 text-base font-semibold">GL Account entry</h2><div className="space-y-3">{draft.glaccount.map((row, index) => <div key={row.mappingField} className="grid grid-cols-1 md:grid-cols-[1fr_1fr_1fr] gap-3 items-end"><div className="rounded-md bg-zinc-100 px-3 py-2 text-sm font-medium">{row.mappingField}</div><label className="text-xs text-slate-500">Sage account number<input disabled={!editing} value={row.accNo} onChange={(e) => updateRow(index, "accNo", e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm text-slate-900" /></label><label className="text-xs text-slate-500">Sage account name<input disabled={!editing} value={row.accName} onChange={(e) => updateRow(index, "accName", e.target.value)} className="mt-1 w-full rounded-md border px-3 py-2 text-sm text-slate-900" /></label></div>)}</div></section>{editing && <div className="flex justify-end"><button type="button" onClick={saveMapping} disabled={saving} className="rounded-lg bg-black px-5 py-2 text-sm font-medium text-white disabled:opacity-50">{saving ? "Saving..." : "Save"}</button></div>}{!editing && mapping && <div className="flex justify-end"><button type="button" onClick={() => setEditing(true)} className="rounded-lg bg-black px-5 py-2 text-sm font-medium text-white">Edit</button></div>}</div></DialogContent></Dialog>
   </div>;
 }

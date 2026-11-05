@@ -51,28 +51,44 @@ const formatUsDate = (dateString) => {
   return `${month}/${day}/${year}`;
 };
 
-function generateSageImportCsv({ date, depositAccountName, depositAccountNumber, entries }) {
+const formatAmount = (value) => {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2) : "0.00";
+};
+
+function generateSageImportCsvData({ date, depositAccountName, depositAccountNumber, entries }) {
   const reportDate = formatUsDate(date);
   const rows = entries.map((entry, index) => {
     const values = {
       DONOTIMPORT: "",
       RECEIPT_DATE: reportDate,
+      PAYMETHOD: "EFT",
       DOCDATE: reportDate,
       DEPOSITTO: depositAccountName,
       UNDEPACCTNO: depositAccountNumber,
       CURRENCY: "CAD",
       LINE_NO: index + 1,
       ACCT_NO: entry.accNo,
-      AMOUNT: entry.amount,
+      AMOUNT: formatAmount(entry.amount),
       PAYER_NAME: "Daily Sales",
     };
-    return SAGE_IMPORT_HEADERS.map((header) => csvValue(values[header])).join(",");
+    return SAGE_IMPORT_HEADERS.map((header) => csvValue(values[header]));
   });
 
-  return Buffer.from(
-    [SAGE_IMPORT_HEADERS.join(","), ...rows].join("\r\n") + "\r\n",
-    "utf8",
-  );
+  const csv = [SAGE_IMPORT_HEADERS, ...rows]
+    .map((row) => row.join(","))
+    .join("\r\n") + "\r\n";
+
+  return {
+    headers: SAGE_IMPORT_HEADERS,
+    rows,
+    csv,
+    buffer: Buffer.from(csv, "utf8"),
+  };
 }
 
-module.exports = { SAGE_IMPORT_HEADERS, generateSageImportCsv };
+function generateSageImportCsv(input) {
+  return generateSageImportCsvData(input).buffer;
+}
+
+module.exports = { SAGE_IMPORT_HEADERS, generateSageImportCsv, generateSageImportCsvData };

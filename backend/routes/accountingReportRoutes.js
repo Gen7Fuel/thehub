@@ -10,7 +10,7 @@ const Location = require("../models/Location");
 const Payable = require("../models/Payables");
 const SageAccountMap = require("../models/SageAccountMap");
 const { KardpollReport } = require("../models/CashRec");
-const { generateSageImportCsv } = require("../utils/generateSageImportCsv");
+const { generateSageImportCsvData } = require("../utils/generateSageImportCsv");
 const { processInfonetReport } = require("../utils/flattenInfonetReport");
 const {
   generateAdminFeePdfReports,
@@ -115,6 +115,7 @@ async function generateExcelBuffer(rows, sheetName = "Data") {
 router.post("/infonet-reports", upload.single("file"), async (req, res) => {
   try {
     const { site, adminFee, provinceStatusDiscount } = req.body;
+    const sortBy = req.body.sortBy === "date" ? "date" : "statusNumber";
     const file = req.file;
 
     if (!file) {
@@ -182,6 +183,7 @@ router.post("/infonet-reports", upload.single("file"), async (req, res) => {
         flattenData,
         addressLine1,
         addressLine2,
+        sortBy,
       );
 
     // 6. Generate Standard Infonet Grade PDF Reports
@@ -190,6 +192,7 @@ router.post("/infonet-reports", upload.single("file"), async (req, res) => {
       flattenData,
       addressLine1,
       addressLine2,
+      sortBy,
     );
 
     // 7. Build raw attachments array (4 total attachments)
@@ -780,7 +783,7 @@ router.post("/ap-customer-report", async (req, res) => {
 
 /**
  * POST /sage-export
- * Generates the Sage daily sales CSV and queues it as an email attachment.
+ * Generates the Sage daily sales CSV and returns it for browser preview/download.
  */
 router.post("/sage-export", async (req, res) => {
   try {
@@ -849,31 +852,24 @@ router.post("/sage-export", async (req, res) => {
           ? Math.abs(mappingAmounts[account.mappingField])
           : -Math.abs(mappingAmounts[account.mappingField]),
     }));
-    const csv = generateSageImportCsv({
+    const generated = generateSageImportCsvData({
       date,
       depositAccountName: accountMap.depositAccName,
       depositAccountNumber: accountMap.depositAccountNumber,
       entries,
     });
-    const formattedDate = date.slice(5, 7) + "/" + date.slice(8, 10) + "/" + date.slice(0, 4);
+    // Slashes are path separators on Windows, so use hyphens in the downloadable filename.
+    const formattedDate = date.slice(5, 7) + "-" + date.slice(8, 10) + "-" + date.slice(0, 4);
     const siteDisplayName = formatReportSiteName(resolvedSiteName);
-    const recipientEmail = req.user?.email || "daksh@gen7fuel.com";
-
-    await emailQueue.add("sendSageExportReportEmail", {
-      to: recipientEmail,
-      subject: `Sage Export Report – ${siteDisplayName} (${formattedDate})`,
-      text: `Hello,\n\nAttached is the requested Sage daily sales import for ${siteDisplayName} dated ${formattedDate}.\n\nBest regards,\nGen7 Fuel Automated System`,
-      attachments: [{
-        filename: `Sage Import ${siteDisplayName} - ${formattedDate}.csv`,
-        content: csv.toString("base64"),
-        encoding: "base64",
-        contentType: "text/csv",
-      }],
-    });
+    const filename = `Sage Import ${siteDisplayName} - ${formattedDate}.csv`;
 
     return res.json({
       success: true,
-      message: `The Sage import report has been queued and will be emailed directly to ${recipientEmail} shortly.`,
+      message: "Sage import generated. Review the preview and download the CSV when ready.",
+      filename,
+      csv: generated.csv,
+      headers: generated.headers,
+      rows: generated.rows,
     });
   } catch (error) {
     console.error("Error generating Sage export report:", error);
