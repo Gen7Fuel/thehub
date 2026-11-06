@@ -111,12 +111,15 @@ async function attemptPricePost({ gvmLocationName, prices, timezone }) {
     }
 
     console.log("⏱️ Standing by for the pricing page to fully render...");
-    await page.waitForTimeout(3000);
-
     const newButton = page.getByRole("button", { name: "New", exact: true }).first();
 
-    if (!(await newButton.isVisible().catch(() => false))) {
-      throw new Error('DOM_ELEMENT_MISSING: The "New" pricing button could not be found on the pricing page.');
+    // The pricing grid can finish rendering after navigation/network idle.
+    // Wait for the control itself instead of taking a single visibility snapshot.
+    try {
+      await newButton.waitFor({ state: "visible", timeout: 15000 });
+    } catch (error) {
+      if (error.name !== "TimeoutError") throw error;
+      throw new Error('DOM_ELEMENT_MISSING: The "New" pricing button did not become visible within 15 seconds on the pricing page.');
     }
 
     console.log('✏️ Clicking "New" to open the pricing modal...');
