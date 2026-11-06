@@ -16,10 +16,25 @@ const {
 const id = () => new mongoose.Types.ObjectId();
 
 describe("station audit models", () => {
+  it("omits the legacy template key for manually created sections", () => {
+    const section = new StationAuditSection({
+      name: "Manual section",
+      sites: [id()],
+      createdBy: id(),
+    });
+
+    expect(section.legacyTemplateId).toBeUndefined();
+  });
+
   it("validates the configuration models", () => {
     const userId = id();
     const locationId = id();
-    const section = new StationAuditSection({ name: "Operations", sites: [locationId], createdBy: userId });
+    const section = new StationAuditSection({
+      name: "Operations",
+      sites: [locationId],
+      departments: [id()],
+      createdBy: userId,
+    });
     const department = new StationAuditDepartment({
       name: "Maintenance",
       departmentHead: userId,

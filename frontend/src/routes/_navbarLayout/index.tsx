@@ -86,14 +86,21 @@ function App() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             
           {/* AUDITS - EMERALD */}
-          {access?.stationAudit?.value && (
+          {(access?.stationAudit?.value || access?.auditManager?.value) && (
             <Section 
               title="Audits" 
               accentColor="border-t-emerald-500" 
               icon={<ClipboardCheck className="w-5 h-5 text-emerald-600" />}
             >
-              <NavButton to="/audit" label="Station Audits" icon={Layers} theme="emerald" />
-              <NavButton to="/station-audits/checklist" label="Station Audits New" icon={ListChecks} theme="emerald" />
+              {access?.stationAudit?.value && (
+                <>
+                  <NavButton to="/audit" label="Station Audits" icon={Layers} theme="emerald" />
+                  <NavButton to="/station-audits/checklist" label="Station Audits New" icon={ListChecks} theme="emerald" />
+                </>
+              )}
+              {access?.auditManager?.value && (
+                <NavButton to="/audit-manager" label="Audit Manager" icon={Settings} theme="emerald" />
+              )}
             </Section>
           )}
 

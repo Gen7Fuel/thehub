@@ -10,12 +10,16 @@
  *
  * The default mode is a read-only dry run. The apply mode aborts before any
  * writes if a legacy site, status template, department, or creator cannot be
- * resolved. Departments without a matching Hub user are migrated inactive so
- * they cannot receive new issues accidentally.
+ * resolved. Departments using department-head assignment without a matching
+ * Hub user are migrated inactive so they cannot receive new issues accidentally.
+ * Station Manager remains active because its assignee is resolved from the site.
  */
 
 require("dotenv").config();
 const mongoose = require("mongoose");
+
+const HO_ADMIN_NAME = "HO Admin";
+const HO_ADMIN_HEAD_ID = new mongoose.Types.ObjectId("68bf1b4aa1f5bc66c9dd8b72");
 
 const AuditTemplate = require("../models/audit/auditTemplate");
 const SelectTemplate = require("../models/audit/selectTemplate");
@@ -134,6 +138,7 @@ function buildMigrationDocuments(source) {
   );
 
   const departments = (assignedToTemplate?.options || []).map((option) => {
+    const isStationManager = lookupKey(option.text) === "station manager";
     const defaultEmails = splitEmails(option.email, option.cc);
     const departmentHead = defaultEmails
       .map((email) => source.usersByEmail.get(email))
@@ -156,7 +161,7 @@ function buildMigrationDocuments(source) {
       }
     }
 
-    if (!departmentHead) {
+    if (!isStationManager && !departmentHead) {
       warnings.push(
         `Department "${option.text}" has no legacy email matching a Hub user; migrated inactive`
       );
@@ -168,15 +173,31 @@ function buildMigrationDocuments(source) {
       departmentHead,
       members: [],
       defaultIssueAssignees: departmentHead ? [departmentHead] : [],
-      assignmentStrategy: lookupKey(option.text) === "station manager"
+      assignmentStrategy: isStationManager
         ? "station_manager"
         : "department_head",
+      isAdminDepartment: false,
       notificationEmails: defaultEmails,
       siteNotifications,
-      active: Boolean(departmentHead),
+      active: isStationManager || Boolean(departmentHead),
       createdBy: assignedToTemplate.createdBy || fallbackCreator,
       legacySelectOptionText: normalize(option.text),
     };
+  });
+
+  departments.push({
+    name: HO_ADMIN_NAME,
+    description: "Head office audit administration",
+    departmentHead: HO_ADMIN_HEAD_ID,
+    members: [],
+    defaultIssueAssignees: [HO_ADMIN_HEAD_ID],
+    assignmentStrategy: "department_head",
+    isAdminDepartment: true,
+    notificationEmails: [],
+    siteNotifications: [],
+    active: true,
+    createdBy: fallbackCreator,
+    legacySelectOptionText: HO_ADMIN_NAME,
   });
 
   const departmentByName = new Map(
@@ -187,6 +208,7 @@ function buildMigrationDocuments(source) {
 
   for (const template of source.templates) {
     const sectionType = lookupKey(template.name) === "orders" ? "order" : "checklist";
+    const sectionDepartmentNames = new Set();
     const sites = [];
     for (const siteName of template.sites || []) {
       const location = source.locationByName.get(lookupKey(siteName));
@@ -194,7 +216,7 @@ function buildMigrationDocuments(source) {
       else sites.push(location._id);
     }
 
-    sections.push({
+    const sectionDocument = {
       name: normalize(template.name),
       description: normalize(template.description),
       sortOrder: 0,
@@ -203,7 +225,9 @@ function buildMigrationDocuments(source) {
       active: true,
       createdBy: template.createdBy || fallbackCreator,
       legacyTemplateId: template._id,
-    });
+      departmentLegacyNames: [],
+    };
+    sections.push(sectionDocument);
 
     for (const item of template.items || []) {
       const statusSet = statusSetByLegacyName.get(lookupKey(item.statusTemplate));
@@ -218,6 +242,9 @@ function buildMigrationDocuments(source) {
         errors.push(
           `Checklist "${item.item}" in "${template.name}" references missing department "${item.assignedTo}"`
         );
+      }
+      if (department?.legacySelectOptionText) {
+        sectionDepartmentNames.add(lookupKey(department.legacySelectOptionText));
       }
 
       const assignedSites = [];
@@ -253,6 +280,10 @@ function buildMigrationDocuments(source) {
         createdBy: template.createdBy || fallbackCreator,
       });
     }
+    sectionDocument.departmentLegacyNames = [
+      ...sectionDepartmentNames,
+      lookupKey(HO_ADMIN_NAME),
+    ];
   }
 
   sections
@@ -300,10 +331,18 @@ async function upsertDocuments(documents) {
   }
 
   const sectionIds = new Map();
-  for (const document of documents.sections) {
+  for (const sourceSection of documents.sections) {
+    const { departmentLegacyNames, ...document } = sourceSection;
     const saved = await StationAuditSection.findOneAndUpdate(
       { legacyTemplateId: document.legacyTemplateId },
-      { $set: document },
+      {
+        $set: {
+          ...document,
+          departments: departmentLegacyNames
+            .map((name) => departmentIds.get(name))
+            .filter(Boolean),
+        },
+      },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );
     sectionIds.set(document.legacyTemplateId.toString(), saved._id);

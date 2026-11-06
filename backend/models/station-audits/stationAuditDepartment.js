@@ -39,6 +39,7 @@ const StationAuditDepartmentSchema = new mongoose.Schema(
       enum: ["department_head", "station_manager", "operations_queue"],
       default: "department_head",
     },
+    isAdminDepartment: { type: Boolean, default: false },
     escalationDepartment: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "StationAuditDepartment",
@@ -66,6 +67,8 @@ const StationAuditDepartmentSchema = new mongoose.Schema(
 StationAuditDepartmentSchema.index({ name: 1 }, { unique: true });
 StationAuditDepartmentSchema.index({ departmentHead: 1, active: 1 });
 StationAuditDepartmentSchema.index({ "members.user": 1, active: 1 });
+StationAuditDepartmentSchema.index({ isAdminDepartment: 1, departmentHead: 1, active: 1 });
+StationAuditDepartmentSchema.index({ isAdminDepartment: 1, "members.user": 1, active: 1 });
 StationAuditDepartmentSchema.index({ legacySelectOptionText: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model("StationAuditDepartment", StationAuditDepartmentSchema);
