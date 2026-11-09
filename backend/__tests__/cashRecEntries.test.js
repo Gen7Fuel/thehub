@@ -27,11 +27,12 @@ function evaluate(expression, document) {
 }
 
 describe('cash-rec entries: cash including U.S. Cash', () => {
-  let shifts, lottery, entries, aggregate
+  let shifts, lottery, entries, aggregate, province
 
   beforeEach(() => {
     shifts = []
     lottery = null
+    province = 'Ontario'
     const findNothing = () => ({ lean: async () => null })
     aggregate = vi.fn(async pipeline => {
       const group = pipeline.find(stage => stage.$group).$group
@@ -54,7 +55,7 @@ describe('cash-rec entries: cash including U.S. Cash', () => {
       },
       '../models/Transactions': { aggregate: async () => [] },
       '../models/Lottery': { findOne: () => ({ lean: async () => lottery }) },
-      '../models/Location': { findOne: () => ({ lean: async () => ({ sellsLottery: Boolean(lottery) }) }) },
+      '../models/Location': { findOne: () => ({ lean: async () => ({ sellsLottery: Boolean(lottery), province }) }) },
       '../models/CashRecTag': {},
       '../services/sageService': {},
       '../constants/sageBankAccounts': {},
@@ -71,9 +72,9 @@ describe('cash-rec entries: cash including U.S. Cash', () => {
     entries = module.exports.stack.find(layer => layer.route?.path === '/entries').route.stack[0].handle
   })
 
-  async function getEntries() {
+  async function getEntries(site = 'Rankin', date = '2026-10-29') {
     const res = { json: vi.fn(), status: vi.fn().mockReturnThis() }
-    await entries({ query: { site: 'Rankin', date: '2026-10-29' } }, res)
+    await entries({ query: { site, date } }, res)
     expect(res.status).not.toHaveBeenCalled()
     expect(res.json).toHaveBeenCalledOnce()
     return res.json.mock.calls[0][0]
@@ -122,5 +123,27 @@ describe('cash-rec entries: cash including U.S. Cash', () => {
     expect((await getEntries()).cashSummary.totals.report_canadian_cash).toBe(0)
     shifts = [{}]
     expect((await getEntries()).cashSummary.totals.report_canadian_cash).toBe(0)
+  })
+
+  it.each(['Manitoba', ' manitoba '])('skips Zing adjustments for Sioux Valley in %s', async (value) => {
+    province = value
+    shifts = [{ canadianCash: 1000, canadian_cash_collected: 999, onlineLottoTotal: 100, instantLottTotal: 12 }]
+    lottery = { onlineLottoTotal: 100, instantLottTotal: null }
+    const result = await getEntries('Sioux Valley', '2026-11-03')
+    expect(result.adjustedOverShort).toBe(-1)
+    expect(result.cashSummary.totals.instantLottTotal).toBe(12)
+  })
+
+  it('still applies online lottery adjustments in Manitoba', async () => {
+    province = 'Manitoba'
+    shifts = [{ canadianCash: 1000, canadian_cash_collected: 999, onlineLottoTotal: 110, instantLottTotal: 12 }]
+    lottery = { onlineLottoTotal: 100, onlineCancellations: 2, onlineDiscounts: 3 }
+    expect((await getEntries('Sioux Valley', '2026-11-03')).adjustedOverShort).toBe(-16)
+  })
+
+  it('preserves scratch lottery adjustments outside Manitoba', async () => {
+    shifts = [{ canadianCash: 1000, canadian_cash_collected: 999, onlineLottoTotal: 100, instantLottTotal: 30 }]
+    lottery = { onlineLottoTotal: 100, instantLottTotal: 10, scratchFreeTickets: 5, oldScratchTickets: 3 }
+    expect((await getEntries()).adjustedOverShort).toBe(-13)
   })
 })
