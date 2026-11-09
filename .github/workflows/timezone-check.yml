@@ -1,0 +1,42 @@
+name: Timezone Data Check
+
+on:
+  schedule:
+    - cron: "15 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  timezone-check:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Check B.C. timezone data
+        run: |
+          node - <<'NODE'
+          const moment = require("moment-timezone");
+          const value = moment
+            .utc("2026-11-07T14:13:00Z")
+            .tz("America/Vancouver");
+
+          console.log("Timezone data:", moment.tz.dataVersion);
+          console.log("Calculated time:", value.format("YYYY-MM-DD HH:mm z Z"));
+
+          if (value.utcOffset() !== -420) {
+            throw new Error("America/Vancouver timezone data is outdated.");
+          }
+          NODE

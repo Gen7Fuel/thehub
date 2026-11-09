@@ -96,6 +96,7 @@ const { router: aiCustomerRoutes } = require('./routes/aiCustomerRoutes');
 const bulletinRoutes = require('./routes/bulletinRoutes');
 const eventRoutes = require('./routes/eventRoutes');
 const { initializePermissionMap } = require("./utils/permissionStore");
+const { runTimezoneHealthCheck } = require("./services/timezoneHealthCheck");
 const setupSocket = require("./socket");
 
 dotenv.config();
@@ -247,6 +248,9 @@ const startServer = async () => {
     server.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`🔧 GVM Unifi sync: ${process.env.GVM_SYNC_ENABLED === "true" ? "ENABLED" : "disabled"}`);
+      // Non-blocking operational warning: stale timezone data must not prevent
+      // the backend from serving traffic. Any alert is sent through emailQueue.
+      void runTimezoneHealthCheck();
     });
   } catch (err) {
     console.error("❌ Critical Failure: Could not initialize Permission Map", err);
