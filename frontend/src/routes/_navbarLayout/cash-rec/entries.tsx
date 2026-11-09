@@ -267,7 +267,7 @@ function RouteComponent() {
   //   typeof v === 'number' && Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : ''
 
   // Column visibility based on site
-  const showLottery = site === 'Oliver' || site === 'Osoyoos'
+  const showLottery = site === 'Oliver' || site === 'Osoyoos' || site === 'Sioux Valley'
   const showKardpoll = !(site === 'Sarnia' || site === 'Walpole')
 
   return (
@@ -336,7 +336,7 @@ function RouteComponent() {
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">Cash Back</th>
                 <th className="px-1 py-1 text-center align-bottom h-24 bg-violet-50">CDN Cash</th>
 
-                {/* Lottery before Handheld Debit (only for Oliver/Osoyoos) */}
+                {/* Lottery before Handheld Debit */}
                 {showLottery && (
                   <>
                     <th className="px-1 py-1 text-center align-bottom h-24 bg-amber-50">Lottery Sales</th>
@@ -390,7 +390,7 @@ function RouteComponent() {
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.cash_back)}</td>
                     <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>{fmt2(data?.cashSummary?.totals.report_canadian_cash)}</td>
 
-                    {/* Lottery moved before Handheld Debit (only for Oliver/Osoyoos) */}
+                    {/* Lottery before Handheld Debit */}
                     {showLottery && (
                       <>
                         <td className="px-2 py-2 text-right cursor-copy" onClick={copyCell}>

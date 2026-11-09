@@ -81,6 +81,9 @@ type CashSummaryTotals = {
   parsedPayouts: number
   safedropsCount: number
   safedropsAmount: number
+  onlineLottoTotal?: number
+  instantLottTotal?: number
+  lottoPayout?: number
 }
 
 type CashSummaryAgg = {
@@ -302,8 +305,8 @@ function RouteComponent() {
             const gblMonerisFuelSales = totalSales - itemSales - reportedCanadianCash - missedCpl - salesTax
             const storeSales = itemSales
             const canadianCash = reportedCanadianCash
-            const lotterySales = 0
-            const lotteryPayouts = 0
+            const lotterySales = num(totals.onlineLottoTotal) + num(totals.instantLottTotal)
+            const lotteryPayouts = num(totals.lottoPayout)
             const totalDollarSales = gblMonerisFuelSales + canadianCash + kardpollSales + storeSales + lotterySales + lotteryPayouts + salesTax
 
             const cashSafeDeposited = canadianCashCollected
