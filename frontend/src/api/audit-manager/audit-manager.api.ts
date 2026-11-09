@@ -1,9 +1,27 @@
 import { apiClient } from '@/api/core/clients'
 import { requestConfig } from '@/api/core/request-context'
 import type { RequestOptions } from '@/api/core/types'
-import type { AuditManagerDepartmentCreate, AuditManagerDepartmentList, AuditManagerDepartmentOptions, AuditManagerDepartmentUpdate, AuditManagerDepartmentUpdateResult, AuditManagerSectionCreate, AuditManagerSectionList, AuditManagerSectionUpdate, AuditManagerSectionUpdateResult, AuditManagerUniversalSiteResult } from './audit-manager.types'
+import type { AuditManagerChecklistSectionDetail, AuditManagerChecklistSectionList, AuditManagerDepartmentCreate, AuditManagerDepartmentList, AuditManagerDepartmentOptions, AuditManagerDepartmentUpdate, AuditManagerDepartmentUpdateResult, AuditManagerSectionCreate, AuditManagerSectionList, AuditManagerSectionUpdate, AuditManagerSectionUpdateResult, AuditManagerStatusOptionSetCreate, AuditManagerStatusOptionSetList, AuditManagerStatusOptionSetResult, AuditManagerStatusOptionSetUpdate, AuditManagerStatusOptionUsage, AuditManagerUniversalSiteResult } from './audit-manager.types'
 
 export const auditManagerApi = {
+  async checklistSections(options: RequestOptions): Promise<AuditManagerChecklistSectionList> {
+    return (await apiClient.get('/station-audits/manager/checklists/sections', requestConfig(options))).data
+  },
+  async checklistSection(sectionId: string, options: RequestOptions): Promise<AuditManagerChecklistSectionDetail> {
+    return (await apiClient.get(`/station-audits/manager/checklists/sections/${sectionId}`, requestConfig(options))).data
+  },
+  async listStatusOptionSets(options: RequestOptions): Promise<AuditManagerStatusOptionSetList> {
+    return (await apiClient.get('/station-audits/manager/status-options', requestConfig(options))).data
+  },
+  async statusOptionUsage(statusOptionSetId: string, options: RequestOptions): Promise<AuditManagerStatusOptionUsage> {
+    return (await apiClient.get(`/station-audits/manager/status-options/${statusOptionSetId}/usage`, requestConfig(options))).data
+  },
+  async createStatusOptionSet(input: AuditManagerStatusOptionSetCreate, options: RequestOptions): Promise<AuditManagerStatusOptionSetResult> {
+    return (await apiClient.post('/station-audits/manager/status-options', input, requestConfig(options))).data
+  },
+  async updateStatusOptionSet(statusOptionSetId: string, input: AuditManagerStatusOptionSetUpdate, options: RequestOptions): Promise<AuditManagerStatusOptionSetResult> {
+    return (await apiClient.put(`/station-audits/manager/status-options/${statusOptionSetId}`, input, requestConfig(options))).data
+  },
   async listDepartments(options: RequestOptions): Promise<AuditManagerDepartmentList> {
     return (await apiClient.get('/station-audits/manager/departments', requestConfig(options))).data
   },

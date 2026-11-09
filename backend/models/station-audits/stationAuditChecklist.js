@@ -47,6 +47,7 @@ StationAuditChecklistSchema.index({ assignedSites: 1, active: 1 });
 // multikey index over both assignedSites and auditTypes (parallel arrays).
 StationAuditChecklistSchema.index({ auditTypes: 1, active: 1 });
 StationAuditChecklistSchema.index({ department: 1, active: 1 });
+StationAuditChecklistSchema.index({ statusOptionSet: 1, active: 1 });
 StationAuditChecklistSchema.index(
   { legacyTemplateId: 1, legacyItemId: 1 },
   { unique: true, sparse: true }

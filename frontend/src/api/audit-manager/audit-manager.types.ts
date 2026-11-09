@@ -142,3 +142,83 @@ export interface AuditManagerDepartmentCreate {
   siteNotifications: Array<{ site: string; emails: string[] }>
   active: boolean
 }
+
+export interface AuditManagerStatusOption {
+  _id?: string
+  key: string
+  label: string
+  sortOrder: number
+}
+
+export interface AuditManagerStatusOptionSet {
+  _id: string
+  name: string
+  description: string
+  options: AuditManagerStatusOption[]
+  active: boolean
+  checklistCount: number
+  activeChecklistCount: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AuditManagerStatusOptionSetList {
+  statusOptionSets: AuditManagerStatusOptionSet[]
+}
+
+export interface AuditManagerStatusOptionUsage {
+  checklists: Array<{
+    _id: string
+    item: string
+    description: string
+    active: boolean
+    section: { _id: string; name: string; active: boolean } | null
+  }>
+}
+
+export type AuditManagerStatusOptionSetUpdate =
+  | { name: string }
+  | { description: string }
+  | { options: Array<{ label: string }> }
+  | { active: boolean }
+
+export type AuditManagerStatusOptionSetField = 'name' | 'description' | 'options' | 'active'
+export type AuditManagerStatusOptionSetCreate = {
+  name: string
+  description: string
+  options: Array<{ label: string }>
+  active: boolean
+}
+
+export interface AuditManagerStatusOptionSetResult {
+  statusOptionSet: AuditManagerStatusOptionSet
+}
+
+export interface AuditManagerChecklistSectionList {
+  sections: AuditManagerSection[]
+}
+
+export interface AuditManagerChecklistDetail {
+  _id: string
+  item: string
+  description: string
+  sortOrder: number
+  category: string
+  frequency: 'daily' | 'weekly' | 'monthly'
+  auditTypes: Array<'store' | 'visitor'>
+  department: { _id: string; name: string; active: boolean } | null
+  statusOptionSet: AuditManagerStatusOptionSet | null
+  followUpInstructions: string
+  commentRequired: boolean
+  requestOrderEnabled: boolean
+  suppliesVendor: string
+  assignedSites: AuditManagerSite[]
+  active: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AuditManagerChecklistSectionDetail {
+  section: AuditManagerSection
+  checklists: AuditManagerChecklistDetail[]
+}

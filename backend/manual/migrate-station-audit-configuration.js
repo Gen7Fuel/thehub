@@ -65,6 +65,7 @@ function optionKeys(options) {
       _id: option._id,
       key,
       label: normalize(option.text),
+      sortOrder: index,
     };
   });
 }

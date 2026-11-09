@@ -475,6 +475,9 @@ function DepartmentManagementPage() {
                         : undefined
                     }
                   >
+                    <p className="mb-3 text-xs text-slate-500">
+                      Department head is notified directly and members are CC&apos;d automatically. Emails below are additional CC recipients.
+                    </p>
                     <EmailList
                       emails={selected.notificationEmails}
                       empty="No default notification emails."
@@ -686,7 +689,7 @@ function DepartmentCreateForm({ draft, setDraft, options, search, setSearch, onS
     <div className="space-y-2"><Label>Members</Label><UserSelector users={options?.users || []} selected={draft.members} search={search} setSearch={setSearch} onChange={(members) => setDraft((current) => ({ ...current, members }))} /></div>
     <div className="space-y-2"><Label>Default issue assignees</Label><UserSelector users={options?.users || []} selected={draft.defaultIssueAssignees} search={search} setSearch={setSearch} onChange={(defaultIssueAssignees) => setDraft((current) => ({ ...current, defaultIssueAssignees }))} /></div>
     <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><div className="flex items-center justify-between"><Label>Assignment strategy</Label><Button type="button" variant="ghost" size="sm" onClick={onStrategyHelp}><Info className="mr-1 h-4 w-4" />Help</Button></div><Select value={draft.assignmentStrategy} onValueChange={(assignmentStrategy: AuditManagerDepartmentCreate["assignmentStrategy"]) => setDraft((current) => ({ ...current, assignmentStrategy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(strategyLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Escalation department</Label><Select value={draft.escalationDepartment || "none"} onValueChange={(value) => setDraft((current) => ({ ...current, escalationDepartment: value === "none" ? null : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No escalation department</SelectItem>{options?.departments.map((department) => <SelectItem key={department._id} value={department._id}>{department.name}</SelectItem>)}</SelectContent></Select></div></div>
-    <div className="space-y-2"><Label>Notification emails</Label><EmailChipEditor emails={draft.notificationEmails} onChange={(notificationEmails) => setDraft((current) => ({ ...current, notificationEmails }))} /></div>
+    <div className="space-y-2"><Label>Notification emails</Label><p className="text-xs text-slate-500">Department head is notified directly and members are CC&apos;d automatically. Add only additional CC recipients here.</p><EmailChipEditor emails={draft.notificationEmails} onChange={(notificationEmails) => setDraft((current) => ({ ...current, notificationEmails }))} /></div>
     <div className="space-y-2"><Label>Site notification overrides</Label><SiteNotificationEditor sites={options?.sites || []} entries={draft.siteNotifications} onChange={(value) => setDraft((current) => ({ ...current, siteNotifications: value as Array<{ site: string; emails: string[] }> }))} /></div>
   </div>;
 }
@@ -893,7 +896,7 @@ function EmailEditor({
   emails: string[];
   onChange: (value: EditDraft) => void;
 }) {
-  return <EmailChipEditor emails={emails} onChange={(next) => onChange(next)} />;
+  return <div className="space-y-3"><p className="text-xs text-slate-500">Department head is notified directly and members are CC&apos;d automatically. Add only additional CC recipients here.</p><EmailChipEditor emails={emails} onChange={(next) => onChange(next)} /></div>;
 }
 
 function SiteNotificationEditor({

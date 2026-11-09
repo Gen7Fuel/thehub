@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const StatusOptionSchema = new mongoose.Schema({
   key: { type: String, required: true, trim: true },
   label: { type: String, required: true, trim: true },
+  sortOrder: { type: Number, required: true, min: 0, default: 0 },
 });
 
 const StationAuditStatusOptionSetSchema = new mongoose.Schema(
@@ -22,7 +23,9 @@ const StationAuditStatusOptionSetSchema = new mongoose.Schema(
     },
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    legacySelectTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "SelectTemplate", default: null },
+    // Manual option sets omit this field so they do not collide in the sparse
+    // unique legacy index on an explicit null value.
+    legacySelectTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "SelectTemplate" },
   },
   { timestamps: true }
 );
