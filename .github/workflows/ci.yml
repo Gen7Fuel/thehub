@@ -19,7 +19,7 @@ jobs:
       - name: Run frontend tests
         run: |
           cd frontend
-          npm install
+          npm ci
           # The route suite is transform-heavy; bounding workers prevents
           # GitHub's shared runner from starving jsdom tests into 5s timeouts.
           npm test -- --run --maxWorkers=1
@@ -27,7 +27,7 @@ jobs:
       - name: Run backend tests
         run: |
           cd backend
-          npm install
+          npm ci
           npm test
 
   build:
@@ -54,7 +54,7 @@ jobs:
       - name: Build backend
         run: |
           cd backend
-          npm install
+          npm ci
 
       # 5. Build CDN (npm install only)
       - name: Build CDN

@@ -1,0 +1,81 @@
+name: Auto-merge approved timezone dependency updates
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-auto-merge:
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Read Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify this is the narrowly scoped timezone update
+        id: verify
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -euo pipefail
+          echo "eligible=false" >> "$GITHUB_OUTPUT"
+
+          if ! grep -qw "moment-timezone" <<< "$DEPENDENCY_NAMES"; then
+            echo "Skipping: this PR does not update moment-timezone."
+            exit 0
+          fi
+
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              ;;
+            *)
+              echo "Skipping: only patch/minor updates are eligible; received $UPDATE_TYPE."
+              exit 0
+              ;;
+          esac
+
+          mapfile -t changed_files < <(
+            gh api --paginate \
+              "repos/$REPOSITORY/pulls/$PR_NUMBER/files" \
+              --jq '.[].filename'
+          )
+
+          if [[ "${#changed_files[@]}" -eq 0 ]]; then
+            echo "Skipping: no changed files were returned."
+            exit 0
+          fi
+
+          for file in "${changed_files[@]}"; do
+            case "$file" in
+              backend/package.json|backend/package-lock.json)
+                ;;
+              *)
+                echo "Skipping: unexpected changed file: $file"
+                exit 0
+                ;;
+            esac
+          done
+
+          echo "Verified: moment-timezone patch/minor update with manifest-only changes."
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+
+      - name: Enable GitHub auto-merge
+        if: steps.verify.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge "$PR_URL" --auto --squash
