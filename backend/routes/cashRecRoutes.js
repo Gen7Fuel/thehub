@@ -1108,11 +1108,15 @@ router.get('/entries', async (req, res) => {
             ((Number(lotteryDoc.onlineLottoTotal) || 0) -
               (Number(lotteryDoc.onlineCancellations) || 0) -
               (Number(lotteryDoc.onlineDiscounts) || 0))
-          const scratchOverShort =
-            shiftInstant -
-            ((Number(lotteryDoc.instantLottTotal) || 0) +
-              (Number(lotteryDoc.scratchFreeTickets) || 0) +
-              (Number(lotteryDoc.oldScratchTickets) || 0))
+          // Match the Cash Summary report: Manitoba excludes Zing sales
+          // differences from Till Over/Short, including the value Desk posts.
+          const isManitoba = location.province?.trim().toLowerCase() === 'manitoba'
+          const scratchOverShort = isManitoba
+            ? 0
+            : shiftInstant -
+              ((Number(lotteryDoc.instantLottTotal) || 0) +
+                (Number(lotteryDoc.scratchFreeTickets) || 0) +
+                (Number(lotteryDoc.oldScratchTickets) || 0))
           const adjustedReportedCash = reportCanadianCash + onlineOverShort + scratchOverShort
           const canadianCashCollected = Number(cashSummary?.totals?.canadian_cash_collected) || 0
           adjustedOverShort =
