@@ -8,7 +8,7 @@ export interface AuditManagerDepartmentSummary {
   _id: string
   name: string
   description?: string
-  departmentHead?: string | null
+  departmentHead?: string | AuditManagerUserSummary | null
   members?: Array<{ user: string; addedAt?: string; addedBy?: string | null }>
   assignmentStrategy: 'department_head' | 'station_manager' | 'operations_queue'
   isAdminDepartment?: boolean
@@ -61,6 +61,11 @@ export interface AuditManagerSectionCreate {
 
 export interface AuditManagerUniversalSiteResult {
   site: AuditManagerSite
+  updatedSections: number
+}
+
+export interface AuditManagerUniversalDepartmentResult {
+  department: AuditManagerDepartmentSummary
   updatedSections: number
 }
 
@@ -202,13 +207,13 @@ export interface AuditManagerChecklistDetail {
   _id: string
   item: string
   description: string
-  sortOrder: number
+  sortOrder: number | null
   category: string
   frequency: 'daily' | 'weekly' | 'monthly'
   auditTypes: Array<'store' | 'visitor'>
   department: { _id: string; name: string; active: boolean } | null
   statusOptionSet: AuditManagerStatusOptionSet | null
-  followUpInstructions: string
+  followUp: boolean
   commentRequired: boolean
   requestOrderEnabled: boolean
   suppliesVendor: string
@@ -221,4 +226,62 @@ export interface AuditManagerChecklistDetail {
 export interface AuditManagerChecklistSectionDetail {
   section: AuditManagerSection
   checklists: AuditManagerChecklistDetail[]
+}
+
+export interface AuditManagerChecklistEditOptions {
+  sites: AuditManagerSite[]
+  departments: Array<{
+    _id: string
+    name: string
+    active: boolean
+    departmentHead: AuditManagerUserSummary | null
+    defaultIssueAssignees: AuditManagerUserSummary[]
+  }>
+  statusOptionSets: Array<AuditManagerStatusOptionSet & { checklistCount: number }>
+  categories: string[]
+  vendors: string[]
+}
+
+export type AuditManagerChecklistUpdate =
+  | { item: string }
+  | { description: string }
+  | { category: string }
+  | { frequency: 'daily' | 'weekly' | 'monthly' }
+  | { auditTypes: Array<'store' | 'visitor'> }
+  | { department: string }
+  | { statusOptionSet: string }
+  | { followUp: boolean }
+  | { commentRequired: boolean }
+  | { assignedSites: string[] }
+  | { orderConfiguration: { enabled: boolean; vendor: string } }
+  | { active: boolean }
+
+export interface AuditManagerChecklistCreate {
+  item: string
+  description: string
+  category: string
+  frequency: 'daily' | 'weekly' | 'monthly'
+  auditTypes: Array<'store' | 'visitor'>
+  department: string
+  statusOptionSet: string
+  followUp: boolean
+  commentRequired: boolean
+  assignedSites: string[]
+  orderConfiguration: { enabled: boolean; vendor: string }
+  active: boolean
+}
+
+export type AuditManagerChecklistUpdateField =
+  | 'item' | 'description' | 'category' | 'frequency' | 'auditTypes'
+  | 'department' | 'statusOptionSet' | 'followUp'
+  | 'commentRequired' | 'assignedSites' | 'orderConfiguration' | 'active'
+
+export interface AuditManagerChecklistUpdateResult {
+  checklist: AuditManagerChecklistDetail
+}
+
+export interface AuditManagerChecklistStatusCreate {
+  name: string
+  description: string
+  options: Array<{ label: string }>
 }

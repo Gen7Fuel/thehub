@@ -20,7 +20,7 @@ import { useAuth } from '@/context/AuthContext'
 import { auditManagerService } from '@/api/audit-manager/audit-manager.service'
 import { isApiError } from '@/api/core/errors'
 import type { AuditManagerDepartmentSummary, AuditManagerSection, AuditManagerSectionCreate, AuditManagerSectionUpdate, AuditManagerSite } from '@/api/audit-manager/audit-manager.types'
-import { hasAuditManagerAccess, hasAuditManagerAction, hasAuditManagerPermission } from '@/lib/auditManagerPermissions'
+import { hasAuditManagerAccess, hasAuditManagerAction, hasAuditManagerNestedAction, hasAuditManagerPermission } from '@/lib/auditManagerPermissions'
 
 export const Route = createFileRoute('/_navbarLayout/audit-manager/section')({
   component: SectionManagementPage,
@@ -28,6 +28,12 @@ export const Route = createFileRoute('/_navbarLayout/audit-manager/section')({
 
 function siteName(site: AuditManagerSection['sites'][number]) {
   return site.site || site.stationName
+}
+
+function departmentHeadName(department: AuditManagerDepartmentSummary) {
+  const head = department.departmentHead
+  if (!head || typeof head === 'string') return 'No department head assigned'
+  return [head.firstName, head.lastName].filter(Boolean).join(' ') || head.email
 }
 
 type EditableSectionField = 'name' | 'description' | 'sectionType' | 'sites' | 'departments' | 'active'
@@ -70,6 +76,9 @@ function SectionManagementPage() {
   const [universalSiteOpen, setUniversalSiteOpen] = useState(false)
   const [universalSiteId, setUniversalSiteId] = useState('')
   const [confirmUniversalSite, setConfirmUniversalSite] = useState(false)
+  const [universalDepartmentOpen, setUniversalDepartmentOpen] = useState(false)
+  const [universalDepartmentId, setUniversalDepartmentId] = useState('')
+  const [confirmUniversalDepartment, setConfirmUniversalDepartment] = useState(false)
   const [actionSaving, setActionSaving] = useState(false)
   const [actionError, setActionError] = useState('')
 
@@ -82,6 +91,9 @@ function SectionManagementPage() {
   const canView = hasAuditManagerAccess(user?.access)
     && hasAuditManagerPermission(user?.access, 'section')
   const canEdit = hasAuditManagerAction(user?.access, 'section', 'edit')
+  const canAddSection = hasAuditManagerAction(user?.access, 'section', 'add')
+  const canAddAllSite = hasAuditManagerNestedAction(user?.access, 'section', 'add', 'allSite')
+  const canAddAllDepartment = hasAuditManagerNestedAction(user?.access, 'section', 'add', 'allDepartment')
 
   useEffect(() => {
     if (!user || !canView) return
@@ -124,16 +136,14 @@ function SectionManagementPage() {
 
   function beginEdit(field: EditableSectionField) {
     if (!selectedSection || !canEdit) return
-    const hoAdmin = availableDepartments.find((department) => department.name.toLowerCase() === 'ho admin')
+    const adminDepartmentIds = availableDepartments.filter((department) => department.isAdminDepartment === true).map((department) => department._id)
     const selectedDepartmentIds = (selectedSection.departments || []).map((department) => department._id)
     const values: Record<EditableSectionField, EditDraft> = {
       name: selectedSection.name,
       description: selectedSection.description || '',
       sectionType: selectedSection.sectionType,
       sites: (selectedSection.sites || []).map((site) => site._id),
-      departments: hoAdmin
-        ? [...new Set([...selectedDepartmentIds, hoAdmin._id])]
-        : selectedDepartmentIds,
+      departments: [...new Set([...selectedDepartmentIds, ...adminDepartmentIds])],
       active: selectedSection.active,
     }
     setEditDraft(values[field])
@@ -228,8 +238,8 @@ function SectionManagementPage() {
   }
 
   function openCreateDialog() {
-    const hoAdmin = availableDepartments.find((department) => department.name.toLowerCase() === 'ho admin')
-    setCreateDraft({ ...emptyCreateDraft, departments: hoAdmin ? [hoAdmin._id] : [] })
+    const adminDepartmentIds = availableDepartments.filter((department) => department.isAdminDepartment === true).map((department) => department._id)
+    setCreateDraft({ ...emptyCreateDraft, departments: adminDepartmentIds })
     setActionError('')
     setCreateOpen(true)
   }
@@ -291,6 +301,32 @@ function SectionManagementPage() {
     }
   }
 
+  async function addUniversalDepartment() {
+    if (!universalDepartmentId) return
+    setActionSaving(true)
+    setActionError('')
+    try {
+      const result = await auditManagerService.addUniversalDepartment(universalDepartmentId)
+      const refreshed = await auditManagerService.listSections()
+      setSections(refreshed.sections)
+      setAvailableSites(refreshed.options?.sites || [])
+      setAvailableDepartments(refreshed.options?.departments || [])
+      setConfirmUniversalDepartment(false)
+      setUniversalDepartmentOpen(false)
+      setUniversalDepartmentId('')
+      toast.success(result.updatedSections === 0 ? 'Department was already assigned to every section' : `Department added to ${result.updatedSections} sections`)
+    } catch (requestError) {
+      if (isApiError(requestError) && requestError.status === 403) {
+        navigate({ to: '/no-access' })
+        return
+      }
+      setConfirmUniversalDepartment(false)
+      setActionError(isApiError(requestError) ? requestError.message : 'Unable to add this department to all sections.')
+    } finally {
+      setActionSaving(false)
+    }
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl px-3 pb-10 sm:px-5">
       <div className="mb-5 rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-slate-50 p-4 shadow-sm sm:p-6">
@@ -302,12 +338,15 @@ function SectionManagementPage() {
               <p className="mt-1 text-sm text-slate-600">Review section metadata, station coverage, and department visibility.</p>
             </div>
           </div>
-          {canEdit && (
+          {(canAddSection || canAddAllSite || canAddAllDepartment) && (
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Button type="button" onClick={openCreateDialog}><Plus className="mr-2 h-4 w-4" />Add section</Button>
-              <Button type="button" variant="outline" onClick={() => { setActionError(''); setUniversalSiteOpen(true) }}>
+              {canAddSection && <Button type="button" onClick={openCreateDialog}><Plus className="mr-2 h-4 w-4" />Add section</Button>}
+              {canAddAllSite && <Button type="button" variant="outline" onClick={() => { setActionError(''); setUniversalSiteOpen(true) }}>
                 <MapPinned className="mr-2 h-4 w-4" />Add site to all
-              </Button>
+              </Button>}
+              {canAddAllDepartment && <Button type="button" variant="outline" onClick={() => { setActionError(''); setUniversalDepartmentOpen(true) }}>
+                <Building2 className="mr-2 h-4 w-4" />Assign department to all
+              </Button>}
             </div>
           )}
         </div>
@@ -369,7 +408,7 @@ function SectionManagementPage() {
               onSelectAll={() => setCreateDraft((current) => ({ ...current, sites: availableSites.map((site) => site._id) }))}
               selectAllLabel="Select all stations"
             />
-            <CreateMultiSelect label="Departments" options={availableDepartments.map((department) => ({ id: department._id, label: department.name, locked: department.name.toLowerCase() === 'ho admin' }))} selected={createDraft.departments} onToggle={(id, checked) => toggleCreateSelection('departments', id, checked)} />
+            <CreateMultiSelect label="Departments" options={availableDepartments.map((department) => ({ id: department._id, label: department.name, locked: department.isAdminDepartment === true }))} selected={createDraft.departments} onToggle={(id, checked) => toggleCreateSelection('departments', id, checked)} />
             <div className="space-y-2"><Label>Initial status</Label><Select value={createDraft.active ? 'active' : 'inactive'} onValueChange={(value) => setCreateDraft((current) => ({ ...current, active: value === 'active' }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select><p className="text-xs text-slate-500">Active sections are automatically placed last in the current active order.</p></div>
             {actionError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div>}
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" disabled={actionSaving} onClick={() => setCreateOpen(false)}>Cancel</Button><Button disabled={actionSaving || !createDraft.name.trim() || createDraft.sites.length === 0 || createDraft.departments.length === 0} onClick={() => void createSection()}>{actionSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}Create section</Button></div>
@@ -393,6 +432,31 @@ function SectionManagementPage() {
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>Add this site to all active sections?</AlertDialogTitle><AlertDialogDescription>This will update every active Station Audit section. Archived sections and existing site assignments will remain unchanged.</AlertDialogDescription></AlertDialogHeader>
           <AlertDialogFooter><AlertDialogCancel disabled={actionSaving}>Go back</AlertDialogCancel><AlertDialogAction disabled={actionSaving} onClick={(event) => { event.preventDefault(); void addUniversalSite() }}>{actionSaving ? 'Updating…' : 'Confirm and update'}</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={universalDepartmentOpen} onOpenChange={(open) => { if (!actionSaving && !confirmUniversalDepartment) setUniversalDepartmentOpen(open) }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader><DialogTitle>Assign an admin department to every section</DialogTitle></DialogHeader>
+          <p className="text-sm text-slate-600">Only active departments marked as admin departments are available.</p>
+          <RadioGroup value={universalDepartmentId} onValueChange={setUniversalDepartmentId} className="max-h-80 overflow-y-auto rounded-xl border p-3">
+            {availableDepartments.filter((department) => department.isAdminDepartment === true).map((department) => (
+              <label key={department._id} className="flex min-h-14 cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50">
+                <RadioGroupItem value={department._id} className="mt-1" />
+                <span className="min-w-0"><span className="block text-sm font-semibold">{department.name}</span><span className="block text-xs text-slate-500">Head: {departmentHeadName(department)}</span></span>
+              </label>
+            ))}
+            {availableDepartments.every((department) => department.isAdminDepartment !== true) && <p className="p-3 text-sm text-slate-500">No active admin departments are available.</p>}
+          </RadioGroup>
+          {actionError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{actionError}</div>}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" disabled={actionSaving} onClick={() => setUniversalDepartmentOpen(false)}>Cancel</Button><Button disabled={!universalDepartmentId || actionSaving} onClick={() => setConfirmUniversalDepartment(true)}>Review change</Button></div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={confirmUniversalDepartment} onOpenChange={(open) => { if (!actionSaving) setConfirmUniversalDepartment(open) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader><AlertDialogTitle>Assign this department to every section?</AlertDialogTitle><AlertDialogDescription>This will add the selected admin department to all active and archived Station Audit sections without removing any existing department assignments.</AlertDialogDescription></AlertDialogHeader>
+          <AlertDialogFooter><AlertDialogCancel disabled={actionSaving}>Go back</AlertDialogCancel><AlertDialogAction disabled={actionSaving} onClick={(event) => { event.preventDefault(); void addUniversalDepartment() }}>{actionSaving ? 'Updating…' : 'Confirm and update'}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
@@ -645,7 +709,7 @@ function SectionFieldEditor({
     : availableDepartments.map((department) => ({
       id: department._id,
       label: department.name,
-      locked: department.name.toLowerCase() === 'ho admin',
+      locked: department.isAdminDepartment === true,
     }))
 
   return (

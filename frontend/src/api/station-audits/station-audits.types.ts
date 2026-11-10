@@ -23,7 +23,7 @@ export interface StationAuditChecklistItem {
     name: string
     options: StationAuditStatusOption[]
   }
-  followUpInstructions: string
+  followUp: boolean
   completed: boolean
   run: { _id: string; periodKey: string; state: string; completedAt?: string | null } | null
   response: {

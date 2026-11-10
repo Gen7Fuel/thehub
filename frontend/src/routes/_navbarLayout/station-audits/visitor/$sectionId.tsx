@@ -44,6 +44,7 @@ function VisitorSectionChecklistPage() {
       sectionId={sectionId}
       site={search.site}
       frequency={search.frequency}
+      availableFrequencies={['all', 'daily', 'weekly', 'monthly']}
       auditType="visitor"
       onBack={onBack}
       onInitializeSite={onInitializeSite}

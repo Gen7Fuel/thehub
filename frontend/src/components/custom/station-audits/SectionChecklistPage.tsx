@@ -17,6 +17,7 @@ import { stationAuditsService } from '@/api/station-audits/station-audits.servic
 import type { SaveStationAuditResponseResult, StationAuditChecklistItem, StationAuditChecklistReadModel, StationAuditFrequency } from '@/api/station-audits/station-audits.types'
 
 const labels: Record<StationAuditFrequency, string> = { all: 'All frequencies', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }
+const frequencyButtonLabels: Record<StationAuditFrequency, string> = { all: 'All', daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' }
 const frequencyOrder = { daily: 0, weekly: 1, monthly: 2 } as const
 
 function photoUrl(filename: string) {
@@ -194,6 +195,7 @@ export function StationAuditSectionChecklistPage({
   sectionId,
   site,
   frequency,
+  availableFrequencies,
   auditType,
   onBack,
   onInitializeSite,
@@ -205,6 +207,7 @@ export function StationAuditSectionChecklistPage({
   sectionId: string
   site?: string
   frequency: StationAuditFrequency
+  availableFrequencies: StationAuditFrequency[]
   auditType: 'store' | 'visitor'
   onBack: () => void
   onInitializeSite: (site: string) => void
@@ -284,12 +287,22 @@ export function StationAuditSectionChecklistPage({
     <div className="mx-auto w-full max-w-5xl px-3 pb-10 sm:px-5">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 h-4 w-4" /> Sections</Button>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="flex flex-col gap-2 sm:items-end">
           <SitePicker value={site} onValueChange={onSiteChange} className="h-11 w-full sm:w-52" />
-          <Select value={frequency} onValueChange={(value) => onFrequencyChange(value as StationAuditFrequency)}>
-            <SelectTrigger className="h-11 w-full sm:w-48"><SelectValue /></SelectTrigger>
-            <SelectContent>{Object.entries(labels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
-          </Select>
+          <div className="flex flex-wrap gap-2" aria-label="Audit frequency">
+            {availableFrequencies.map((value) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={frequency === value ? 'default' : 'outline'}
+                onClick={() => onFrequencyChange(value)}
+                aria-pressed={frequency === value}
+              >
+                {frequencyButtonLabels[value]}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 

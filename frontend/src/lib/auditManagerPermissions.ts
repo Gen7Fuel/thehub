@@ -27,5 +27,6 @@ export function hasAuditManagerNestedAction(
   action: string,
   nestedAction: string,
 ) {
-  return access?.auditManager?.[permission]?.[action]?.[nestedAction] === true
+  const value = access?.auditManager?.[permission]?.[action]?.[nestedAction]
+  return value === true || value?.value === true
 }

@@ -5,6 +5,7 @@ const StationAuditChecklistSchema = new mongoose.Schema(
     section: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditSection", required: true },
     item: { type: String, required: true, trim: true },
     description: { type: String, trim: true, default: "" },
+    // Only active checklists participate in ordering. Inactive items use null.
     sortOrder: { type: Number, default: 0, min: 0 },
     category: { type: String, trim: true, default: "" },
     frequency: {
@@ -28,7 +29,7 @@ const StationAuditChecklistSchema = new mongoose.Schema(
       ref: "StationAuditStatusOptionSet",
       required: true,
     },
-    followUpInstructions: { type: String, trim: true, default: "" },
+    followUp: { type: Boolean, default: false },
     commentRequired: { type: Boolean, default: false },
     requestOrderEnabled: { type: Boolean, default: false },
     suppliesVendor: { type: String, trim: true, default: "" },

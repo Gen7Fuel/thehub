@@ -272,7 +272,7 @@ function buildMigrationDocuments(source) {
         category: normalize(item.category),
         frequency: item.frequency || "daily",
         auditTypes: sectionType === "order" ? ["store"] : ["store", "visitor"],
-        followUpInstructions: normalize(item.followUpTemplate),
+        followUp: false,
         commentRequired: item.commentRequired === true,
         requestOrderEnabled: Boolean(item.suppliesVendor),
         suppliesVendor: normalize(item.suppliesVendor),
@@ -293,14 +293,14 @@ function buildMigrationDocuments(source) {
       section.sortOrder = index;
     });
 
-  const checklistsBySection = new Map();
+  const checklistsBySectionFrequency = new Map();
   for (const checklist of checklists) {
-    const sectionKey = checklist.sectionLegacyId.toString();
-    if (!checklistsBySection.has(sectionKey)) checklistsBySection.set(sectionKey, []);
-    checklistsBySection.get(sectionKey).push(checklist);
+    const scopeKey = `${checklist.sectionLegacyId}:${checklist.frequency}`;
+    if (!checklistsBySectionFrequency.has(scopeKey)) checklistsBySectionFrequency.set(scopeKey, []);
+    checklistsBySectionFrequency.get(scopeKey).push(checklist);
   }
-  for (const sectionChecklists of checklistsBySection.values()) {
-    sectionChecklists
+  for (const frequencyChecklists of checklistsBySectionFrequency.values()) {
+    frequencyChecklists
       .sort((left, right) => left.item.localeCompare(right.item, undefined, { sensitivity: "base" }))
       .forEach((checklist, index) => {
         checklist.sortOrder = index;
@@ -369,6 +369,7 @@ async function upsertDocuments(documents) {
           statusOptionSet: statusIds.get(statusSetLegacyId.toString()),
           department: departmentIds.get(lookupKey(departmentLegacyName)),
         },
+        $unset: { followUpInstructions: "" },
       },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );

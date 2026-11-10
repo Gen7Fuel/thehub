@@ -41,6 +41,9 @@ services:
       - UPLOAD_SERVICE_URL=http://cdn:5001
       - REDIS_URL=redis://redis:6379
       - FORCE_COLOR=1
+      # The current JWT contains the permission tree and can exceed Node's
+      # 16 KiB request-header limit once browser and action headers are added.
+      - NODE_OPTIONS=--max-http-header-size=32768
     depends_on:
       - mongo
       - redis
@@ -88,6 +91,8 @@ services:
       - "5173:5173"
     environment:
       - VITE_DOCKER=true
+      # Vite receives browser requests before proxying /api to the backend.
+      - NODE_OPTIONS=--max-http-header-size=32768
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules

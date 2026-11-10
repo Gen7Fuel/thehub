@@ -459,7 +459,7 @@ router.get("/:sectionId", async (req, res) => {
         active: true,
       })
         .select(
-          "section item description sortOrder category frequency auditTypes department statusOptionSet followUpInstructions commentRequired requestOrderEnabled suppliesVendor"
+          "section item description sortOrder category frequency auditTypes department statusOptionSet followUp commentRequired requestOrderEnabled suppliesVendor"
         )
         .populate("department", "name departmentHead")
         .populate("statusOptionSet", "name options")

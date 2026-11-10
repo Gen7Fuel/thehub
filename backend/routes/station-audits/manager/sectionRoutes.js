@@ -8,7 +8,9 @@ const {
 } = require("../../../models/station-audits");
 
 const router = express.Router();
-const HO_ADMIN_NAME = "HO Admin";
+const ADD_PERMISSION = "auditManager.section.add";
+const ADD_ALL_SITE_PERMISSION = "auditManager.section.add.allSite";
+const ADD_ALL_DEPARTMENT_PERMISSION = "auditManager.section.add.allDepartment";
 
 async function logSectionChange(req, change) {
   const { logChange } = require("../../../middleware/changeLogger");
@@ -106,8 +108,8 @@ function normalizeSectionCreate(body = {}) {
   };
 }
 
-async function getHoAdminDepartment() {
-  return StationAuditDepartment.findOne({ name: HO_ADMIN_NAME, active: true })
+async function getAdminDepartments() {
+  return StationAuditDepartment.find({ isAdminDepartment: true, active: true })
     .select("_id")
     .lean();
 }
@@ -155,7 +157,8 @@ router.get("/", async (_req, res) => {
         .sort({ stationName: 1 })
         .lean(),
       StationAuditDepartment.find({ active: true })
-        .select("name description assignmentStrategy active")
+        .select("name description departmentHead assignmentStrategy isAdminDepartment active")
+        .populate("departmentHead", "firstName lastName email")
         .sort({ name: 1 })
         .lean(),
     ]);
@@ -202,13 +205,15 @@ router.get("/", async (_req, res) => {
 // POST /api/station-audits/manager/sections
 router.post("/", async (req, res) => {
   try {
+    if (req.header("X-Required-Permission") !== ADD_PERMISSION)
+      return res.status(403).json({ error: "Section add permission was not supplied" });
     const normalized = normalizeSectionCreate(req.body);
     if (normalized.error) return res.status(400).json({ error: normalized.error });
 
-    const [siteCount, departmentCount, hoAdmin, lastActive] = await Promise.all([
+    const [siteCount, departmentCount, adminDepartments, lastActive] = await Promise.all([
       Location.countDocuments({ _id: { $in: normalized.value.sites }, type: "store" }),
       StationAuditDepartment.countDocuments({ _id: { $in: normalized.value.departments }, active: true }),
-      getHoAdminDepartment(),
+      getAdminDepartments(),
       StationAuditSection.findOne({ active: true }).sort({ sortOrder: -1 }).select("sortOrder").lean(),
     ]);
     if (siteCount !== normalized.value.sites.length) {
@@ -217,10 +222,11 @@ router.post("/", async (req, res) => {
     if (departmentCount !== normalized.value.departments.length) {
       return res.status(400).json({ error: "Every selected department must be active" });
     }
-    if (!hoAdmin) return res.status(409).json({ error: "The HO Admin department must be configured first" });
+    if (!adminDepartments.length) return res.status(409).json({ error: "An active admin department must be configured first" });
 
     const departmentIds = new Map(
-      [...normalized.value.departments, hoAdmin._id].map((id) => [id.toString(), id])
+      [...normalized.value.departments, ...adminDepartments.map((department) => department._id)]
+        .map((id) => [id.toString(), id])
     );
     const section = await StationAuditSection.create({
       ...normalized.value,
@@ -263,6 +269,8 @@ router.post("/", async (req, res) => {
 // PUT /api/station-audits/manager/sections/sites/universal
 router.put("/sites/universal", async (req, res) => {
   try {
+    if (req.header("X-Required-Permission") !== ADD_ALL_SITE_PERMISSION)
+      return res.status(403).json({ error: "Universal site permission was not supplied" });
     const siteId = String(req.body?.siteId || "").trim();
     if (!mongoose.isValidObjectId(siteId)) return res.status(400).json({ error: "Invalid site ID" });
     const site = await Location.findOne({ _id: siteId, type: "store" }).select("_id stationName site").lean();
@@ -290,6 +298,49 @@ router.put("/sites/universal", async (req, res) => {
   } catch (error) {
     console.error("Failed to add a site to all Station Audit sections:", error);
     return res.status(500).json({ error: "Failed to add site to all Station Audit sections" });
+  }
+});
+
+// PUT /api/station-audits/manager/sections/departments/universal
+router.put("/departments/universal", async (req, res) => {
+  try {
+    if (req.header("X-Required-Permission") !== ADD_ALL_DEPARTMENT_PERMISSION)
+      return res.status(403).json({ error: "Universal department permission was not supplied" });
+    const departmentId = String(req.body?.departmentId || "").trim();
+    if (!mongoose.isValidObjectId(departmentId))
+      return res.status(400).json({ error: "Invalid department ID" });
+    const department = await StationAuditDepartment.findOne({
+      _id: departmentId,
+      active: true,
+      isAdminDepartment: true,
+    })
+      .select("_id name departmentHead isAdminDepartment")
+      .populate("departmentHead", "firstName lastName email")
+      .lean();
+    if (!department)
+      return res.status(400).json({ error: "The selected department must be an active admin department" });
+
+    const affectedSections = await StationAuditSection.find({
+      departments: { $ne: department._id },
+    }).select("_id name").lean();
+    const result = await StationAuditSection.updateMany(
+      { departments: { $ne: department._id } },
+      { $addToSet: { departments: department._id } },
+    );
+    await logSectionChange(req, {
+      action: "update",
+      resourceType: "station-audit-section",
+      resourceIds: affectedSections.map((section) => section._id),
+      success: true,
+      statusCode: 200,
+      message: `Added admin department ${department.name} to ${result.modifiedCount} Station Audit sections`,
+      source: "station-audit.manager.sections",
+      bulk: { affectedCount: result.modifiedCount, truncated: false },
+    });
+    return res.json({ department, updatedSections: result.modifiedCount });
+  } catch (error) {
+    console.error("Failed to add a department to all Station Audit sections:", error);
+    return res.status(500).json({ error: "Failed to add department to all Station Audit sections" });
   }
 });
 
@@ -377,10 +428,11 @@ router.put("/:sectionId", async (req, res) => {
       }
     }
     if (update.field === "departments") {
-      const hoAdmin = await getHoAdminDepartment();
-      if (!hoAdmin) return res.status(409).json({ error: "The HO Admin department must be configured first" });
-      if (!update.value.some((id) => id.toString() === hoAdmin._id.toString())) {
-        update.value.push(hoAdmin._id);
+      const adminDepartments = await getAdminDepartments();
+      if (!adminDepartments.length) return res.status(409).json({ error: "An active admin department must be configured first" });
+      const selectedIds = new Set(update.value.map((id) => id.toString()));
+      for (const department of adminDepartments) {
+        if (!selectedIds.has(department._id.toString())) update.value.push(department._id);
       }
       const count = await StationAuditDepartment.countDocuments({
         _id: { $in: update.value },
