@@ -1078,7 +1078,7 @@ router.post('/', async (req, res) => {
         if (resp.ok) {
           const data = await resp.json()
           content = String(data?.content || '').replace(/^\uFEFF/, '')
-          parsed = parseSftReport(content)
+          parsed = parseSftReport(content, site)
 
           values = {
             canadian_cash_collected: values.canadian_cash_collected, // keep user counted
@@ -2371,7 +2371,7 @@ router.put('/:id', async (req, res) => {
         if (resp.ok) {
           const data = await resp.json()
           const content = String(data?.content || '').replace(/^\uFEFF/, '')
-          const parsed = parseSftReport(content)
+          const parsed = parseSftReport(content, finalSite)
 
           if (parsed) {
             enrichedValues = {
