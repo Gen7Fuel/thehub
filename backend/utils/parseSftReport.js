@@ -208,6 +208,7 @@
 // module.exports = { parseSftReport }
 
 // Shared parser for .sft shift report files
+const { calculateLotteryPayout } = require('./lotteryPayoutFormula');
 const toNumber = (s) => (s == null ? null : Number(String(s).replace(/,/g, '')));
 const pickNum = (re, text) => {
   const m = text.match(re);
@@ -537,7 +538,7 @@ const parseBingoSales = (text) => {
   return totalBingo > 0 ? Number(totalBingo.toFixed(2)) : null;
 };
 
-function parseSftReport(text) {
+function parseSftReport(text, site) {
   const metrics = {
     fuelSales: pickNum(/^\s*Fuel sales\s+([-\d.,]+)\s*$/mi, text),
     companyCoupon: pickNum(/^\s*Company Coupon\s+([-\d.,]+)\s*$/mi, text),
@@ -586,13 +587,10 @@ function parseSftReport(text) {
     payouts: pickNum(/^\s*Payouts\s+([-\d.,]+)\s*$/mi, text),
     unsettledPrepays: pickNum(/^\s*Unsettled Prepays\s+([-\d.,]+)\s*$/mi, text),
 
-    lottoPayout: (() => {
-      const payout = pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text);
-      const win = pickNum(/^\s*LOTTO WIN\s+([-\d.,]+)\s*$/mi, text);
-
-      if (payout == null && win == null) return null;
-      return Number(((payout || 0) + (win || 0)).toFixed(2));
-    })(),
+    lottoPayout: calculateLotteryPayout(site, {
+      lottoPayout: pickNum(/^\s*lotto\s*payouts?\s*[:\-]?\s*\$?\s*([-\d.,]+)\s*$/mi, text),
+      lottoWin: pickNum(/^\s*LOTTO WIN\s+([-\d.,]+)\s*$/mi, text),
+    }),
 
     onlineLottoTotal: (() => {
       const m = text.match(

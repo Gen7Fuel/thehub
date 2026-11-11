@@ -68,7 +68,7 @@ async function fetchAndParseShift(site, shiftNumber) {
   const data = await response.json();
   const content = String(data?.content || "").replace(/^\uFEFF/, "");
   if (!content) throw new Error("SFT file content was empty");
-  return parseSftReport(content);
+  return parseSftReport(content, site);
 }
 
 async function main() {

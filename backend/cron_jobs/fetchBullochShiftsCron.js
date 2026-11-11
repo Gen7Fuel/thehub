@@ -163,7 +163,7 @@ async function syncSftShiftsForSite(site, timezone = "America/Toronto") {
         }
 
         // Parse SFT report content using utility
-        const parsed = parseSftReport(content);
+        const parsed = parseSftReport(content, site);
 
         // --- EMPTY SHIFT CHECK ---
         // Calculate AR paid total
