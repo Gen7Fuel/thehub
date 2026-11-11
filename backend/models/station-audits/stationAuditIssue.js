@@ -4,7 +4,8 @@ const IssueAssigneeSchema = new mongoose.Schema(
   {
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     role: { type: String, enum: ["owner", "collaborator"], default: "collaborator" },
-    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    // null means the assignment was produced automatically when the issue was raised.
+    assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     assignedAt: { type: Date, default: Date.now },
   },
   { _id: false }

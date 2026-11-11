@@ -36,8 +36,10 @@ const StationAuditChecklistSchema = new mongoose.Schema(
     assignedSites: [{ type: mongoose.Schema.Types.ObjectId, ref: "Location" }],
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    legacyTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "AuditTemplate", default: null },
-    legacyItemId: { type: mongoose.Schema.Types.ObjectId, default: null },
+    // Only migrated checklists carry legacy identifiers. Manual checklists must
+    // leave both paths absent so their null values do not collide in MongoDB.
+    legacyTemplateId: { type: mongoose.Schema.Types.ObjectId, ref: "AuditTemplate", default: undefined },
+    legacyItemId: { type: mongoose.Schema.Types.ObjectId, default: undefined },
   },
   { timestamps: true }
 );
@@ -51,7 +53,13 @@ StationAuditChecklistSchema.index({ department: 1, active: 1 });
 StationAuditChecklistSchema.index({ statusOptionSet: 1, active: 1 });
 StationAuditChecklistSchema.index(
   { legacyTemplateId: 1, legacyItemId: 1 },
-  { unique: true, sparse: true }
+  {
+    unique: true,
+    partialFilterExpression: {
+      legacyTemplateId: { $type: "objectId" },
+      legacyItemId: { $type: "objectId" },
+    },
+  }
 );
 
 module.exports = mongoose.model("StationAuditChecklist", StationAuditChecklistSchema);

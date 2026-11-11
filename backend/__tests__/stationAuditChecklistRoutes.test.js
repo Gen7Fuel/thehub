@@ -37,12 +37,18 @@ describe("station audit response input", () => {
       comment: " checked ",
       photos: ["one.jpg", "one.jpg", "two.jpg"],
       issueRaised: true,
+      requestOrder: true,
+      issueAlreadyResolved: true,
+      resolutionComment: " fixed before submission ",
     })).toEqual({
       checked: true,
       statusOptionId: "option-id",
       comment: "checked",
       photos: ["one.jpg", "two.jpg"],
       issueRaised: true,
+      requestOrder: true,
+      issueAlreadyResolved: true,
+      resolutionComment: "fixed before submission",
     });
   });
 

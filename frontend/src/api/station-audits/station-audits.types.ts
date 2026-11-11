@@ -33,6 +33,9 @@ export interface StationAuditChecklistItem {
     selectedStatus?: { optionId?: string; key?: string; label?: string }
     comment?: string
     photos?: string[]
+    requestOrder?: boolean
+    orderCreated?: boolean
+    order?: string | null
     issueRaised?: boolean
     issue?: string | null
   } | null
@@ -44,6 +47,9 @@ export interface SaveStationAuditResponseInput {
   comment: string
   photos: string[]
   issueRaised: boolean
+  requestOrder: boolean
+  issueAlreadyResolved?: boolean
+  resolutionComment?: string
 }
 
 export interface SaveStationAuditResponseResult {
@@ -51,6 +57,7 @@ export interface SaveStationAuditResponseResult {
   response: NonNullable<StationAuditChecklistItem['response']>
   completed: boolean
   issue: { _id: string } | null
+  orderQueued?: boolean
   summary: { total: number; completed: number; pending: number }
 }
 

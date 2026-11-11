@@ -19,6 +19,7 @@ require("./queues/fuelOrderDraftQueue"); // Just runs the worker
 const { initWriteOffAutomationWorker } = require("./queues/writeOffAutomationQueue");
 const { initPriceScheduleWorker } = require("./queues/priceScheduleQueue");
 const { initCsoInvoiceWorker } = require("./queues/csoInvoiceQueue"); // 1. Import worker initializer
+const { initStationAuditOrderWorker } = require("./queues/stationAuditOrderQueue");
 require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
 // require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
 require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
@@ -209,6 +210,7 @@ app.set("io", io);
 initPriceScheduleWorker(io);
 initCsoInvoiceWorker(io);
 initWriteOffAutomationWorker(io);
+initStationAuditOrderWorker(io);
 initWeeklyInstanceCron(io); 
 
 const PORT = process.env.PORT || 5000;

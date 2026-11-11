@@ -83,7 +83,7 @@ type EditDraft =
   | Array<{ site: string; emails: string[] }>;
 const strategyLabels = {
   department_head: "Department Head",
-  station_manager: "Site Station Manager",
+  station_manager: "Station Manager",
   operations_queue: "Head Office Operations",
 } as const;
 const emptyDepartment: AuditManagerDepartmentCreate = {

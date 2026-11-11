@@ -397,6 +397,13 @@ router.post("/sections/:sectionId/checklists", async (req, res) => {
     });
     return res.status(201).json({ checklist });
   } catch (error) {
+    if (error?.code === 11000) {
+      if (error?.keyPattern?.legacyTemplateId || error?.keyPattern?.legacyItemId) {
+        return res.status(409).json({ error: "This checklist conflicts with an existing legacy checklist mapping" });
+      }
+      console.error("Duplicate key while creating checklist metadata:", error);
+      return res.status(409).json({ error: "A checklist with this configuration already exists" });
+    }
     console.error("Failed to create checklist metadata:", error);
     return res.status(500).json({ error: "Failed to create checklist metadata" });
   }

@@ -101,7 +101,14 @@ export function StationAuditSectionNavigationPage({
               <p className="mt-1 text-sm text-slate-600">Open one section to load only its assigned checklist items.</p>
             </div>
           </div>
-          <SitePicker value={site} onValueChange={onSiteChange} className="h-11 w-full sm:w-60" />
+          <div className="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto">
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-600" aria-label="Section progress color legend">
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-red-200" />Not started</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-amber-200" />In progress</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-full bg-emerald-200" />Complete</span>
+            </div>
+            <SitePicker value={site} onValueChange={onSiteChange} className="h-11 w-full sm:w-60" />
+          </div>
         </div>
 
         {data && (
@@ -133,9 +140,16 @@ export function StationAuditSectionNavigationPage({
           {visibleSections.map((section) => {
             const sectionSummary = summarizeSection(section, visibleFrequencies)
             const percent = sectionSummary.total ? Math.round((sectionSummary.completed / sectionSummary.total) * 100) : 0
+            const isComplete = sectionSummary.completed >= sectionSummary.total
+            const isInProgress = sectionSummary.completed > 0 && !isComplete
+            const cardTheme = isComplete
+              ? { card: 'border-emerald-200 bg-emerald-50', bar: 'bg-emerald-500', text: 'text-emerald-700' }
+              : isInProgress
+                ? { card: 'border-amber-200 bg-amber-50', bar: 'bg-amber-500', text: 'text-amber-700' }
+                : { card: 'border-red-200 bg-red-50', bar: 'bg-red-500', text: 'text-red-700' }
             return (
               <button key={section._id} type="button" onClick={() => onSectionOpen(section._id)} className="group text-left">
-                <Card className="h-full border-slate-200 transition-all group-hover:-translate-y-0.5 group-hover:border-emerald-300 group-hover:shadow-md">
+                <Card className={`h-full transition-all group-hover:-translate-y-0.5 group-hover:shadow-md ${cardTheme.card}`}>
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between gap-3">
                       <CardTitle className="text-lg">{section.name}</CardTitle>
@@ -148,9 +162,9 @@ export function StationAuditSectionNavigationPage({
                   <CardContent>
                     <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
                       <span>{sectionSummary.completed} of {sectionSummary.total} completed</span>
-                      <strong className="text-emerald-700">{percent}%</strong>
+                      <strong className={cardTheme.text}>{percent}%</strong>
                     </div>
-                    <div className="mb-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-emerald-500" style={{ width: `${percent}%` }} /></div>
+                    <div className="mb-4 h-2 overflow-hidden rounded-full bg-white/80"><div className={`h-full ${cardTheme.bar}`} style={{ width: `${percent}%` }} /></div>
                     <div className="flex flex-wrap gap-1.5">
                       {visibleFrequencies.map((frequency) => section.frequencies[frequency].total > 0 && (
                         <Badge key={frequency} variant="secondary" className="capitalize">{frequency} {section.frequencies[frequency].completed}/{section.frequencies[frequency].total}</Badge>

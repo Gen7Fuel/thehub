@@ -61,8 +61,11 @@ describe("station audit models", () => {
 
     expect(section.validateSync()).toBeUndefined();
     expect(department.validateSync()).toBeUndefined();
+    expect(department.legacySelectOptionText).toBeUndefined();
     expect(optionSet.validateSync()).toBeUndefined();
     expect(checklist.validateSync()).toBeUndefined();
+    expect(checklist.legacyTemplateId).toBeUndefined();
+    expect(checklist.legacyItemId).toBeUndefined();
     expect(section.sortOrder).toBe(0);
     expect(checklist.sortOrder).toBe(0);
     expect(section.sectionType).toBe("checklist");
@@ -151,7 +154,7 @@ describe("station audit models", () => {
         checklistItem: "Inspect fuel pumps",
         departmentName: "Maintenance",
       },
-      assignees: [{ user: userId, role: "owner", assignedBy: userId }],
+      assignees: [{ user: userId, role: "owner", assignedBy: null }],
       raisedBy: userId,
     });
     const activity = new StationAuditIssueActivity({

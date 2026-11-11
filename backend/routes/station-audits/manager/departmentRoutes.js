@@ -257,7 +257,16 @@ router.post("/", async (req, res) => {
       },
     });
   } catch (error) {
-    if (error?.code === 11000) return res.status(409).json({ error: "A department with this name already exists" });
+    if (error?.code === 11000) {
+      if (error?.keyPattern?.name || error?.keyValue?.name) {
+        return res.status(409).json({ error: "A department with this name already exists" });
+      }
+      if (error?.keyPattern?.legacySelectOptionText || error?.keyValue?.legacySelectOptionText !== undefined) {
+        return res.status(409).json({ error: "This department conflicts with an existing legacy department mapping" });
+      }
+      console.error("Duplicate key while creating Station Audit department:", error);
+      return res.status(409).json({ error: "A department with this configuration already exists" });
+    }
     console.error("Failed to create Station Audit department:", error);
     return res.status(500).json({ error: "Failed to create Station Audit department" });
   }
@@ -329,7 +338,13 @@ router.put("/:departmentId", async (req, res) => {
       },
     });
   } catch (error) {
-    if (error?.code === 11000) return res.status(409).json({ error: "A department with this name already exists" });
+    if (error?.code === 11000) {
+      if (error?.keyPattern?.name || error?.keyValue?.name) {
+        return res.status(409).json({ error: "A department with this name already exists" });
+      }
+      console.error("Duplicate key while updating Station Audit department:", error);
+      return res.status(409).json({ error: "A department with this configuration already exists" });
+    }
     console.error("Failed to update Station Audit department:", error);
     return res.status(500).json({ error: "Failed to update Station Audit department" });
   }

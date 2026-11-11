@@ -59,7 +59,9 @@ const StationAuditDepartmentSchema = new mongoose.Schema(
     },
     active: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    legacySelectOptionText: { type: String, trim: true, default: null },
+    // Only migrated departments carry this field. Keeping it absent on newly
+    // created departments prevents null values from colliding in the unique index.
+    legacySelectOptionText: { type: String, trim: true, default: undefined },
   },
   { timestamps: true }
 );
@@ -69,6 +71,12 @@ StationAuditDepartmentSchema.index({ departmentHead: 1, active: 1 });
 StationAuditDepartmentSchema.index({ "members.user": 1, active: 1 });
 StationAuditDepartmentSchema.index({ isAdminDepartment: 1, departmentHead: 1, active: 1 });
 StationAuditDepartmentSchema.index({ isAdminDepartment: 1, "members.user": 1, active: 1 });
-StationAuditDepartmentSchema.index({ legacySelectOptionText: 1 }, { unique: true, sparse: true });
+StationAuditDepartmentSchema.index(
+  { legacySelectOptionText: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { legacySelectOptionText: { $type: "string" } },
+  }
+);
 
 module.exports = mongoose.model("StationAuditDepartment", StationAuditDepartmentSchema);
