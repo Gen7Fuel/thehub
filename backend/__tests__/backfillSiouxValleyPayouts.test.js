@@ -10,6 +10,9 @@ describe('Sioux Valley payout backfill source validation', () => {
   it('accepts zero payouts without erasing a valid zero', () => {
     expect(backfill.correction('Payouts 0.00\n').values).toEqual({ payouts: 0, parsedPayouts: 0, lottoPayout: 0 })
   })
+  it('accepts a valid sales report with no payout lines as zero payouts', () => {
+    expect(backfill.correction('Total Sales 12965.73\n').values).toEqual({ payouts: 0, parsedPayouts: 0, lottoPayout: 0 })
+  })
   it.each(['', 'Report not found', 'LOTTO WIN: $35.00', 'Payouts 12.00\nLOTTO WIN $35.00'])('rejects an unusable report: %s', content => {
     expect(() => backfill.correction(content)).toThrow()
   })

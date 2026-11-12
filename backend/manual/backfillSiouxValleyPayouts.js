@@ -13,7 +13,7 @@ function correction(content) {
   if (!content?.trim()) throw new Error('Empty SFT report')
   const parsed = parseSftReport(content, SITE)
   // Empty or unexpected reports must not erase saved monetary values.
-  if (parsed.payouts == null && parsed.lottoPayout == null) {
+  if (parsed.payouts == null && parsed.lottoPayout == null && parsed.totalSales == null) {
     throw new Error('No payout amounts found in SFT report')
   }
   const lottoWinLine = content.split(/\r?\n/).find(line => /lotto\s+win/i.test(line))
