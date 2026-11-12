@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { runInNewContext } from 'node:vm'
 
 const require = createRequire(import.meta.url)
+const { parseSftReport } = require('../utils/parseSftReport')
 
 // Evaluate the Mongo expressions against isolated shift fixtures. Unknown
 // operators fail the test rather than silently accepting a changed pipeline.
@@ -86,6 +87,20 @@ describe('cash-rec entries: cash including U.S. Cash', () => {
     expect(result.cashSummary.totals.report_canadian_cash).toBe(125)
     expect(result.balanceCheck).toBe(0)
     expect(aggregate.mock.calls[0][0][0].$match.site).toBe('Rankin')
+  })
+
+  it.each([
+    ['Sioux Valley', 61, 0],
+    ['Rankin', 26, -35],
+  ])('uses parsed payouts in the balance check for %s', async (site, payouts, balanceCheck) => {
+    shifts = [parseSftReport(
+      'Canadian Cash 100.00\nTotal Sales 161.00\nPayouts 26.00\nLotto Payout 200.00\nLOTTO WIN 35.00\n',
+      site,
+    )]
+    const result = await getEntries(site)
+    expect(result.cashSummary.totals.payouts).toBe(payouts)
+    expect(result.cashSummary.totals.lottoPayout).toBe(200)
+    expect(result.balanceCheck).toBe(balanceCheck)
   })
 
   it('falls back per shift for older records mixed with combined cash records', async () => {
