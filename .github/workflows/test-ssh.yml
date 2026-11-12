@@ -58,8 +58,9 @@ jobs:
           script: |
             set -e
             cd /home/gen7fuel/thehub
-            container=$(docker compose ps -q backend)
+            container=$(docker ps -q --filter label=com.docker.compose.service=backend --filter label=com.docker.compose.project=thehub)
             test -n "$container"
+            test "$(printf '%s\n' "$container" | wc -l)" -eq 1
             task_dir=/app/.payout-backfill/${{ github.run_id }}
             docker exec "$container" mkdir -p "$task_dir/manual" "$task_dir/utils" "$task_dir/models"
             docker cp /tmp/thehub-payout-backfill/${{ github.run_id }}/payout-backfill/backfillSiouxValleyPayouts.js "$container:$task_dir/manual/"
