@@ -1,5 +1,6 @@
 // SFT general payout rules. Only Sioux Valley includes LOTTO WIN for now.
 // Keep location differences here so manual imports and scheduled syncs agree.
+// These payouts feed the cash-rec balance check; Lotto Payout stays separate.
 const defaultFormula = ['payouts'];
 const siteFormulas = new Map([
   ['sioux valley', ['payouts', 'lottoWin']],
