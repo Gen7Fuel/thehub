@@ -4,15 +4,30 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.github/workflows/main.yml'
+  workflow_dispatch:
+    inputs:
+      service:
+        description: Service to rebuild and deploy
+        type: choice
+        required: true
+        default: backend
+        options:
+          - backend
+          - frontend
+          - auth-backend
+          - cdn
+          - all
 
 jobs:
   check-changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      auth-backend: ${{ steps.filter.outputs.auth-backend }}
-      cdn: ${{ steps.filter.outputs.cdn }} # 👈 Added
-      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.changes.outputs.backend }}
+      auth-backend: ${{ steps.changes.outputs.auth-backend }}
+      cdn: ${{ steps.changes.outputs.cdn }} # 👈 Added
+      frontend: ${{ steps.changes.outputs.frontend }}
       backend-image: ${{ steps.images.outputs.backend-image }}
       auth-backend-image: ${{ steps.images.outputs.auth-backend-image }}
       cdn-image: ${{ steps.images.outputs.cdn-image }} # 👈 Added
@@ -22,6 +37,7 @@ jobs:
 
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name != 'workflow_dispatch'
         with:
           filters: |
             backend:
@@ -33,22 +49,48 @@ jobs:
             frontend:
               - 'frontend/**'
 
+      - id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SELECTED_SERVICE: ${{ inputs.service }}
+          BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
+          AUTH_BACKEND_CHANGED: ${{ steps.filter.outputs.auth-backend }}
+          CDN_CHANGED: ${{ steps.filter.outputs.cdn }}
+          FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
+        run: |
+          for service in backend auth-backend cdn frontend; do
+            if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+              changed=false
+              if [ "$SELECTED_SERVICE" = "$service" ] || [ "$SELECTED_SERVICE" = "all" ]; then
+                changed=true
+              fi
+            else
+              case "$service" in
+                backend) changed="$BACKEND_CHANGED" ;;
+                auth-backend) changed="$AUTH_BACKEND_CHANGED" ;;
+                cdn) changed="$CDN_CHANGED" ;;
+                frontend) changed="$FRONTEND_CHANGED" ;;
+              esac
+            fi
+            echo "$service=$changed" >> "$GITHUB_OUTPUT"
+          done
+
       - id: images
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "owner=${OWNER}" >> $GITHUB_OUTPUT
-          if [ "${{ steps.filter.outputs.backend }}" = "true" ]; then
+          if [ "${{ steps.changes.outputs.backend }}" = "true" ]; then
             echo "backend-image=ghcr.io/${OWNER}/thehub-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "backend-image=ghcr.io/${OWNER}/thehub-backend:latest" >> $GITHUB_OUTPUT
           fi
-          if [ "${{ steps.filter.outputs.auth-backend }}" = "true" ]; then
+          if [ "${{ steps.changes.outputs.auth-backend }}" = "true" ]; then
             echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "auth-backend-image=ghcr.io/${OWNER}/thehub-auth-backend:latest" >> $GITHUB_OUTPUT
           fi
           # Added CDN image tagging
-          if [ "${{ steps.filter.outputs.cdn }}" = "true" ]; then
+          if [ "${{ steps.changes.outputs.cdn }}" = "true" ]; then
             echo "cdn-image=ghcr.io/${OWNER}/thehub-cdn:${{ github.sha }}" >> $GITHUB_OUTPUT
           else
             echo "cdn-image=ghcr.io/${OWNER}/thehub-cdn:latest" >> $GITHUB_OUTPUT
