@@ -1,15 +1,16 @@
-// SFT lottery payout rules. Only Sioux Valley includes LOTTO WIN for now.
+// SFT general payout rules. Only Sioux Valley includes LOTTO WIN for now.
 // Keep location differences here so manual imports and scheduled syncs agree.
-const defaultFormula = ['lottoPayout'];
+// These payouts feed the cash-rec balance check; Lotto Payout stays separate.
+const defaultFormula = ['payouts'];
 const siteFormulas = new Map([
-  ['sioux valley', ['lottoPayout', 'lottoWin']],
+  ['sioux valley', ['payouts', 'lottoWin']],
 ]);
 
-function calculateLotteryPayout(site, amounts) {
+function calculatePayouts(site, amounts) {
   const formula = siteFormulas.get(String(site ?? '').trim().toLowerCase()) ?? defaultFormula;
   const values = formula.map(field => amounts[field]).filter(value => value != null);
   if (values.length === 0) return null;
   return Number(values.reduce((sum, value) => sum + value, 0).toFixed(2));
 }
 
-module.exports = { calculateLotteryPayout };
+module.exports = { calculatePayouts };
