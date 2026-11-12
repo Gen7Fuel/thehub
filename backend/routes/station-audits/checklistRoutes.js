@@ -6,6 +6,11 @@ const { logChange } = require("../../middleware/changeLogger");
 const { enqueueStationAuditOrder } = require("../../queues/stationAuditOrderQueue");
 const { emailQueue } = require("../../queues/emailQueue");
 const {
+  OPEN_ISSUE_STATUSES,
+  getOpenIssueChecklistIds,
+  isChecklistVisible,
+} = require("../../services/stationAuditIssueVisibility");
+const {
   StationAuditSection,
   StationAuditChecklist,
   StationAuditDepartment,
@@ -314,6 +319,7 @@ async function ensureIssueForResponse({ response, run, checklist, section, locat
       originalPhotos: response.photos || [],
     },
     status: "created",
+    priority: "low",
     assignees: assigneeUsers.map((user, index) => ({
       user: user._id,
       role: index === 0 ? "owner" : "collaborator",
@@ -467,6 +473,31 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
     if (!input.checked) {
       return res.status(409).json({ error: "Completed checklist responses cannot be reopened" });
     }
+
+    // Do not start a new period for a store checklist while an issue from an
+    // earlier period is still active. A response already belonging to this
+    // period remains accessible, which keeps the issue-raising submission
+    // visible until its period ends.
+    const currentRun = await StationAuditRun.findOne(runFilter).select("_id").lean();
+    const currentResponse = currentRun
+      ? await StationAuditResponse.findOne({
+          run: currentRun._id,
+          checklist: checklist._id,
+        }).lean()
+      : null;
+    if (type === "store" && !currentResponse) {
+      const hasOpenIssue = await StationAuditIssue.exists({
+        site: location._id,
+        checklist: checklist._id,
+        status: { $in: OPEN_ISSUE_STATUSES },
+      });
+      if (hasOpenIssue) {
+        return res.status(409).json({
+          error: "This checklist has an unresolved issue from an earlier audit period",
+          code: "OPEN_ISSUE_BLOCKS_CHECKLIST",
+        });
+      }
+    }
     const run = input.checked
       ? await findOrCreateRun(runFilter, {
           ...runFilter,
@@ -482,11 +513,10 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
       return res.status(404).json({ error: "No active response exists for this checklist period" });
     }
 
-    const existingResponse = await StationAuditResponse.findOne({
+    const existingResponse = currentResponse || await StationAuditResponse.findOne({
       run: run._id,
       checklist: checklist._id,
-    })
-      .lean();
+    }).lean();
     if (existingResponse?.checked === true) {
       return res.status(409).json({ error: "This checklist was already completed and cannot be updated" });
     }
@@ -597,13 +627,29 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
       }
     }
 
-    const requiredChecklistIds = await StationAuditChecklist.find({
+    const configuredChecklistIds = await StationAuditChecklist.find({
       section: section._id,
       assignedSites: location._id,
       auditTypes: type,
       frequency: checklist.frequency,
       active: true,
     }).distinct("_id");
+    const [blockedChecklistIds, currentRunResponseIds] = await Promise.all([
+      getOpenIssueChecklistIds({
+        siteId: location._id,
+        checklistIds: configuredChecklistIds,
+        type,
+      }),
+      StationAuditResponse.find({ run: run._id }).distinct("checklist"),
+    ]);
+    const currentRunResponseChecklistIds = new Set(currentRunResponseIds.map(String));
+    const requiredChecklistIds = configuredChecklistIds.filter((checklistId) =>
+      isChecklistVisible({
+        checklistId,
+        openIssueChecklistIds: blockedChecklistIds,
+        currentResponseChecklistIds: currentRunResponseChecklistIds,
+      })
+    );
     const completedCount = await StationAuditResponse.countDocuments({
       run: run._id,
       checklist: { $in: requiredChecklistIds },
@@ -769,6 +815,12 @@ router.get("/:sectionId", async (req, res) => {
           .lean()
       : [];
 
+    const openIssueChecklistIds = await getOpenIssueChecklistIds({
+      siteId: location._id,
+      checklistIds: checklists.map((checklist) => checklist._id),
+      type,
+    });
+
     const runBySectionFrequency = new Map(
       runs.map((run) => [`${run.section}:${run.frequency}`, run])
     );
@@ -782,6 +834,14 @@ router.get("/:sectionId", async (req, res) => {
       const response = run
         ? responseByRunChecklist.get(`${run._id}:${checklist._id}`) || null
         : null;
+
+      if (!isChecklistVisible({
+        checklistId: checklist._id,
+        openIssueChecklistIds,
+        currentResponseChecklistIds: new Set(response ? [String(checklist._id)] : []),
+      })) {
+        continue;
+      }
 
       if (checklist.statusOptionSet?.options) {
         checklist.statusOptionSet.options.sort((left, right) =>
@@ -814,7 +874,7 @@ router.get("/:sectionId", async (req, res) => {
       };
     });
 
-    const total = checklists.length;
+    const total = outputSections.reduce((sum, entry) => sum + entry.summary.total, 0);
     const completed = outputSections.reduce(
       (sum, entry) => sum + entry.summary.completed,
       0

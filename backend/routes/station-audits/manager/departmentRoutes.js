@@ -9,11 +9,13 @@ const GENERAL_EDIT_PERMISSION = "auditManager.department.edit";
 const ADD_PERMISSION = "auditManager.department.add";
 const STRATEGY_PERMISSION = `${GENERAL_EDIT_PERMISSION}.strategyAutomation`;
 const STATUS_PERMISSION = `${GENERAL_EDIT_PERMISSION}.status`;
+const ADMIN_DEPARTMENT_PERMISSION = `${GENERAL_EDIT_PERMISSION}.adminDepartment`;
 const EDITABLE_FIELDS = new Set([
   "name", "description", "departmentHead", "members", "defaultIssueAssignees",
   "assignmentStrategy", "escalationDepartment", "notificationEmails",
-  "siteNotifications", "active",
+  "siteNotifications", "active", "isAdminDepartment",
 ]);
+const CREATE_FIELDS = [...EDITABLE_FIELDS].filter((field) => field !== "isAdminDepartment");
 
 function membershipFilter(userId) {
   return { $or: [{ departmentHead: userId }, { "members.user": userId }] };
@@ -22,6 +24,7 @@ function membershipFilter(userId) {
 function requiredPermission(field) {
   if (field === "assignmentStrategy") return STRATEGY_PERMISSION;
   if (field === "active") return STATUS_PERMISSION;
+  if (field === "isAdminDepartment") return ADMIN_DEPARTMENT_PERMISSION;
   return GENERAL_EDIT_PERMISSION;
 }
 
@@ -104,14 +107,15 @@ function normalizeDepartmentUpdate(body = {}) {
     }
     return { field, value: entries };
   }
-  if (field === "active") {
-    return typeof rawValue === "boolean" ? { field, value: rawValue } : { error: "Active must be true or false" };
+  if (field === "active" || field === "isAdminDepartment") {
+    const label = field === "active" ? "Active" : "Admin department";
+    return typeof rawValue === "boolean" ? { field, value: rawValue } : { error: `${label} must be true or false` };
   }
   return { error: "Unsupported department field" };
 }
 
 function normalizeDepartmentCreate(body = {}) {
-  const fields = [...EDITABLE_FIELDS];
+  const fields = CREATE_FIELDS;
   const value = {};
   for (const field of fields) {
     if (body[field] === undefined) return { error: `${field} is required` };
@@ -279,12 +283,14 @@ router.put("/:departmentId", async (req, res) => {
     if (!userId || !mongoose.isValidObjectId(departmentId)) return res.status(400).json({ error: "Invalid department request" });
     const update = normalizeDepartmentUpdate(req.body);
     if (update.error) return res.status(400).json({ error: update.error });
-    if (req.header("X-Required-Permission") !== requiredPermission(update.field)) {
-      return res.status(403).json({ error: "The required field-level permission was not supplied" });
-    }
-
     const before = await StationAuditDepartment.findById(departmentId).lean();
     if (!before) return res.status(404).json({ error: "Department not found" });
+    const expectedPermission = before.isAdminDepartment || update.field === "isAdminDepartment"
+      ? ADMIN_DEPARTMENT_PERMISSION
+      : requiredPermission(update.field);
+    if (req.header("X-Required-Permission") !== expectedPermission) {
+      return res.status(403).json({ error: "The required field-level permission was not supplied" });
+    }
     if (!await canEditDepartment(userId, before)) return res.status(403).json({ error: "Only this department's head or an audit administrator can edit it" });
 
     if (update.field === "departmentHead" && update.value) {

@@ -61,8 +61,10 @@ export const auditManagerService = {
       actionOptions('auditManager.department.add', 'audit-manager.departments', 'create', 'station-audit-department', 'Station Audit department created'),
     )
   },
-  updateDepartment(departmentId: string, input: AuditManagerDepartmentUpdate, field: AuditManagerDepartmentUpdateField) {
-    const permission = field === 'assignmentStrategy'
+  updateDepartment(departmentId: string, input: AuditManagerDepartmentUpdate, field: AuditManagerDepartmentUpdateField, adminDepartment = false) {
+    const permission = adminDepartment || field === 'isAdminDepartment'
+      ? 'auditManager.department.edit.adminDepartment'
+      : field === 'assignmentStrategy'
       ? 'auditManager.department.edit.strategyAutomation'
       : field === 'active'
         ? 'auditManager.department.edit.status'

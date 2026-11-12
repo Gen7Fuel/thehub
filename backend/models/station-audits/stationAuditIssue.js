@@ -36,6 +36,12 @@ const StationAuditIssueSchema = new mongoose.Schema(
       default: "created",
       required: true,
     },
+    priority: {
+      type: String,
+      enum: ["low", "normal", "high", "critical"],
+      default: "low",
+      required: true,
+    },
     assignees: {
       type: [IssueAssigneeSchema],
       default: [],
@@ -70,6 +76,7 @@ const StationAuditIssueSchema = new mongoose.Schema(
 StationAuditIssueSchema.index({ "assignees.user": 1, status: 1, updatedAt: -1 });
 StationAuditIssueSchema.index({ currentDepartment: 1, status: 1, updatedAt: -1 });
 StationAuditIssueSchema.index({ site: 1, status: 1, updatedAt: -1 });
+StationAuditIssueSchema.index({ site: 1, status: 1, checklist: 1 });
 StationAuditIssueSchema.index({ checklist: 1, site: 1, raisedAt: -1 });
 StationAuditIssueSchema.index({ response: 1 }, { unique: true });
 

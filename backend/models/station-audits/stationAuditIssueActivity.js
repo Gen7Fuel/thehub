@@ -28,6 +28,7 @@ const StationAuditIssueActivitySchema = new mongoose.Schema(
         "comment_added",
         "photos_added",
         "status_changed",
+        "priority_changed",
         "assignment_changed",
         "department_changed",
         "escalated",
@@ -36,7 +37,10 @@ const StationAuditIssueActivitySchema = new mongoose.Schema(
       ],
       required: true,
     },
-    actor: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    // Historical legacy status entries did not record the user who made the
+    // change. Live events still provide an actor; migrated system events use
+    // null rather than attributing the change to the audit completer.
+    actor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     body: { type: String, trim: true, default: "", maxlength: 5000 },
     photos: [{ type: String, trim: true }],
     changes: { type: [IssueChangeSchema], default: [] },

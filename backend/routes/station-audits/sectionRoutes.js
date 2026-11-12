@@ -11,6 +11,10 @@ const {
   FREQUENCIES,
   AUDIT_TYPES,
 } = require("./checklistRoutes");
+const {
+  getOpenIssueChecklistIds,
+  isChecklistVisible,
+} = require("../../services/stationAuditIssueVisibility");
 
 const router = express.Router();
 
@@ -72,21 +76,41 @@ router.get("/", async (req, res) => {
     const responses = runs.length
       ? await StationAuditResponse.find({
           run: { $in: runs.map((run) => run._id) },
-          checked: true,
         })
-          .select("run checklist")
+          .select("run checklist checked")
           .lean()
       : [];
+
+    const openIssueChecklistIds = await getOpenIssueChecklistIds({
+      siteId: location._id,
+      checklistIds: checklists.map((checklist) => checklist._id),
+      type,
+    });
 
     const runBySectionFrequency = new Map(
       runs.map((run) => [`${run.section}:${run.frequency}`, run])
     );
-    const completedKeys = new Set(
+    const responseKeys = new Set(
       responses.map((response) => `${response.run}:${response.checklist}`)
+    );
+    const completedKeys = new Set(
+      responses
+        .filter((response) => response.checked === true)
+        .map((response) => `${response.run}:${response.checklist}`)
     );
     const checklistsBySection = new Map(sectionIds.map((id) => [id.toString(), []]));
     checklists.forEach((checklist) => {
-      checklistsBySection.get(checklist.section.toString()).push(checklist);
+      const run = runBySectionFrequency.get(`${checklist.section}:${checklist.frequency}`);
+      const currentResponseChecklistIds = new Set(
+        run && responseKeys.has(`${run._id}:${checklist._id}`) ? [String(checklist._id)] : []
+      );
+      if (isChecklistVisible({
+        checklistId: checklist._id,
+        openIssueChecklistIds,
+        currentResponseChecklistIds,
+      })) {
+        checklistsBySection.get(checklist.section.toString()).push(checklist);
+      }
     });
 
     const outputSections = sections.map((section) => {

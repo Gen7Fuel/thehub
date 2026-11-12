@@ -173,6 +173,10 @@ describe("station audit models", () => {
     expect(run.validateSync()).toBeUndefined();
     expect(response.validateSync()).toBeUndefined();
     expect(issue.validateSync()).toBeUndefined();
+    expect(issue.priority).toBe("low");
     expect(activity.validateSync()).toBeUndefined();
+
+    issue.priority = "urgent";
+    expect(issue.validateSync()?.errors.priority).toBeDefined();
   });
 });

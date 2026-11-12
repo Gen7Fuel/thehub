@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { DateTime } from "luxon";
 import checklistRouteModule from "../routes/station-audits/checklistRoutes.js";
+import issueVisibilityModule from "../services/stationAuditIssueVisibility.js";
 
 const { periodKeyFor, periodKeysFor, normalizeResponseInput, shouldCreateIssue } = checklistRouteModule;
+const { isChecklistVisible } = issueVisibilityModule;
 
 describe("station audit checklist period keys", () => {
   it("preserves the legacy daily, weekly, and monthly key formats", () => {
@@ -56,5 +58,33 @@ describe("station audit response input", () => {
     expect(normalizeResponseInput({ photos: Array.from({ length: 11 }, (_, index) => `${index}.jpg`) }).error)
       .toMatch(/at most 10 images/);
     expect(normalizeResponseInput({ photos: ["../secret.jpg"] }).error).toBe("Invalid image path");
+  });
+});
+
+describe("station audit open issue visibility", () => {
+  const openIssueChecklistIds = new Set(["checklist-a"]);
+
+  it("hides an unresolved checklist when the current period has no response", () => {
+    expect(isChecklistVisible({
+      checklistId: "checklist-a",
+      openIssueChecklistIds,
+      currentResponseChecklistIds: new Set(),
+    })).toBe(false);
+  });
+
+  it("keeps the issue-raising checklist visible during its original period", () => {
+    expect(isChecklistVisible({
+      checklistId: "checklist-a",
+      openIssueChecklistIds,
+      currentResponseChecklistIds: new Set(["checklist-a"]),
+    })).toBe(true);
+  });
+
+  it("shows a checklist that has no active issue", () => {
+    expect(isChecklistVisible({
+      checklistId: "checklist-b",
+      openIssueChecklistIds,
+      currentResponseChecklistIds: new Set(),
+    })).toBe(true);
   });
 });

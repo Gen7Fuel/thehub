@@ -19,6 +19,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -38,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -75,6 +86,7 @@ type EditField =
   | "escalationDepartment"
   | "notificationEmails"
   | "siteNotifications"
+  | "isAdminDepartment"
   | "active";
 type EditDraft =
   | string
@@ -134,6 +146,7 @@ function DepartmentManagementPage() {
   const [search, setSearch] = useState("");
   const [siteDialog, setSiteDialog] = useState(false);
   const [strategyHelp, setStrategyHelp] = useState(false);
+  const [confirmAdminChange, setConfirmAdminChange] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<AuditManagerDepartmentCreate>(emptyDepartment);
   const [saving, setSaving] = useState(false);
@@ -162,9 +175,16 @@ function DepartmentManagementPage() {
     "edit",
     "status",
   );
+  const hasAdminDepartmentPermission = hasAuditManagerNestedAction(
+    user?.access,
+    "department",
+    "edit",
+    "adminDepartment",
+  );
   const canEditSelected = Boolean(
     selected &&
     hasEditPermission &&
+    (!selected.isAdminDepartment || hasAdminDepartmentPermission) &&
     (selected.accessScope === "admin" ||
       selected.departmentHead?._id === user?.id),
   );
@@ -234,6 +254,7 @@ function DepartmentManagementPage() {
       siteNotifications: selected.siteNotifications
         .map((entry) => ({ site: entry.site?._id || "", emails: entry.emails }))
         .filter((entry) => entry.site),
+      isAdminDepartment: selected.isAdminDepartment,
       active: selected.active,
     };
     setSearch("");
@@ -242,8 +263,12 @@ function DepartmentManagementPage() {
     setEditField(field);
   }
 
-  async function saveField() {
+  async function saveField(confirmedAdminChange = false) {
     if (!selected || !editField) return;
+    if (editField === "isAdminDepartment" && !confirmedAdminChange) {
+      setConfirmAdminChange(true);
+      return;
+    }
     const input = {
       [editField]:
         editField === "departmentHead" || editField === "escalationDepartment"
@@ -257,6 +282,7 @@ function DepartmentManagementPage() {
         selected._id,
         input,
         editField,
+        selected.isAdminDepartment,
       );
       setDepartments((current) =>
         current.map((department) =>
@@ -405,6 +431,21 @@ function DepartmentManagementPage() {
                       </p>
                     </DetailBlock>
                   </div>
+                  {hasAdminDepartmentPermission && (
+                    <DetailBlock
+                      label="Administrative department"
+                      icon={ShieldCheck}
+                      onEdit={
+                        canEditSelected
+                          ? () => beginEdit("isAdminDepartment")
+                          : undefined
+                      }
+                    >
+                      <Badge variant={selected.isAdminDepartment ? "default" : "outline"}>
+                        {selected.isAdminDepartment ? "Admin department" : "Standard department"}
+                      </Badge>
+                    </DetailBlock>
+                  )}
                   <DetailBlock
                     label={`Members (${selected.memberCount})`}
                     icon={Users}
@@ -476,7 +517,7 @@ function DepartmentManagementPage() {
                     }
                   >
                     <p className="mb-3 text-xs text-slate-500">
-                      Department head is notified directly and members are CC&apos;d automatically. Emails below are additional CC recipients.
+                      Default assignees and the department head are emailed automatically. Add any additional recipients below.
                     </p>
                     <EmailList
                       emails={selected.notificationEmails}
@@ -513,6 +554,38 @@ function DepartmentManagementPage() {
             )}
           </DialogContent>
         </Dialog>
+
+        <AlertDialog
+          open={confirmAdminChange}
+          onOpenChange={(open) => { if (!saving) setConfirmAdminChange(open); }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                {editDraft === true
+                  ? "Make this an administrative department?"
+                  : "Remove administrative access from this department?"}
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                {editDraft === true
+                  ? "Members and the department head may gain visibility across all Station Audit departments. Confirm that this access is intentional."
+                  : "Members and the department head may lose global department visibility. Confirm that another administrative department will remain available."}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={saving}>Go back</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={saving}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void saveField(true).finally(() => setConfirmAdminChange(false));
+                }}
+              >
+                {saving ? "Updating…" : "Confirm change"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Dialog open={siteDialog} onOpenChange={setSiteDialog}>
           <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
@@ -689,7 +762,7 @@ function DepartmentCreateForm({ draft, setDraft, options, search, setSearch, onS
     <div className="space-y-2"><Label>Members</Label><UserSelector users={options?.users || []} selected={draft.members} search={search} setSearch={setSearch} onChange={(members) => setDraft((current) => ({ ...current, members }))} /></div>
     <div className="space-y-2"><Label>Default issue assignees</Label><UserSelector users={options?.users || []} selected={draft.defaultIssueAssignees} search={search} setSearch={setSearch} onChange={(defaultIssueAssignees) => setDraft((current) => ({ ...current, defaultIssueAssignees }))} /></div>
     <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><div className="flex items-center justify-between"><Label>Assignment strategy</Label><Button type="button" variant="ghost" size="sm" onClick={onStrategyHelp}><Info className="mr-1 h-4 w-4" />Help</Button></div><Select value={draft.assignmentStrategy} onValueChange={(assignmentStrategy: AuditManagerDepartmentCreate["assignmentStrategy"]) => setDraft((current) => ({ ...current, assignmentStrategy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(strategyLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Escalation department</Label><Select value={draft.escalationDepartment || "none"} onValueChange={(value) => setDraft((current) => ({ ...current, escalationDepartment: value === "none" ? null : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No escalation department</SelectItem>{options?.departments.map((department) => <SelectItem key={department._id} value={department._id}>{department.name}</SelectItem>)}</SelectContent></Select></div></div>
-    <div className="space-y-2"><Label>Notification emails</Label><p className="text-xs text-slate-500">Department head is notified directly and members are CC&apos;d automatically. Add only additional CC recipients here.</p><EmailChipEditor emails={draft.notificationEmails} onChange={(notificationEmails) => setDraft((current) => ({ ...current, notificationEmails }))} /></div>
+    <div className="space-y-2"><Label>Notification emails</Label><p className="text-xs text-slate-500">Default assignees and the department head are emailed automatically. Add any additional recipients below.</p><EmailChipEditor emails={draft.notificationEmails} onChange={(notificationEmails) => setDraft((current) => ({ ...current, notificationEmails }))} /></div>
     <div className="space-y-2"><Label>Site notification overrides</Label><SiteNotificationEditor sites={options?.sites || []} entries={draft.siteNotifications} onChange={(value) => setDraft((current) => ({ ...current, siteNotifications: value as Array<{ site: string; emails: string[] }> }))} /></div>
   </div>;
 }
@@ -804,6 +877,22 @@ function DepartmentFieldEditor({
         onChange={setDraft}
       />
     );
+  if (field === "isAdminDepartment")
+    return (
+      <div className="flex items-center justify-between gap-4 rounded-xl border p-4">
+        <div>
+          <Label htmlFor="admin-department-toggle">Administrative department</Label>
+          <p className="mt-1 text-sm text-slate-500">
+            Grants the department global visibility across Station Audit departments.
+          </p>
+        </div>
+        <Switch
+          id="admin-department-toggle"
+          checked={draft === true}
+          onCheckedChange={(checked) => setDraft(checked)}
+        />
+      </div>
+    );
   return (
     <Select
       value={draft === true ? "active" : "inactive"}
@@ -896,7 +985,7 @@ function EmailEditor({
   emails: string[];
   onChange: (value: EditDraft) => void;
 }) {
-  return <div className="space-y-3"><p className="text-xs text-slate-500">Department head is notified directly and members are CC&apos;d automatically. Add only additional CC recipients here.</p><EmailChipEditor emails={emails} onChange={(next) => onChange(next)} /></div>;
+  return <div className="space-y-3"><p className="text-xs text-slate-500">Default assignees and the department head are emailed automatically. Add any additional recipients below.</p><EmailChipEditor emails={emails} onChange={(next) => onChange(next)} /></div>;
 }
 
 function SiteNotificationEditor({
@@ -1099,6 +1188,7 @@ function fieldLabel(field: EditField) {
       escalationDepartment: "escalation department",
       notificationEmails: "notification emails",
       siteNotifications: "site notification overrides",
+      isAdminDepartment: "administrative department status",
       active: "status",
     } as const
   )[field];

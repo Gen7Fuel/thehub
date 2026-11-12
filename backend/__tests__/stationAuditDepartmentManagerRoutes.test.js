@@ -23,6 +23,7 @@ describe("station audit department updates", () => {
       value: "Maintenance",
     });
     expect(normalizeDepartmentUpdate({ active: false })).toEqual({ field: "active", value: false });
+    expect(normalizeDepartmentUpdate({ isAdminDepartment: true })).toEqual({ field: "isAdminDepartment", value: true });
     expect(normalizeDepartmentUpdate({ members: [] })).toEqual({ field: "members", value: [] });
     expect(normalizeDepartmentUpdate({ name: "A", active: true }).error).toMatch(/exactly one/i);
   });
@@ -31,6 +32,7 @@ describe("station audit department updates", () => {
     expect(requiredPermission("name")).toBe("auditManager.department.edit");
     expect(requiredPermission("assignmentStrategy")).toBe("auditManager.department.edit.strategyAutomation");
     expect(requiredPermission("active")).toBe("auditManager.department.edit.status");
+    expect(requiredPermission("isAdminDepartment")).toBe("auditManager.department.edit.adminDepartment");
   });
 
   it("requires and normalizes the complete create payload", () => {

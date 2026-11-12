@@ -120,6 +120,7 @@ export default function Navbar() {
   const isVendor = matchRoute({ to: '/vendor', fuzzy: true })
   const isAudit = matchRoute({ to: '/audit', fuzzy: true })
   const isStationAudits = matchRoute({ to: '/station-audits', fuzzy: true })
+  const isAuditTracker = matchRoute({ to: '/audit-tracker', fuzzy: true })
   const isDashboard = matchRoute({ to: '/dashboard', fuzzy: true })
   const isSupport = matchRoute({ to: '/support', fuzzy: true })
   const isSafesheet = matchRoute({ to: '/safesheet', fuzzy: true })
@@ -138,6 +139,7 @@ export default function Navbar() {
     if (isCycleCount) return 'Cycle Count'
     if (isVendor) return 'Vendor Management'
     if (isStationAudits) return 'Station Audits New'
+    if (isAuditTracker) return 'Audits Tracker'
     if (isAudit) return 'Station Audits'
     if (isDashboard) return 'Dashboard'
     if (isSupport) return 'Support'

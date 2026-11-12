@@ -31,6 +31,7 @@ import {
   FileUp,
   LayoutGrid,
   FileBarChart,
+  ListTodo,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -85,7 +86,7 @@ function App() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             
           {/* AUDITS - EMERALD */}
-          {(access?.stationAudit?.value || access?.auditManager?.value) && (
+          {(access?.stationAudit?.value || access?.auditManager?.value || access?.auditTracker?.value) && (
             <Section 
               title="Audits" 
               accentColor="border-t-emerald-500" 
@@ -100,6 +101,9 @@ function App() {
               )}
               {access?.auditManager?.value && (
                 <NavButton to="/audit-manager" label="Audit Manager" icon={Settings} theme="emerald" />
+              )}
+              {access?.auditTracker?.value && (
+                <NavButton to="/audit-tracker" label="Audits Tracker" icon={ListTodo} theme="emerald" />
               )}
             </Section>
           )}

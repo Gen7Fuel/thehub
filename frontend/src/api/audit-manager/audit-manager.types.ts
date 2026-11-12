@@ -117,6 +117,7 @@ export type AuditManagerDepartmentUpdate =
   | { escalationDepartment: string | null }
   | { notificationEmails: string[] }
   | { siteNotifications: Array<{ site: string; emails: string[] }> }
+  | { isAdminDepartment: boolean }
   | { active: boolean }
 
 export type AuditManagerDepartmentUpdateField =
@@ -129,6 +130,7 @@ export type AuditManagerDepartmentUpdateField =
   | 'escalationDepartment'
   | 'notificationEmails'
   | 'siteNotifications'
+  | 'isAdminDepartment'
   | 'active'
 
 export interface AuditManagerDepartmentUpdateResult {
