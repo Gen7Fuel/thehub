@@ -8,6 +8,8 @@ Admin endpoints (`GET /cdn/files`, `DELETE /cdn/delete/:id`) require `Authorizat
 
 Listing preserves original modification dates from blob metadata, so Desk's monthly backup grouping remains unchanged. `cdn/.keep`, Azure directory entries, other prefixes, and internal control files are excluded. Both flat and hierarchical Azure accounts are supported. Desk continues writing monthly archives to `cdn_backup/` using the existing CDN APIs.
 
+Azure file listings share a 30-second in-process inventory across paginated requests. Simultaneous requests share one refresh, and uploads/deletions invalidate the inventory, including failed writes that might have committed remotely. Changes made directly in Azure outside this API appear after the cache expires. This prevents Desk's month/search/backup enumeration from rescanning every Azure blob for each 100-file page.
+
 See [MIGRATION.md](MIGRATION.md) for the staged migration, maintenance boundary, cutover and rollback. Keep the uploads volume mounted during rollout: it holds the persistent write-pause state as well as rollback data. Azure file content is not written into this volume.
 
 Migration copies perform content read-back verification while Hub is online. ETag-bound receipts are retained in the separate `cdn_migration_state` volume so cutover can revalidate unchanged files without downloading them again. `CDN_MIGRATION_CONCURRENCY` defaults to four file transfers (allowed range 1–8). The source uploads volume can be mounted read-only for an isolated initial copy.

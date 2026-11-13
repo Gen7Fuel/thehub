@@ -76,6 +76,7 @@ for (const mode of ['local', 'azure']) test(`${mode}: upload formats, downloads,
   assert.ok(restarted); assert.equal(JSON.parse(await fs.readFile(path.join(dir, '.cdn-maintenance.json'))).paused, true);
   await pause(false);
   assert.equal((await fetch(base + '/cdn/delete/' + filename, { method: 'DELETE', headers })).status, 200);
+  assert.equal((await (await fetch(base + '/cdn/files', { headers })).json()).totalFiles, 2);
   assert.equal((await fetch(base + '/cdn/download/' + filename)).status, 404);
   assert.equal((await fetch(base + '/cdn/download/.cdn-maintenance.json')).status, 400);
   if (mode === 'azure') assert.ok(container.blobs.has('cdn_backup/month.tar'));
@@ -106,4 +107,86 @@ test('Azure failures never report upload success or fall back to local files', a
   const response = await fetch(base + '/cdn/upload-base64', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ base64Data: 'aGk=', fileName: 'file.txt' }) });
   assert.equal(response.status, 503); assert.deepEqual(await fs.readdir(dir), []);
+});
+
+test('Azure pagination and overlapping list requests share one inventory refresh', async t => {
+  const { base, headers, storage, container } = await server(t, 'azure');
+  for (let i = 0; i < 205; i++) {
+    await container.getBlockBlobClient(`cdn/${String(i).padStart(3, '0')}.txt`).uploadData(Buffer.from('x'));
+  }
+  let scans = 0;
+  const original = storage.list;
+  storage.list = async () => {
+    scans++;
+    await new Promise(resolve => setTimeout(resolve, 50));
+    return original();
+  };
+  const pages = await Promise.all([1, 2, 3, 1].map(async page => {
+    const response = await fetch(base + '/cdn/files?page=' + page, { headers });
+    assert.equal(response.status, 200);
+    return response.json();
+  }));
+  assert.equal(scans, 1);
+  assert.deepEqual(pages.map(page => page.files.length), [100, 100, 5, 100]);
+  assert.equal(new Set(pages.slice(0, 3).flatMap(page => page.files.map(file => file.filename))).size, 205);
+  const upload = await fetch(base + '/cdn/upload-base64', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64Data: 'aGk=', fileName: 'new.txt' }) });
+  assert.equal(upload.status, 200);
+  assert.equal((await (await fetch(base + '/cdn/files', { headers })).json()).totalFiles, 206);
+  assert.equal(scans, 2);
+});
+
+test('expired inventories refresh and listing errors are not cached', async t => {
+  const { base, headers, storage } = await server(t, 'azure');
+  let now = Date.now();
+  t.mock.method(Date, 'now', () => now);
+  let scans = 0;
+  storage.list = async () => {
+    if (++scans === 1) throw new Error('Temporary list failure');
+    return [];
+  };
+  assert.equal((await fetch(base + '/cdn/files', { headers })).status, 503);
+  assert.equal((await fetch(base + '/cdn/files', { headers })).status, 200);
+  assert.equal((await fetch(base + '/cdn/files', { headers })).status, 200);
+  assert.equal(scans, 2);
+  now += 30001;
+  assert.equal((await fetch(base + '/cdn/files', { headers })).status, 200);
+  assert.equal(scans, 3);
+});
+
+test('a refresh started before an upload cannot overwrite the newer cached inventory', async t => {
+  const { base, headers, storage } = await server(t, 'azure');
+  const original = storage.list;
+  let release;
+  let started;
+  const firstStarted = new Promise(resolve => { started = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  let scans = 0;
+  storage.list = async () => {
+    const scan = ++scans;
+    const inventory = await original();
+    if (scan === 1) { started(); await barrier; }
+    return inventory;
+  };
+  const first = fetch(base + '/cdn/files', { headers });
+  await firstStarted;
+  const uploaded = await fetch(base + '/cdn/upload-base64', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64Data: 'aGk=', fileName: 'new.txt' }) });
+  assert.equal(uploaded.status, 200);
+  assert.equal((await (await fetch(base + '/cdn/files', { headers })).json()).totalFiles, 1);
+  release();
+  assert.equal((await (await first).json()).totalFiles, 0);
+  assert.equal((await (await fetch(base + '/cdn/files', { headers })).json()).totalFiles, 1);
+  assert.equal(scans, 2);
+});
+
+test('failed writes invalidate listings even when the remote write committed', async t => {
+  const { base, headers, storage } = await server(t, 'azure');
+  assert.equal((await (await fetch(base + '/cdn/files', { headers })).json()).totalFiles, 0);
+  const original = storage.put;
+  storage.put = async (...args) => { await original(...args); throw new Error('Response lost after write'); };
+  const uploaded = await fetch(base + '/cdn/upload-base64', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64Data: 'aGk=', fileName: 'new.txt' }) });
+  assert.equal(uploaded.status, 503);
+  assert.equal((await (await fetch(base + '/cdn/files', { headers })).json()).totalFiles, 1);
 });

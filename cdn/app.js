@@ -11,6 +11,33 @@ const { createStorage, validFilename, CONTROL_FILE } = require('./storage');
 function createApp({ env = process.env, storage = createStorage({ env }) } = {}) {
   const app = express();
   let activeWrites = 0;
+  // Desk enumerates every 100-file page for months, search and backup. Azure
+  // listing is account I/O, so share one inventory across those page requests.
+  // Mutations invalidate it; overlapping requests share one refresh.
+  const listCacheMs = storage.mode === 'azure' ? 30000 : 0;
+  let listingGeneration = 0;
+  let cachedListing;
+  let pendingListing;
+  function invalidateListing() {
+    listingGeneration++;
+    cachedListing = undefined;
+    pendingListing = undefined;
+  }
+  async function listFiles() {
+    if (cachedListing && cachedListing.expiresAt > Date.now()) return cachedListing.files;
+    if (pendingListing) return pendingListing.promise;
+    const generation = listingGeneration;
+    const promise = Promise.resolve().then(() => storage.list()).then(files => {
+      const sorted = [...files].sort((a, b) => Date.parse(b.lastModified) - Date.parse(a.lastModified) || a.filename.localeCompare(b.filename));
+      if (generation === listingGeneration && listCacheMs > 0) {
+        cachedListing = { files: sorted, expiresAt: Date.now() + listCacheMs };
+      }
+      return sorted;
+    });
+    pendingListing = { promise };
+    try { return await promise; }
+    finally { if (pendingListing?.promise === promise) pendingListing = undefined; }
+  }
   app.locals.drainWrites = async () => { while (activeWrites) await delay(50); };
   let changingPause = false;
   const controlPath = path.join(storage.uploadsDir, CONTROL_FILE);
@@ -39,7 +66,13 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
       return res.status(503).set('Retry-After', '60').json({ error: 'File uploads and deletions are paused for maintenance. Please retry shortly.' });
     }
     activeWrites++;
-    try { await fn(req, res); } finally { activeWrites--; }
+    invalidateListing();
+    try { await fn(req, res); }
+    finally {
+      // Also invalidate on failure: a storage timeout may follow a committed write.
+      invalidateListing();
+      activeWrites--;
+    }
   });
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }).single('file');
   const multipart = (req, res) => new Promise((resolve, reject) => upload(req, res, err => err ? reject(err) : resolve()));
@@ -89,8 +122,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
     res.json({ filename });
   }));
   app.get('/cdn/files', admin, route(async (req, res) => {
-    const files = await storage.list();
-    files.sort((a, b) => Date.parse(b.lastModified) - Date.parse(a.lastModified) || a.filename.localeCompare(b.filename));
+    const files = await listFiles();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const totalPages = Math.ceil(files.length / 100);
     if (page > totalPages && totalPages > 0) return res.status(404).json({ error: `Invalid page number. Maximum page is ${totalPages}` });
