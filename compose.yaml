@@ -127,10 +127,16 @@ services:
     image: ${CDN_IMAGE}
     volumes:
       - uploads:/app/uploads
+      - cdn_migration_state:/migration/state
     ports:
       - "5001:5001"
     environment:
       - CDN_ADMIN_TOKEN=${CDN_ADMIN_TOKEN}
+      - CDN_STORAGE=${CDN_STORAGE:-local}
+      - CDN_MIGRATION_STATE_DIR=/migration/state
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_CONTAINER=${AZURE_CONTAINER}
+    stop_grace_period: 60s
     depends_on:
       - mongo
     restart: always
@@ -163,6 +169,7 @@ services:
 volumes:
   dist:
   uploads:
+  cdn_migration_state:
   mongodb_data:
   redis_data:
   postgres_data:

@@ -1,0 +1,11 @@
+version: 1
+name: azure-storage-outage
+slug: azure-storage-outage
+protocol: http
+description: Azure Blob REST outage response for CDN SDK failure checks
+port: 4019
+interceptRequests: true
+scenarios:
+  - name: default
+    default: true
+    path: ./default.js
