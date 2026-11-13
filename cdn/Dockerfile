@@ -1,10 +1,10 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
 COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --prefer-offline
+    npm ci --prefer-offline
 
 COPY . .
 

@@ -3,16 +3,21 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test test/*.test.js",
+    "migrate:copy": "node migrate.js copy",
+    "migrate:finalize": "node migrate.js finalize",
+    "migrate:verify": "node migrate.js verify"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@azure/storage-blob": "^12.28.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.1",
+    "mime-types": "^2.1.35",
     "sharp": "^0.35.3",
     "uuid": "^11.0.5"
   }

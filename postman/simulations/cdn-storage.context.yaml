@@ -1,0 +1,23 @@
+purpose:
+  stands_in_for: Azure Blob REST returning ServerBusy during storage operations
+  unblocks: Checking CDN errors through the real Azure JavaScript SDK without modifying production files
+assumptions:
+  - id: sdk-outage-propagation
+    status: supported
+    claim: In the simulated ServerBusy scenario, CDN uploads, downloads, listings and deletions return retryable HTTP 503 without local file fallback.
+    reason: The actual CDN HTTP routes and Azure SDK ran against the local Postman simulation; no HTTP client methods were stubbed in this check.
+    verification: On 2026-11-13 test/simulation.test.js passed; simulation request logs showed PUT, HEAD, GET list and DELETE with 503. This establishes caller behavior for these responses, not Azure availability or every failure mode.
+    source: cdn/test/simulation.test.js; postman/mocks/azure-storage-outage/default.js
+    updated_at: '2026-11-13'
+  - id: successful-azure-storage
+    status: supported
+    claim: The production Azure account permits the required upload, list, read, metadata and delete operations on cdn/.
+    reason: The outage mock does not model success. A separate isolated live test used the configured Azure account and actual SDK on 2026-11-13.
+    verification: cdn/test/live.test.js passed for multipart, base64 and PNG uploads, full and ranged downloads, original-date listing and deletion of only temporary UUID files. A separate isolated migration test passed resumable copy, delta upload, checksum verification and stale-file reconciliation; all temporary test objects were removed. The configured account returns hierarchical directory entries with hdi_isfolder metadata; listings and migration reconciliation exclude them. On 2026-11-13 the VPS completed production cutover after matching final manifests for 10,099 files and successful public-download and upload checks; see cdn/MIGRATION.md for the deployment record and remaining lifecycle-policy limitation.
+    source: https://learn.microsoft.com/en-us/javascript/api/overview/azure/storage-blob-readme
+    updated_at: '2026-11-13'
+fingerprints:
+  - id: cdn-azure-migration
+    date: '2026-11-13'
+    commit: null
+    cli: Postman 1.75.0; status command unavailable in this installed CLI, so no owner mock search or cloud binding was used
