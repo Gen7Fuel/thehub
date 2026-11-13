@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   hasAuditTrackerAccess,
+  hasAuditTrackerMyIssuesAction,
   hasAuditTrackerPermission,
 } from '../auditTrackerPermissions'
 
@@ -23,5 +24,23 @@ describe('audit tracker permissions', () => {
     expect(hasAuditTrackerPermission(access, 'myIssues')).toBe(true)
     expect(hasAuditTrackerPermission(access, 'departmentIssues')).toBe(true)
     expect(hasAuditTrackerPermission(access, 'report')).toBe(false)
+  })
+
+  it('checks each My Issues action independently', () => {
+    const access = {
+      auditTracker: {
+        value: true,
+        myIssues: {
+          value: true,
+          updateStatus: true,
+          escalateIssue: { value: true },
+          postComments: false,
+        },
+      },
+    }
+
+    expect(hasAuditTrackerMyIssuesAction(access, 'updateStatus')).toBe(true)
+    expect(hasAuditTrackerMyIssuesAction(access, 'escalateIssue')).toBe(true)
+    expect(hasAuditTrackerMyIssuesAction(access, 'postComments')).toBe(false)
   })
 })
