@@ -32,9 +32,23 @@ function azureContainer(env = process.env) {
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
       throw new Error('AZURE_STORAGE_ACCOUNT_URL must be an HTTPS account root URL');
     }
-    const { ManagedIdentityCredential } = require('@azure/identity');
-    const credential = env.CDN_AZURE_CLIENT_ID ? new ManagedIdentityCredential({ clientId: env.CDN_AZURE_CLIENT_ID }) : new ManagedIdentityCredential();
+    const { ManagedIdentityCredential, ClientSecretCredential } = require('@azure/identity');
+    const authMode = env.CDN_AZURE_AUTH_MODE || 'managed-identity';
+    let credential;
+    if (authMode === 'client-secret') {
+      if (env.WEBSITE_INSTANCE_ID) throw new Error('App Service requires managed identity storage authentication');
+      if (![env.CDN_AZURE_TENANT_ID, env.CDN_AZURE_CLIENT_ID, env.CDN_AZURE_CLIENT_SECRET].every(value => typeof value === 'string' && value.trim())) {
+        throw new Error('Client-secret storage authentication requires CDN-scoped tenant, client and secret configuration');
+      }
+      credential = new ClientSecretCredential(env.CDN_AZURE_TENANT_ID, env.CDN_AZURE_CLIENT_ID, env.CDN_AZURE_CLIENT_SECRET);
+    } else if (authMode === 'managed-identity') {
+      if (env.CDN_AZURE_TENANT_ID || env.CDN_AZURE_CLIENT_SECRET) throw new Error('Client-secret configuration cannot be combined with managed identity');
+      credential = env.CDN_AZURE_CLIENT_ID ? new ManagedIdentityCredential({ clientId: env.CDN_AZURE_CLIENT_ID }) : new ManagedIdentityCredential();
+    } else throw new Error('Unsupported CDN_AZURE_AUTH_MODE');
     return new BlobServiceClient(url.href, credential).getContainerClient(env.AZURE_CONTAINER);
+  }
+  if (env.CDN_AZURE_AUTH_MODE || env.CDN_AZURE_CLIENT_ID || env.CDN_AZURE_TENANT_ID || env.CDN_AZURE_CLIENT_SECRET) {
+    throw new Error('Account URL authentication configuration cannot be combined with a connection string');
   }
   return BlobServiceClient.fromConnectionString(env.AZURE_STORAGE_CONNECTION_STRING).getContainerClient(env.AZURE_CONTAINER);
 }

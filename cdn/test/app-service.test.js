@@ -76,6 +76,19 @@ test('preview starts paused, persists the pause, and blocks writes until explici
   assert.equal((await upload()).status, 200);
 });
 
+test('VPS fallback requires explicit complete client-secret configuration and keeps App Service on managed identity', () => {
+  const env = { AZURE_CONTAINER: 'hub', AZURE_STORAGE_ACCOUNT_URL: 'https://gen7erpmedia29b24248.blob.core.windows.net',
+    CDN_AZURE_AUTH_MODE: 'client-secret', CDN_AZURE_TENANT_ID: '00000000-0000-0000-0000-000000000001',
+    CDN_AZURE_CLIENT_ID: '00000000-0000-0000-0000-000000000002', CDN_AZURE_CLIENT_SECRET: 'test-secret' };
+  assert.equal(azureContainer(env).url, env.AZURE_STORAGE_ACCOUNT_URL + '/hub');
+  for (const key of ['CDN_AZURE_TENANT_ID', 'CDN_AZURE_CLIENT_ID', 'CDN_AZURE_CLIENT_SECRET']) {
+    assert.throws(() => azureContainer({ ...env, [key]: '' }), /requires CDN-scoped/);
+  }
+  assert.throws(() => azureContainer({ ...env, WEBSITE_INSTANCE_ID: 'azure' }), /requires managed identity/);
+  assert.throws(() => azureContainer({ ...env, CDN_AZURE_AUTH_MODE: 'managed-identity' }), /cannot be combined/);
+  assert.throws(() => azureContainer({ ...env, CDN_AZURE_AUTH_MODE: 'typo' }), /Unsupported/);
+});
+
 test('unresolved Key Vault references cannot authorize admin endpoints or pass readiness', async t => {
   const token = '@Microsoft.KeyVault(SecretUri=https://vault/secrets/token/)';
   const { base } = await fixture(t, { CDN_ADMIN_TOKEN: token });
