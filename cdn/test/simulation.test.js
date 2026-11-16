@@ -22,6 +22,7 @@ test('real Azure SDK over HTTP: storage outage returns retryable failure without
     ['/cdn/upload-base64', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"base64Data":"aGk=","fileName":"test.txt"}' }],
     ['/cdn/download/test.txt', {}],
     ['/cdn/files', { headers: { Authorization: 'Bearer test' } }],
+    ['/cdn/files?page=2', { headers: { Authorization: 'Bearer test' } }],
     ['/cdn/delete/test.txt', { method: 'DELETE', headers: { Authorization: 'Bearer test' } }],
   ]) {
     const response = await fetch(base + endpoint, options);

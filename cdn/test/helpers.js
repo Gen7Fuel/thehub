@@ -10,6 +10,7 @@ function fakeContainer() {
   }
   return {
     blobs,
+    async getProperties() { return {}; },
     getBlockBlobClient(name) {
       return {
         url: 'https://test.invalid/container/' + name,

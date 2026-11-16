@@ -1,0 +1,168 @@
+name: Deploy CDN to Azure
+run-name: ${{ inputs.mode == 'media-copy' && 'Copy and verify CDN media' || inputs.mode == 'rollback-image' && 'Build VPS CDN standby' || 'Deploy CDN to Azure' }}
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cdn/**'
+      - '.github/workflows/cdn-azure.yml'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Run a paused preview deployment or the online media baseline
+        type: choice
+        required: true
+        default: preview
+        options: [preview, media-copy, rollback-image]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdn-azure-production
+  cancel-in-progress: false
+
+jobs:
+  rollback-image:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'rollback-image' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps'
+    runs-on: ubuntu-latest
+    environment: cdn-production
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - name: Install, audit and test standby
+        working-directory: cdn
+        run: |
+          npm ci
+          npm audit --omit=dev
+          npm test
+      - name: Record source release
+        working-directory: cdn
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: node -e 'require("node:fs").writeFileSync("release.json", JSON.stringify({commit:process.env.RELEASE_COMMIT}))'
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./cdn
+          file: ./cdn/Dockerfile.rollback
+          push: true
+          tags: ghcr.io/gen7fuel/thehub-cdn-rollback:${{ github.sha }}
+
+  package:
+    if: inputs.mode != 'media-copy' && inputs.mode != 'rollback-image' && github.ref == 'refs/heads/main' && (vars.CDN_DEPLOY_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && vars.CDN_AZURE_PREVIEW_ENABLED == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - name: Install and test CDN
+        working-directory: cdn
+        run: |
+          npm ci
+          npm test
+      - name: Package source for Linux App Service build
+        working-directory: cdn
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          node -e 'require("node:fs").writeFileSync("release.json", JSON.stringify({commit:process.env.RELEASE_COMMIT}))'
+          zip ../cdn-azure.zip index.js app.js storage.js runtime.js package.json package-lock.json release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdn-azure
+          path: cdn-azure.zip
+          retention-days: 7
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: cdn-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cdn-azure
+      - name: Check deployment configuration
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CDN_CLIENT_ID }}
+        run: test -n "$CLIENT_ID"
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CDN_CLIENT_ID }}
+          tenant-id: 21634e14-74fa-410a-8886-4c3f808b58cb
+          subscription-id: 29b24248-1990-4592-b25d-e6ee8e9db784
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: gen7erp-cdn-prod-29b24248
+          package: cdn-azure.zip
+      - name: Resolve app hostname
+        run: |
+          hostname=$(az webapp show --resource-group Gen7ERP --name gen7erp-cdn-prod-29b24248 --query defaultHostName --output tsv)
+          test -n "$hostname"
+          echo "CDN_HEALTH_URL=https://${hostname}/cdn/health" >> "$GITHUB_ENV"
+      - name: Verify deployed release and storage readiness
+        env:
+          CDN_EXPECT_RELEASE: ${{ github.sha }}
+          CDN_EXPECT_PAUSED: ${{ vars.CDN_DEPLOY_TARGET != 'azure' && 'true' || '' }}
+        run: node cdn/scripts/verify-deployment.cjs
+
+  media-copy:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'media-copy' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: cdn-media-copy-v2
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - name: Install, audit and test
+        working-directory: cdn
+        run: |
+          npm ci
+          npm audit --omit=dev
+          npm test
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_MEDIA_COPY_CLIENT_ID }}
+          tenant-id: 21634e14-74fa-410a-8886-4c3f808b58cb
+          subscription-id: 29b24248-1990-4592-b25d-e6ee8e9db784
+      - name: Copy source CDN prefix and verify every destination byte
+        working-directory: cdn
+        env:
+          CDN_COPY_SOURCE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          CDN_COPY_REPORT_DIR: ${{ runner.temp }}/cdn-media-copy
+        run: node scripts/copy-media.cjs
+      - name: Publish aggregate result only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdn-media-copy-summary-${{ github.run_id }}
+          path: ${{ runner.temp }}/cdn-media-copy/public-summary.json
+          if-no-files-found: ignore
+          retention-days: 90

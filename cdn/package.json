@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "test": "node --test test/*.test.js",
     "migrate:copy": "node migrate.js copy",
     "migrate:finalize": "node migrate.js finalize",
@@ -13,12 +14,13 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@azure/identity": "^4.14.1",
     "@azure/storage-blob": "^12.28.0",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
-    "multer": "^1.4.5-lts.1",
+    "express": "^4.22.3",
     "mime-types": "^2.1.35",
-    "sharp": "^0.35.3",
-    "uuid": "^11.0.5"
+    "multer": "^1.4.5-lts.1",
+    "sharp": "^0.35.5",
+    "uuid": "^11.1.1"
   }
 }

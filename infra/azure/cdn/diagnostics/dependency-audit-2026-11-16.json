@@ -1,0 +1,20 @@
+{
+  "verifiedAt": "2026-11-16T20:05:41.197Z",
+  "vulnerabilities": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "versions": {
+    "express": "4.22.3",
+    "sharp": "0.35.5",
+    "uuid": "11.1.1",
+    "proxy-addr": "2.0.8",
+    "qs": "6.16.2",
+    "body-parser": "1.20.9",
+    "path-to-regexp": "0.1.13"
+  }
+}

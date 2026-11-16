@@ -7,10 +7,39 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { setTimeout: delay } = require('node:timers/promises');
 const { createStorage, validFilename, CONTROL_FILE } = require('./storage');
+const { adminTokenReady, releaseId } = require('./runtime');
 
 function createApp({ env = process.env, storage = createStorage({ env }) } = {}) {
   const app = express();
+  const processStartedAt = new Date().toISOString();
   let activeWrites = 0;
+  // Desk enumerates every 100-file page for months, search and backup. Azure
+  // listing is account I/O, so share one inventory across those page requests.
+  // Mutations invalidate it; overlapping requests share one refresh.
+  const listCacheMs = storage.mode === 'azure' ? 30000 : 0;
+  let listingGeneration = 0;
+  let cachedListing;
+  let pendingListing;
+  function invalidateListing() {
+    listingGeneration++;
+    cachedListing = undefined;
+    pendingListing = undefined;
+  }
+  async function listFiles() {
+    if (cachedListing && cachedListing.expiresAt > Date.now()) return cachedListing.files;
+    if (pendingListing) return pendingListing.promise;
+    const generation = listingGeneration;
+    const promise = Promise.resolve().then(() => storage.list()).then(files => {
+      const sorted = [...files].sort((a, b) => Date.parse(b.lastModified) - Date.parse(a.lastModified) || a.filename.localeCompare(b.filename));
+      if (generation === listingGeneration && listCacheMs > 0) {
+        cachedListing = { files: sorted, expiresAt: Date.now() + listCacheMs };
+      }
+      return sorted;
+    });
+    pendingListing = { promise };
+    try { return await promise; }
+    finally { if (pendingListing?.promise === promise) pendingListing = undefined; }
+  }
   app.locals.drainWrites = async () => { while (activeWrites) await delay(50); };
   let changingPause = false;
   const controlPath = path.join(storage.uploadsDir, CONTROL_FILE);
@@ -20,7 +49,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
       if (typeof state.paused !== 'boolean' || typeof state.drained !== 'boolean') throw new Error('Invalid maintenance state');
       return state;
     }
-    catch (err) { if (err.code === 'ENOENT') return { paused: false, drained: false }; throw err; }
+    catch (err) { if (err.code === 'ENOENT') return { paused: env.CDN_START_PAUSED === 'true', drained: false }; throw err; }
   }
   function setPause(state) {
     const temp = controlPath + '.tmp';
@@ -30,7 +59,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
   if (pauseState().paused) setPause({ paused: true, drained: true });
   const route = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   function admin(req, res, next) {
-    if (!env.CDN_ADMIN_TOKEN) return res.status(503).json({ error: 'Admin token not configured on server' });
+    if (!adminTokenReady(env)) return res.status(503).json({ error: 'Admin token not configured on server' });
     if (req.get('Authorization') !== `Bearer ${env.CDN_ADMIN_TOKEN}`) return res.status(401).json({ error: 'Unauthorized' });
     next();
   }
@@ -39,13 +68,26 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
       return res.status(503).set('Retry-After', '60').json({ error: 'File uploads and deletions are paused for maintenance. Please retry shortly.' });
     }
     activeWrites++;
-    try { await fn(req, res); } finally { activeWrites--; }
+    invalidateListing();
+    try { await fn(req, res); }
+    finally {
+      // Also invalidate on failure: a storage timeout may follow a committed write.
+      invalidateListing();
+      activeWrites--;
+    }
   });
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }).single('file');
   const multipart = (req, res) => new Promise((resolve, reject) => upload(req, res, err => err ? reject(err) : resolve()));
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.get('/cdn', (req, res) => res.send('Upload service running'));
+  app.get('/cdn/health', route(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!adminTokenReady(env)) return res.status(503).json({ error: 'CDN configuration is not ready' });
+    await storage.check();
+    const state = pauseState();
+    res.json({ status: 'ok', storage: storage.mode, paused: state.paused, drained: state.drained, release: releaseId(), processStartedAt });
+  }));
   app.get('/cdn/maintenance', admin, route(async (req, res) => {
     res.json({ ...pauseState(), activeWrites, storage: storage.mode });
   }));
@@ -89,8 +131,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
     res.json({ filename });
   }));
   app.get('/cdn/files', admin, route(async (req, res) => {
-    const files = await storage.list();
-    files.sort((a, b) => Date.parse(b.lastModified) - Date.parse(a.lastModified) || a.filename.localeCompare(b.filename));
+    const files = await listFiles();
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const totalPages = Math.ceil(files.length / 100);
     if (page > totalPages && totalPages > 0) return res.status(404).json({ error: `Invalid page number. Maximum page is ${totalPages}` });

@@ -1,0 +1,52 @@
+{
+  "runId": "43953172968",
+  "retainedAt": "2026-11-16T21:02:30.604Z",
+  "summary": {
+    "started": "2026-11-16T20:46:30.903Z",
+    "phase": "online-baseline-verified",
+    "files": 10402,
+    "sourceBytes": 34253603616,
+    "copied": 10402,
+    "reused": 0,
+    "verified": 10402,
+    "verifiedBytes": 34253603616,
+    "manifestSha256": "8bfb7970709760b94bab783ecf160835605e43ef6fc5e130fd3f9fbb123d0c4a",
+    "snapshotVerified": true,
+    "sourceManifestAfter": "8bfb7970709760b94bab783ecf160835605e43ef6fc5e130fd3f9fbb123d0c4a",
+    "destinationManifest": "8bfb7970709760b94bab783ecf160835605e43ef6fc5e130fd3f9fbb123d0c4a",
+    "sourceUnchanged": true,
+    "completed": "2026-11-16T21:01:42.717Z",
+    "productionCutover": false,
+    "finalDeltaRequired": true
+  },
+  "evidence": [
+    {
+      "name": "summary.json",
+      "blobName": "_migration/cdn/evidence/43953172968/summary.json",
+      "bytes": 649,
+      "sha256": "53746a718489bb811aa5395fdbd4fd1acbfe67d92c5132227d20af74f2cb99d0",
+      "etag": "\"0x8DF4424EDCEAA69\""
+    },
+    {
+      "name": "source-inventory.json",
+      "blobName": "_migration/cdn/evidence/43953172968/source-inventory.json",
+      "bytes": 2532657,
+      "sha256": "2b20733212f7f35f979dd21e6a2ae67f02021ef3bb256f7f09ba3981703c70db",
+      "etag": "\"0x8DF4424EDF9699F\""
+    },
+    {
+      "name": "verified.jsonl",
+      "blobName": "_migration/cdn/evidence/43953172968/verified.jsonl",
+      "bytes": 3170428,
+      "sha256": "e3ca982d61bd64f401bf730da1a03f1e45f585f7bdd448092ad5a224a849c21b",
+      "etag": "\"0x8DF4424EE239CA4\""
+    },
+    {
+      "name": "artifact.zip",
+      "blobName": "_migration/cdn/evidence/43953172968/artifact.zip",
+      "bytes": 1816927,
+      "sha256": "8c37ab1fb36024f2a4f30e4df513c7462476282c85bcdb1a0e19a22c7d7dc092",
+      "etag": "\"0x8DF4424EE3E1EAE\""
+    }
+  ]
+}

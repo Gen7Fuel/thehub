@@ -6,8 +6,15 @@ assumptions:
     status: supported
     claim: In the simulated ServerBusy scenario, CDN uploads, downloads, listings and deletions return retryable HTTP 503 without local file fallback.
     reason: The actual CDN HTTP routes and Azure SDK ran against the local Postman simulation; no HTTP client methods were stubbed in this check.
-    verification: On 2026-11-13 test/simulation.test.js passed; simulation request logs showed PUT, HEAD, GET list and DELETE with 503. This establishes caller behavior for these responses, not Azure availability or every failure mode.
+    verification: On 2026-11-13 test/simulation.test.js passed; simulation request logs showed PUT, HEAD, GET list and DELETE with 503. Rechecked after adding the Azure inventory cache; two sequential file-list failures produced two actual Azure list requests, so failed refreshes were retried rather than cached. This establishes caller behavior for these responses, not Azure availability or every failure mode.
     source: cdn/test/simulation.test.js; postman/mocks/azure-storage-outage/default.js
+    updated_at: '2026-11-13'
+  - id: pagination-inventory-reuse
+    status: supported
+    claim: The candidate CDN reuses an Azure inventory across Desk's paginated month enumeration, avoiding one full Azure scan per page.
+    reason: An isolated patched CDN used the real Azure account, and the unchanged Desk month route ran in a loopback-only harness with only authentication stubbed; the candidate logged one inventory refresh across both runs.
+    verification: On 2026-11-13 production page timings were 29.726 and 20.826 seconds with 102 pages total. The candidate month route completed in 21.559 seconds cold and 0.160 seconds warm, returning identical September/October/November counts for 10,138 files. Local HTTP tests cover overlap coalescing, expiry, mutation invalidation, in-flight refresh races and failures. These measurements apply to the candidate and test environment, not a guaranteed production latency; these are pre-deployment measurements.
+    source: cdn/test/cdn.test.js; docs/migration/cdn-listing-performance.md
     updated_at: '2026-11-13'
   - id: successful-azure-storage
     status: supported

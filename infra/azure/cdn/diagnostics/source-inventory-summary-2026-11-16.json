@@ -1,0 +1,16 @@
+{
+  "observedDuring": "2026-11-16 migration preparation, before online copy",
+  "account": "gen7fuel",
+  "container": "hub",
+  "prefix": "cdn/",
+  "fileCount": 10381,
+  "bytes": 34160428130,
+  "largestFileBytes": 17712756,
+  "filesWithSha256Metadata": 10381,
+  "filesWithOriginalDateMetadata": 10381,
+  "directoryMarkersExcluded": 1,
+  "months": { "2026-09": 4096, "2026-10": 4367, "2026-11": 1918 },
+  "sourceStorageMode": "azure",
+  "sourcePaused": false,
+  "scope": "Read-only source inventory; no original account configuration, content or writer state changed. This is an observation of a live system, not a final cutover snapshot."
+}

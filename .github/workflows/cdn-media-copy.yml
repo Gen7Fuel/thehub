@@ -1,0 +1,53 @@
+name: Copy and verify CDN media
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdn-media-copy
+  cancel-in-progress: false
+
+jobs:
+  copy:
+    if: github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: cdn-media-copy-v2
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - name: Install, audit and test
+        working-directory: cdn
+        run: |
+          npm ci
+          npm audit --omit=dev
+          npm test
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_MEDIA_COPY_CLIENT_ID }}
+          tenant-id: 21634e14-74fa-410a-8886-4c3f808b58cb
+          subscription-id: 29b24248-1990-4592-b25d-e6ee8e9db784
+      - name: Copy source CDN prefix and verify every destination byte
+        working-directory: cdn
+        env:
+          CDN_COPY_SOURCE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          CDN_COPY_REPORT_DIR: ${{ runner.temp }}/cdn-media-copy
+        run: node scripts/copy-media.cjs
+      - name: Publish aggregate result only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdn-media-copy-summary-${{ github.run_id }}
+          path: ${{ runner.temp }}/cdn-media-copy/public-summary.json
+          if-no-files-found: ignore
+          retention-days: 90

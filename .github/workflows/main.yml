@@ -56,6 +56,7 @@ jobs:
           BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
           AUTH_BACKEND_CHANGED: ${{ steps.filter.outputs.auth-backend }}
           CDN_CHANGED: ${{ steps.filter.outputs.cdn }}
+          CDN_DEPLOY_TARGET: ${{ vars.CDN_DEPLOY_TARGET }}
           FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
         run: |
           for service in backend auth-backend cdn frontend; do
@@ -71,6 +72,10 @@ jobs:
                 cdn) changed="$CDN_CHANGED" ;;
                 frontend) changed="$FRONTEND_CHANGED" ;;
               esac
+            fi
+            # Keep the existing VPS deployment until an explicit cutover.
+            if [ "$service" = "cdn" ] && [ "$CDN_DEPLOY_TARGET" = "azure" ]; then
+              changed=false
             fi
             echo "$service=$changed" >> "$GITHUB_OUTPUT"
           done
