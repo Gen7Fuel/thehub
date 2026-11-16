@@ -1,0 +1,20 @@
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/plan.json
+**/plan.txt
+**/crash.log
+**/crash.*.log
+**/*.tfvars
+**/*.tfvars.json
+**/backend.hcl
+**/backend.tf
+!**/backend.tf.example
+# Bootstrap is now provisioned; its credential-free backend is canonical.
+!bootstrap/backend.tf
+!media-storage/backend.tf
+!cdn/backend.tf
+!f1-east-probe/backend.tf
+!media-copy/backend.tf
+!**/.terraform.lock.hcl
