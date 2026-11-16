@@ -11,6 +11,7 @@ const { adminTokenReady, releaseId } = require('./runtime');
 
 function createApp({ env = process.env, storage = createStorage({ env }) } = {}) {
   const app = express();
+  const processStartedAt = new Date().toISOString();
   let activeWrites = 0;
   // Desk enumerates every 100-file page for months, search and backup. Azure
   // listing is account I/O, so share one inventory across those page requests.
@@ -85,7 +86,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
     if (!adminTokenReady(env)) return res.status(503).json({ error: 'CDN configuration is not ready' });
     await storage.check();
     const state = pauseState();
-    res.json({ status: 'ok', storage: storage.mode, paused: state.paused, drained: state.drained, release: releaseId() });
+    res.json({ status: 'ok', storage: storage.mode, paused: state.paused, drained: state.drained, release: releaseId(), processStartedAt });
   }));
   app.get('/cdn/maintenance', admin, route(async (req, res) => {
     res.json({ ...pauseState(), activeWrites, storage: storage.mode });

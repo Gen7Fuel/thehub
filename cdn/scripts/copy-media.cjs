@@ -127,6 +127,8 @@ async function main() {
   fs.mkdirSync(reportDir, { recursive: true });
   const lock = path.join(reportDir, 'running.lock');
   const handle = fs.openSync(lock, 'wx');
+  const statusBlob = destination.getBlockBlobClient('_migration/cdn/online-copy-status.json');
+  let progressQueue = Promise.resolve();
   let lastPauseCheck = 0;
   async function beforeWrite() {
     if (Date.now() - lastPauseCheck < 10000) return;
@@ -153,6 +155,12 @@ async function main() {
         console.log(JSON.stringify({ phase: summary.phase, files: summary.files, copied: summary.copied,
           reused: summary.reused, verified: summary.verified, verifiedBytes: summary.verifiedBytes,
           sourceUnchanged: summary.sourceUnchanged, failedFile: summary.failedFile, errorCode: summary.errorCode }));
+        const progress = Buffer.from(JSON.stringify({ ...summary, runId: process.env.GITHUB_RUN_ID,
+          commit: process.env.GITHUB_SHA, updatedAt: new Date().toISOString() }, null, 2));
+        progressQueue = progressQueue.then(() => statusBlob.uploadData(progress, {
+          blobHTTPHeaders: { blobContentType: 'application/json' }, metadata: { erpmediacopy: OWNER },
+        }));
+        return progressQueue;
       },
     });
     assert.equal(result.verified, result.files);

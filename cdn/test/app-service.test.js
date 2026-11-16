@@ -65,7 +65,9 @@ test('preview starts paused, persists the pause, and blocks writes until explici
   const health = await fetch(base + '/cdn/health');
   assert.equal(health.status, 200);
   assert.equal(health.headers.get('cache-control'), 'no-store');
-  assert.equal((await health.json()).paused, true);
+  const initialHealth = await health.json();
+  assert.equal(initialHealth.paused, true);
+  assert.ok(Number.isFinite(Date.parse(initialHealth.processStartedAt)));
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(dir, CONTROL_FILE), 'utf8')), { paused: true, drained: true });
   const upload = () => fetch(base + '/cdn/upload-base64', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"base64Data":"aGk=","fileName":"test.txt"}' });
   assert.equal((await upload()).status, 503);
