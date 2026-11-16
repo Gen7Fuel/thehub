@@ -1,0 +1,44 @@
+{
+  "runId": "43953172968",
+  "started": "2026-11-16T21:02:30.723Z",
+  "finished": "2026-11-16T21:02:59.391Z",
+  "success": true,
+  "listing": {
+    "files": 10402,
+    "bytes": 34253603616,
+    "months": {
+      "2026-11": 1939,
+      "2026-10": 4367,
+      "2026-09": 4096
+    },
+    "allNamesSizesDatesMatch": true
+  },
+  "sampleCount": 2,
+  "samples": [
+    {
+      "bytes": 3630598,
+      "contentType": "image/jpeg",
+      "checksumVerified": true,
+      "rangeVerified": true
+    },
+    {
+      "bytes": 4068585,
+      "contentType": "image/jpeg",
+      "checksumVerified": true,
+      "rangeVerified": true
+    }
+  ],
+  "finalHealth": {
+    "status": "ok",
+    "storage": "azure",
+    "paused": true,
+    "drained": true,
+    "release": "e517202260ca383bfe573dd46496d326c980ec5d",
+    "processStartedAt": "2026-11-16T20:13:18.032Z"
+  },
+  "privateEvidence": {
+    "blobName": "_migration/cdn/evidence/43953172968/api-verification.json",
+    "sha256": "ca6b70a0391f2a444677f079e70fab7e295ffc5988693d2d3f6ae8aeeb8085a3",
+    "etag": "\"0x8DF44267F3768E8\""
+  }
+}

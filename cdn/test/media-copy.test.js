@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
-const { copyAndVerify, OWNER } = require('../scripts/copy-media.cjs');
+const { copyAndVerify, publicSummary, OWNER } = require('../scripts/copy-media.cjs');
 
 function fixture() {
   let sequence = 0;
@@ -95,4 +95,13 @@ test('Blob copy refuses an empty source and stale destination objects without de
   const second = fixture(); await second.run(); second.sourceMap.delete('cdn/a.txt');
   await assert.rejects(second.run(), /stale migration object/);
   assert.equal(second.destinationMap.size, 2);
+});
+
+test('Public result omits media identifiers and unexpected private fields, including on failure', () => {
+  const result = publicSummary({ phase: 'failed', files: 2, verified: 1, verifiedBytes: 123,
+    failedFile: 'cdn/private-financial-image.jpg', sourceInventory: [{ name: 'private-financial-image.jpg' }],
+    error: { url: 'https://source/private-financial-image.jpg?sig=private-signature' },
+    accessToken: 'private-access-token' });
+  assert.equal(result.verified, 1); assert.equal(result.phase, 'failed');
+  assert.doesNotMatch(JSON.stringify(result), /financial-image|private-signature|private-access-token|sourceInventory|failedFile/);
 });

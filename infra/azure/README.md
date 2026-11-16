@@ -1,5 +1,14 @@
 # Gen7ERP Azure infrastructure: CDN review
 
+**Completed online baseline:** 10,402 files / 34,253,603,616 bytes were copied
+and independently SHA-256 verified in the new account. All three manifests
+match, and source ETags were stable during the run. All API pages, sizes,
+original dates and historical download samples passed. Full receipts remain
+private in Azure; only aggregate evidence belongs in this public repository.
+The patched preview is healthy, paused and drained. Production stays on the
+VPS/original account; final delta, producer/backup coordination and routing
+changes remain before cutover. See the [current CDN record](cdn/README.md).
+
 **Follow-up:** CDN dependency advisories are resolved (saved npm audit: zero).
 The patched preview is deployed and its pause state was verified across two
 observed new worker processes. The credential-free source, backends and provider

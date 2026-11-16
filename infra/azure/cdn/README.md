@@ -1,5 +1,40 @@
 # Native CDN App Service deployment
 
+## Completed online baseline: 16 November 2026, 21:01 UTC
+
+[Run 43953172968](https://github.com/Gen7Fuel/thehub/actions/runs/43953172968)
+copied and independently SHA-256 read-back verified **10,402 files /
+34,253,603,616 bytes** in 15 minutes 12 seconds. Source-snapshot, final-source
+and destination manifests match:
+`8bfb7970709760b94bab783ecf160835605e43ef6fc5e130fd3f9fbb123d0c4a`.
+Source ETags/inventory were unchanged during this interval. Source remains live;
+a final delta is still required before cutover.
+
+[Baseline/retention summary](diagnostics/media-copy-baseline-43953172968.json)
+records validation of all per-file receipts and private retention of inventory,
+receipts, summary and ZIP under the new container's
+`_migration/cdn/evidence/43953172968/` prefix. Their uploaded bytes were read back
+and hashed. [API validation](diagnostics/media-api-summary-43953172968.json)
+checked **all 105 listing pages**, every filename/size/original date, month totals,
+and historical JPEG download hashes/MIME types/ranges. Final health is Azure
+storage, release `e5172022`, paused and drained. No production switch occurred.
+
+The repository is public. Full inventories and real-file API reports stay in
+private Azure storage; GitHub gets only an allowlisted aggregate summary.
+Detailed local API records are Git-ignored. Private evidence download uses
+`media-copy-workflow.cjs download RUNID` with the operator's Azure sign-in.
+The former full GitHub artifact was removed after verified private retention.
+The migration identity now trusts only `cdn-media-copy-v2`, so older workflow
+source cannot authenticate and republish a full artifact. Both prior
+environments lost their migration client-ID variables.
+
+The original jobless run remains isolated and its standalone workflow disabled.
+Both enable flags are false; target stays `vps`. The patched **Azure preview /
+source lock** audits clean; the live VPS image was preserved. Current tests:
+31 passed, three gated skips. Infrastructure, helpers and aggregate records are
+published; original working-tree changes remain intact. See
+[remaining cutover preparation](../../../docs/migration/cdn-azure-cutover-preparation.md).
+
 ## Current follow-up: patched preview and online baseline
 
 Runtime dependencies were patched within their existing compatibility lines:
@@ -24,8 +59,8 @@ ETags and completion sidecars still match. November's later live inventory
 exceeds that earlier backup by 118 files, so fresh delta/backup coordination
 remains required before cutover. See [backup evidence](diagnostics/backup-verification-2026-11-16.json).
 
-The [online baseline workflow](https://github.com/Gen7Fuel/thehub/actions/runs/43949954335)
-has been dispatched and is queued at this update. Completion is not yet claimed.
+The first standalone run became orphaned. The completed replacement and final
+evidence policy are recorded above.
 See [copy design](../media-copy/README.md) and
 [cutover preparation](../../../docs/migration/cdn-azure-cutover-preparation.md).
 Both the current CDN Terraform definitions and the VPS workflow cutover guard

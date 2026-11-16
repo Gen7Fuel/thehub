@@ -1,6 +1,12 @@
 # Dedicated ERP media storage
 
-Status: infrastructure provisioned on 16 November 2026. No file copy,
+Latest follow-up: the verified online CDN baseline now contains 10,402 files /
+34,253,603,616 bytes in `hub/cdn/`. Per-file verification evidence is private
+under `hub/_migration/cdn/evidence/43953172968/`. Production remains on the old
+account and final delta/cutover are pending. Academy and backup prefixes were
+not copied. See the [current deployment record](../cdn/README.md).
+
+Historical provisioning status: infrastructure provisioned on 16 November 2026. No file copy,
 application-setting change, or storage cutover has run. Existing production
 remains on `gen7fuel/hub` in `EDW_GEN7FUEL`.
 

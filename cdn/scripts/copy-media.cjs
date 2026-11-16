@@ -27,6 +27,12 @@ function manifest(files) {
   for (const file of files) hash.update(JSON.stringify([file.name, file.size, file.originalmtime, file.sha256]) + '\n');
   return hash.digest('hex');
 }
+function publicSummary(summary) {
+  return { phase: summary.phase, files: summary.files, sourceBytes: summary.sourceBytes,
+    copied: summary.copied, verified: summary.verified, verifiedBytes: summary.verifiedBytes,
+    manifestSha256: summary.manifestSha256, sourceUnchanged: summary.sourceUnchanged,
+    snapshotVerified: summary.snapshotVerified, productionCutover: false, finalDeltaRequired: true };
+}
 async function properties(blob) {
   try { return await blob.getProperties(); }
   catch (error) { if (error.statusCode === 404) return null; throw error; }
@@ -124,6 +130,7 @@ async function main() {
   const destination = new BlobServiceClient('https://gen7erpmedia29b24248.blob.core.windows.net', new AzureCliCredential()).getContainerClient('hub');
   const reportDir = process.env.CDN_COPY_REPORT_DIR;
   assert.ok(reportDir, 'Separate report directory required');
+  assert.match(process.env.GITHUB_RUN_ID || '', /^\d+$/, 'GitHub run ID required for private evidence retention');
   fs.mkdirSync(reportDir, { recursive: true });
   const lock = path.join(reportDir, 'running.lock');
   const handle = fs.openSync(lock, 'wx');
@@ -152,9 +159,10 @@ async function main() {
       report: (summary, files) => {
         if (files) fs.writeFileSync(path.join(reportDir, 'source-inventory.json'), JSON.stringify(files.map(({ metadata, ...file }) => file)));
         fs.writeFileSync(path.join(reportDir, 'summary.json'), JSON.stringify(summary, null, 2));
+        fs.writeFileSync(path.join(reportDir, 'public-summary.json'), JSON.stringify(publicSummary(summary), null, 2));
         console.log(JSON.stringify({ phase: summary.phase, files: summary.files, copied: summary.copied,
           reused: summary.reused, verified: summary.verified, verifiedBytes: summary.verifiedBytes,
-          sourceUnchanged: summary.sourceUnchanged, failedFile: summary.failedFile, errorCode: summary.errorCode }));
+          sourceUnchanged: summary.sourceUnchanged, errorCode: summary.errorCode }));
         const progress = Buffer.from(JSON.stringify({ ...summary, runId: process.env.GITHUB_RUN_ID,
           commit: process.env.GITHUB_SHA, updatedAt: new Date().toISOString() }, null, 2));
         progressQueue = progressQueue.then(() => statusBlob.uploadData(progress, {
@@ -164,11 +172,32 @@ async function main() {
       },
     });
     assert.equal(result.verified, result.files);
-  } finally { fs.closeSync(handle); fs.unlinkSync(lock); }
+  } finally {
+    try {
+      const names = ['source-inventory.json', 'verified.jsonl', 'summary.json'].filter(name => fs.existsSync(path.join(reportDir, name)));
+      if (names.length) {
+        const archive = path.join(reportDir, 'artifact.zip');
+        const zipped = require('node:child_process').spawnSync('zip', ['-j', archive, ...names.map(name => path.join(reportDir, name))], { encoding: 'utf8', timeout: 60000 });
+        assert.equal(zipped.status, 0, 'Private evidence archive failed');
+        for (const name of [...names, 'artifact.zip']) {
+          const data = fs.readFileSync(path.join(reportDir, name));
+          const checksum = crypto.createHash('sha256').update(data).digest('hex');
+          const blob = destination.getBlockBlobClient(`_migration/cdn/evidence/${process.env.GITHUB_RUN_ID}/${name}`);
+          const existing = await properties(blob);
+          if (existing) { assert.equal(existing.metadata?.sha256, checksum); assert.equal(existing.contentLength, data.length); }
+          const uploaded = existing || await blob.uploadData(data, { conditions: { ifNoneMatch: '*' },
+            metadata: { erpmediacopy: OWNER, sha256: checksum },
+            blobHTTPHeaders: { blobContentType: name.endsWith('.zip') ? 'application/zip' : name.endsWith('.jsonl') ? 'application/x-ndjson' : 'application/json' } });
+          const checked = await blob.downloadToBuffer(0, undefined, { conditions: { ifMatch: uploaded.etag } });
+          assert.equal(crypto.createHash('sha256').update(checked).digest('hex'), checksum);
+        }
+      }
+    } finally { fs.closeSync(handle); fs.unlinkSync(lock); }
+  }
 }
 if (require.main === module) main().catch(error => {
   // Raw SDK exceptions can contain signed URLs. Never print them.
   console.error(JSON.stringify({ operation: 'cdn-media-copy', errorCode: error.code || error.name,
-    file: error.file, success: false })); process.exitCode = 1;
+    success: false })); process.exitCode = 1;
 });
-module.exports = { copyAndVerify, inventory, manifest, OWNER };
+module.exports = { copyAndVerify, inventory, manifest, publicSummary, OWNER };

@@ -19,14 +19,23 @@ not be represented as a final frozen recovery point.
 
 ## Online copy evidence required
 
-Use the manually gated [media-copy workflow](../../.github/workflows/cdn-media-copy.yml).
+Use the manually gated [Azure workflow](../../.github/workflows/cdn-azure.yml)
+with dispatch input `mode=media-copy` and environment `cdn-media-copy-v2`.
 Require a successful summary, a verified receipt for every inventory file,
 matching source-snapshot and destination manifests, and full destination-byte
 SHA-256 readback. Review `sourceUnchanged`; even true only describes that run's
 observed interval. New changes after it still require a final delta.
-The source account and all non-CDN prefixes remain untouched. Keep the workflow
-disabled after the authorized run; preserve the report artifact outside GitHub's
-90-day artifact retention before relying on it as a permanent migration record.
+The source account and all non-CDN prefixes remain untouched. Keep dispatch
+disabled after each authorized run. Full inventories and receipts stay in
+private Azure storage; this public GitHub repository gets aggregate results only.
+
+The completed baseline is 10,402 files / 34,253,603,616 bytes. Source and
+destination manifests match, source ETags were unchanged during the run, and
+all 105 API listing pages plus historical download samples passed. Full readback
+took about 15 minutes with four workers; do not promise a fixed maintenance
+duration. Current source remains live and a final delta is still required.
+Large-image conversion memory and production throughput remain unproven by
+the tiny-format upload checks and streaming historical-read checks.
 
 ## Producers and routing to review before the maintenance window
 

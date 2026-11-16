@@ -92,7 +92,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.mode == 'media-copy' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    environment: cdn-media-copy
+    environment: cdn-media-copy-v2
     permissions:
       contents: read
       id-token: write
@@ -120,11 +120,11 @@ jobs:
           CDN_COPY_SOURCE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
           CDN_COPY_REPORT_DIR: ${{ runner.temp }}/cdn-media-copy
         run: node scripts/copy-media.cjs
-      - name: Preserve sanitized inventory and verification evidence
+      - name: Publish aggregate result only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cdn-media-copy-${{ github.run_id }}
-          path: ${{ runner.temp }}/cdn-media-copy/
+          name: cdn-media-copy-summary-${{ github.run_id }}
+          path: ${{ runner.temp }}/cdn-media-copy/public-summary.json
           if-no-files-found: ignore
           retention-days: 90

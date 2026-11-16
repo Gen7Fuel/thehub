@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 async function main() {
   const [action = 'status', argument] = process.argv.slice(2);
-  if (!['configure', 'dispatch', 'disable', 'status', 'inspect', 'cancel', 'force-cancel', 'download'].includes(action)) throw new Error('Invalid action');
+  if (!['configure', 'dispatch', 'disable', 'status', 'inspect', 'cancel', 'force-cancel', 'download', 'remove-public-artifact'].includes(action)) throw new Error('Invalid action');
   const auth = spawnSync('git', ['credential', 'fill'], { input: 'protocol=https\nhost=github.com\n\n',
     encoding: 'utf8', timeout: 45000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'Never' } });
   if (auth.status !== 0) throw new Error('GitHub authentication failed');
@@ -28,6 +28,7 @@ async function main() {
   if (target.value !== 'vps') throw new Error('Production target must remain vps');
   async function variable(prefix, name, value) {
     const existing = await api(prefix + '/' + name, 'GET', undefined, true);
+    if (existing?.value === value) return;
     await api(prefix + (existing ? '/' + name : ''), existing ? 'PATCH' : 'POST', { name, value });
   }
   if (action === 'configure') {
@@ -40,18 +41,21 @@ async function main() {
     const trust = spawnSync('C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\python.exe', ['-IBm', 'azure.cli',
       'rest', '--method', 'get', '--url', 'https://management.azure.com/subscriptions/29b24248-1990-4592-b25d-e6ee8e9db784/resourceGroups/Gen7ERP/providers/Microsoft.ManagedIdentity/userAssignedIdentities/gen7erp-media-copy/federatedIdentityCredentials/github-media-copy?api-version=2023-01-31',
       '--query', 'properties.subject', '--output', 'json'], { encoding: 'utf8', timeout: 45000 });
-    if (trust.status !== 0 || JSON.parse(trust.stdout) !== 'repo:Gen7Fuel/thehub:environment:cdn-media-copy') throw new Error('Old environment must no longer have migration federation');
-    const environment = await api('/environments/cdn-media-copy', 'GET', undefined, true);
+    if (trust.status !== 0 || JSON.parse(trust.stdout) !== 'repo:Gen7Fuel/thehub:environment:cdn-media-copy-v2') throw new Error('Old environments must no longer have migration federation');
+    const environment = await api('/environments/cdn-media-copy-v2', 'GET', undefined, true);
     if (!environment) {
-      await api('/environments/cdn-media-copy', 'PUT', { deployment_branch_policy: { protected_branches: false, custom_branch_policies: true } });
-      await api('/environments/cdn-media-copy/deployment-branch-policies', 'POST', { name: 'main', type: 'branch' });
+      await api('/environments/cdn-media-copy-v2', 'PUT', { deployment_branch_policy: { protected_branches: false, custom_branch_policies: true } });
+      await api('/environments/cdn-media-copy-v2/deployment-branch-policies', 'POST', { name: 'main', type: 'branch' });
     }
-    const branches = await api('/environments/cdn-media-copy/deployment-branch-policies');
+    const branches = await api('/environments/cdn-media-copy-v2/deployment-branch-policies');
     if (branches.branch_policies?.length !== 1 || branches.branch_policies[0].name !== 'main' || branches.branch_policies[0].type !== 'branch') throw new Error('Migration environment must allow only main');
-    await variable('/environments/cdn-media-copy/variables', 'AZURE_MEDIA_COPY_CLIENT_ID', JSON.parse(result.stdout));
-    const oldVariable = await api('/environments/cdn-production/variables/AZURE_MEDIA_COPY_CLIENT_ID', 'GET', undefined, true);
-    if (oldVariable) await api('/environments/cdn-production/variables/AZURE_MEDIA_COPY_CLIENT_ID', 'DELETE');
-    await api('/actions/workflows/cdn-media-copy.yml/disable', 'PUT');
+    await variable('/environments/cdn-media-copy-v2/variables', 'AZURE_MEDIA_COPY_CLIENT_ID', JSON.parse(result.stdout));
+    for (const oldEnvironment of ['cdn-production', 'cdn-media-copy']) {
+      const oldVariable = await api(`/environments/${oldEnvironment}/variables/AZURE_MEDIA_COPY_CLIENT_ID`, 'GET', undefined, true);
+      if (oldVariable) await api(`/environments/${oldEnvironment}/variables/AZURE_MEDIA_COPY_CLIENT_ID`, 'DELETE');
+    }
+    const legacyWorkflow = await api('/actions/workflows/cdn-media-copy.yml');
+    if (legacyWorkflow.state === 'active') await api('/actions/workflows/cdn-media-copy.yml/disable', 'PUT');
     await variable('/actions/variables', 'CDN_MEDIA_COPY_ENABLED', 'false');
   }
   if (action === 'dispatch') {
@@ -95,18 +99,35 @@ async function main() {
   }
   if (action === 'download') {
     if (!/^\d+$/.test(argument || '')) throw new Error('Run ID required');
-    const artifacts = await api(`/actions/runs/${argument}/artifacts`);
-    const artifact = artifacts.artifacts.find(item => item.name === 'cdn-media-copy-' + argument);
-    if (!artifact || artifact.expired) throw new Error('Evidence artifact unavailable');
-    const response = await fetch(artifact.archive_download_url, { headers, signal: AbortSignal.timeout(60000) });
-    if (!response.ok) throw new Error('Evidence download failed');
+    const result = spawnSync('C:\\Program Files\\Microsoft SDKs\\Azure\\CLI2\\python.exe', ['-IBm', 'azure.cli',
+      'account', 'get-access-token', '--subscription', '29b24248-1990-4592-b25d-e6ee8e9db784',
+      '--resource', 'https://storage.azure.com/', '--output', 'json'], { encoding: 'utf8', timeout: 45000 });
+    if (result.status !== 0) throw new Error('Azure authentication failed');
+    const auth = JSON.parse(result.stdout);
+    const { BlobServiceClient } = require('../../../../cdn/node_modules/@azure/storage-blob');
+    const client = new BlobServiceClient('https://gen7erpmedia29b24248.blob.core.windows.net', {
+      getToken: async () => ({ token: auth.accessToken, expiresOnTimestamp: Number(auth.expires_on) * 1000 }),
+    });
+    const evidence = await client.getContainerClient('hub').getBlobClient(`_migration/cdn/evidence/${argument}/artifact.zip`).downloadToBuffer();
     const destination = path.join(require('node:os').tmpdir(), 'cdn-media-copy-' + argument + '.zip');
-    fs.writeFileSync(destination, Buffer.from(await response.arrayBuffer()));
-    console.log(JSON.stringify({ evidenceZip: destination, bytes: fs.statSync(destination).size }));
+    fs.writeFileSync(destination, evidence);
+    console.log(JSON.stringify({ evidenceZip: destination, bytes: fs.statSync(destination).size, source: 'private-azure' }));
     return;
   }
+  if (action === 'remove-public-artifact') {
+    if (!/^\d+$/.test(argument || '')) throw new Error('Run ID required');
+    const retained = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../diagnostics/media-copy-baseline-' + argument + '.json'), 'utf8'));
+    if (retained.runId !== argument || retained.summary.phase !== 'online-baseline-verified' || !retained.evidence.some(item => item.name === 'artifact.zip')) throw new Error('Verified private evidence copy is required');
+    const artifacts = await api(`/actions/runs/${argument}/artifacts`);
+    const artifact = artifacts.artifacts.find(item => item.name === 'cdn-media-copy-' + argument);
+    if (artifact) await api(`/actions/artifacts/${artifact.id}`, 'DELETE');
+    const remaining = await api(`/actions/runs/${argument}/artifacts`);
+    if (remaining.artifacts.some(item => item.name === 'cdn-media-copy-' + argument)) throw new Error('Artifact deletion not confirmed');
+    console.log(JSON.stringify({ runId: argument, publicArtifactRemoved: true, privateEvidenceRetained: true })); return;
+  }
   const runs = await api('/actions/workflows/cdn-azure.yml/runs?per_page=10', 'GET', undefined, true);
-  const output = { action, target: target.value,
+  const repository = await api('');
+  const output = { action, repositoryPrivate: repository.private, target: target.value,
     enabled: (await api('/actions/variables/CDN_MEDIA_COPY_ENABLED', 'GET', undefined, true))?.value === 'true', runs: [] };
   for (const run of (runs?.workflow_runs || []).filter(run => run.display_title === 'Copy and verify CDN media').slice(0, 3)) {
     const jobs = await api(`/actions/runs/${run.id}/jobs`);
@@ -115,8 +136,8 @@ async function main() {
       createdAt: run.created_at, updatedAt: run.updated_at,
       pendingEnvironments: (pending || []).map(item => item.environment?.name),
       jobs: jobs.jobs.map(job => ({ name: job.name, status: job.status, conclusion: job.conclusion,
-        steps: job.steps?.map(step => ({ name: step.name, status: step.status, conclusion: step.conclusion })) })) });
+        steps: job.steps?.filter(step => step.status !== 'completed' || step.conclusion !== 'success').map(step => ({ name: step.name, status: step.status, conclusion: step.conclusion })) })) });
   }
   console.log(JSON.stringify(output, null, 2));
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch(error => { console.error(error.code || error.message); process.exitCode = 1; });
