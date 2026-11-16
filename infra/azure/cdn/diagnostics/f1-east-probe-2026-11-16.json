@@ -1,0 +1,69 @@
+{
+  "started": "2026-11-16T19:25:12.131Z",
+  "finished": "2026-11-16T19:25:15.196Z",
+  "subscription": "29b24248-1990-4592-b25d-e6ee8e9db784",
+  "scope": "/subscriptions/29b24248-1990-4592-b25d-e6ee8e9db784/resourceGroups/Gen7ERP/providers/Microsoft.Web/serverfarms/gen7erp-cdn-f1-east-probe",
+  "clientRequestId": "9de9c5ac-1fc1-41ee-a2aa-c0f5ac3e6c84",
+  "apiVersion": "2025-03-01",
+  "request": {
+    "location": "canadaeast",
+    "kind": "linux",
+    "sku": {
+      "name": "F1",
+      "tier": "Free",
+      "size": "F1",
+      "family": "F",
+      "capacity": 1
+    },
+    "properties": {
+      "reserved": true,
+      "zoneRedundant": false,
+      "perSiteScaling": false
+    },
+    "tags": {
+      "application": "Gen7ERP",
+      "component": "cdn-f1-probe",
+      "environment": "diagnostic",
+      "managed_by": "Terraform"
+    }
+  },
+  "quotaBefore": [
+    {
+      "name": "Total Regional VMs",
+      "used": 0,
+      "limit": 30
+    }
+  ],
+  "quotaAfter": [
+    {
+      "name": "Total Regional VMs",
+      "used": 0,
+      "limit": 31
+    }
+  ],
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Mon, 16 Nov 2026 19:25:15 GMT",
+      "x-ms-request-id": "07c6f0b0-f00b-49c1-aeae-0c84e1643c99",
+      "x-ms-correlation-request-id": "f59e1eb4-b886-467d-8d9d-88937c35e82b",
+      "x-ms-routing-request-id": "CANADACENTRAL:20261116T192515Z:f59e1eb4-b886-467d-8d9d-88937c35e82b",
+      "azure-asyncoperation": null,
+      "location": null
+    },
+    "resource": {
+      "id": "/subscriptions/29b24248-1990-4592-b25d-e6ee8e9db784/resourceGroups/Gen7ERP/providers/Microsoft.Web/serverfarms/gen7erp-cdn-f1-east-probe",
+      "kind": "linux",
+      "location": "canadaeast",
+      "sku": {
+        "name": "U13",
+        "tier": "LinuxFree",
+        "size": "U13",
+        "family": "U",
+        "capacity": 1
+      },
+      "provisioningState": "Succeeded"
+    }
+  },
+  "nextAction": "Verify the empty Free plan and record it in its own Terraform state; do not create an app"
+}

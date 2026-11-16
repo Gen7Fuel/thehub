@@ -1,0 +1,96 @@
+{
+  "started": "2026-11-16T17:25:04.556Z",
+  "finished": "2026-11-16T17:25:06.985Z",
+  "subscription": "29b24248-1990-4592-b25d-e6ee8e9db784",
+  "scope": "/subscriptions/29b24248-1990-4592-b25d-e6ee8e9db784/resourceGroups/Gen7ERP/providers/Microsoft.Web/serverfarms/gen7erp-cdn-prod",
+  "clientRequestId": "64a40107-d92b-44d5-9b45-ecfbe7a63503",
+  "apiVersion": "2025-03-01",
+  "request": {
+    "location": "canadacentral",
+    "kind": "linux",
+    "sku": {
+      "name": "B1",
+      "tier": "Basic",
+      "size": "B1",
+      "family": "B",
+      "capacity": 1
+    },
+    "properties": {
+      "reserved": true,
+      "zoneRedundant": false,
+      "perSiteScaling": false
+    },
+    "tags": {
+      "application": "Gen7ERP",
+      "component": "cdn",
+      "environment": "production",
+      "managed_by": "Terraform"
+    }
+  },
+  "quotaBefore": [
+    {
+      "name": "B1 VMs",
+      "used": 0,
+      "limit": 30
+    },
+    {
+      "name": "Total Regional VMs",
+      "used": 0,
+      "limit": 30
+    }
+  ],
+  "quotaAfter": [
+    {
+      "name": "B1 VMs",
+      "used": 0,
+      "limit": 30
+    },
+    {
+      "name": "Total Regional VMs",
+      "used": 0,
+      "limit": 30
+    }
+  ],
+  "response": {
+    "status": 401,
+    "headers": {
+      "date": "Mon, 16 Nov 2026 17:25:06 GMT",
+      "x-ms-request-id": "8ded244b-503a-49d0-8677-c128951dbfd9",
+      "x-ms-correlation-request-id": "8ded244b-503a-49d0-8677-c128951dbfd9",
+      "x-ms-routing-request-id": "CANADACENTRAL:20261116T172506Z:8ded244b-503a-49d0-8677-c128951dbfd9",
+      "azure-asyncoperation": null,
+      "location": null
+    },
+    "error": {
+      "Code": "Unauthorized",
+      "Message": "Operation cannot be completed without additional quota. \r\nAdditional details - Location:  \r\nCurrent Limit (B1 VMs): 0 \r\nCurrent Usage: 0\r\nAmount required for this deployment (B1 VMs): 1 \r\n(Minimum) New Limit that you should request to enable this deployment: 1. \r\nNote that if you experience multiple scaling operations failing (in addition to this one) and need to accommodate the aggregate quota requirements of these operations, you will need to request a higher quota limit than the one currently displayed.",
+      "Target": null,
+      "Details": [
+        {
+          "Message": "Operation cannot be completed without additional quota. \r\nAdditional details - Location:  \r\nCurrent Limit (B1 VMs): 0 \r\nCurrent Usage: 0\r\nAmount required for this deployment (B1 VMs): 1 \r\n(Minimum) New Limit that you should request to enable this deployment: 1. \r\nNote that if you experience multiple scaling operations failing (in addition to this one) and need to accommodate the aggregate quota requirements of these operations, you will need to request a higher quota limit than the one currently displayed."
+        },
+        {
+          "Code": "Unauthorized"
+        },
+        {
+          "ErrorEntity": {
+            "ExtendedCode": "70007",
+            "MessageTemplate": "Operation cannot be completed without additional quota. \r\nAdditional details - Location: {0} \r\nCurrent Limit ({1}): {2} \r\nCurrent Usage: {3}\r\nAmount required for this deployment ({1}): {4} \r\n(Minimum) New Limit that you should request to enable this deployment: {5}. \r\nNote that if you experience multiple scaling operations failing (in addition to this one) and need to accommodate the aggregate quota requirements of these operations, you will need to request a higher quota limit than the one currently displayed.",
+            "Parameters": [
+              "",
+              "B1 VMs",
+              "0",
+              "0",
+              "1",
+              "1"
+            ],
+            "Code": "Unauthorized",
+            "Message": "Operation cannot be completed without additional quota. \r\nAdditional details - Location:  \r\nCurrent Limit (B1 VMs): 0 \r\nCurrent Usage: 0\r\nAmount required for this deployment (B1 VMs): 1 \r\n(Minimum) New Limit that you should request to enable this deployment: 1. \r\nNote that if you experience multiple scaling operations failing (in addition to this one) and need to accommodate the aggregate quota requirements of these operations, you will need to request a higher quota limit than the one currently displayed."
+          }
+        }
+      ],
+      "Innererror": null
+    }
+  },
+  "nextAction": "Investigate discrepancy with these request IDs; no alternative region/SKU or quota change attempted"
+}

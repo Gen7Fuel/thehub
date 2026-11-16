@@ -1,0 +1,26 @@
+{
+  "started": "2026-11-16T20:07:41.802Z",
+  "release": "e517202260ca383bfe573dd46496d326c980ec5d",
+  "checks": [
+    {
+      "state": "unpaused",
+      "before": "2026-11-16T20:08:37.795Z",
+      "after": "2026-11-16T20:10:55.090Z"
+    },
+    {
+      "state": "paused-drained",
+      "before": "2026-11-16T20:10:55.090Z",
+      "after": "2026-11-16T20:13:18.032Z"
+    }
+  ],
+  "finalHealth": {
+    "status": "ok",
+    "storage": "azure",
+    "paused": true,
+    "drained": true,
+    "release": "e517202260ca383bfe573dd46496d326c980ec5d",
+    "processStartedAt": "2026-11-16T20:13:18.032Z"
+  },
+  "finished": "2026-11-16T20:13:28.168Z",
+  "success": true
+}

@@ -1,0 +1,28 @@
+{
+  "started": "2026-11-16T19:45:48.092Z",
+  "app": "gen7erp-cdn-prod-29b24248",
+  "base": "https://gen7erp-cdn-prod-29b24248.azurewebsites.net",
+  "expectedRelease": "3c23d057d40a6e41ada44caf7e9d62bd4504001c",
+  "checks": [
+    "Initial release, managed-identity readiness, pause and admin authorization verified",
+    "All 101 temporary files deleted; destination inventory empty",
+    "Persistent pause survives actual restart; preview ends paused and drained"
+  ],
+  "createdFiles": [
+    "ea10ed5a-00a0-4a25-a2e4-aff96bcf4113.txt"
+  ],
+  "deletedFiles": [
+    "ea10ed5a-00a0-4a25-a2e4-aff96bcf4113.txt"
+  ],
+  "failure": "GET /cdn/download/ea10ed5a-00a0-4a25-a2e4-aff96bcf4113.txt\n\n200 !== 304\n",
+  "finalHealth": {
+    "status": "ok",
+    "storage": "azure",
+    "paused": true,
+    "drained": true,
+    "release": "3c23d057d40a6e41ada44caf7e9d62bd4504001c"
+  },
+  "finished": "2026-11-16T19:47:31.141Z",
+  "success": false,
+  "verificationHarnessNote": "The first conditional request used fetch cache=no-store, which sends Cache-Control: no-cache and forces a full 200 response. Retest uses explicit max-age=0. The fixed-count cleanup message above was a helper reporting bug: createdFiles and deletedFiles correctly show one file. A separate labeled record preserves the retest."
+}

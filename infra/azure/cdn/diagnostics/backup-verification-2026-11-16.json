@@ -1,0 +1,33 @@
+{
+  "observedAt": "2026-11-16T20:06:55.355Z",
+  "workerPhase": "succeeded",
+  "lastScheduledDate": "2026-11-16",
+  "completedAt": "2026-11-16T15:29:59.447Z",
+  "consecutiveFailures": 0,
+  "results": [
+    {
+      "month": "2026-10",
+      "fileCount": 4367,
+      "sourceBytes": 14100860371,
+      "archiveBytes": 14105845760,
+      "sha256": "78ce2b3ae6e7ea33ba7da9d4547ac2f4c7044f57502ca07e735b3142703de1fc",
+      "verifiedAt": "2026-11-16T15:11:46.397Z",
+      "currentArchiveEtagMatchesVerifiedResult": true,
+      "completionSidecarChecksumMatches": true
+    },
+    {
+      "month": "2026-11",
+      "fileCount": 1800,
+      "sourceBytes": 5904534599,
+      "archiveBytes": 5906607104,
+      "sha256": "3c3f13e73320881135969e1b0b198dc2b5cc2ba3cfe04e9df2bbec651cbefaf1",
+      "verifiedAt": "2026-11-16T15:29:58.600Z",
+      "currentArchiveEtagMatchesVerifiedResult": true,
+      "completionSidecarChecksumMatches": true
+    }
+  ],
+  "verificationScope": "The worker previously read back and SHA-256 verified the full uploaded TARs. This follow-up checked unchanged archive ETags and matching completion sidecars; it did not redownload or restore both full archives.",
+  "liveSourceNovemberCountAtInventory": 1918,
+  "latestSourceChangesCoveredByThisBackup": false,
+  "freshDeltaAndBackupCoordinationRequiredBeforeCutover": true
+}
