@@ -15,7 +15,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 180
-    environment: cdn-production
+    environment: cdn-media-copy
     permissions:
       contents: read
       id-token: write

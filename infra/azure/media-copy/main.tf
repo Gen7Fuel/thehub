@@ -27,7 +27,7 @@ resource "azurerm_federated_identity_credential" "github" {
   user_assigned_identity_id = azurerm_user_assigned_identity.migration.id
   issuer                    = "https://token.actions.githubusercontent.com"
   audience                  = ["api://AzureADTokenExchange"]
-  subject                   = "repo:Gen7Fuel/thehub:environment:cdn-production"
+  subject                   = "repo:Gen7Fuel/thehub:environment:cdn-media-copy"
 }
 
 resource "azurerm_role_assignment" "destination" {

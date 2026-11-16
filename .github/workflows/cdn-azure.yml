@@ -1,4 +1,5 @@
 name: Deploy CDN to Azure
+run-name: ${{ inputs.mode == 'media-copy' && 'Copy and verify CDN media' || 'Deploy CDN to Azure' }}
 
 on:
   push:
@@ -7,6 +8,13 @@ on:
       - 'cdn/**'
       - '.github/workflows/cdn-azure.yml'
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Run a paused preview deployment or the online media baseline
+        type: choice
+        required: true
+        default: preview
+        options: [preview, media-copy]
 
 permissions:
   contents: read
@@ -17,7 +25,7 @@ concurrency:
 
 jobs:
   package:
-    if: github.ref == 'refs/heads/main' && (vars.CDN_DEPLOY_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && vars.CDN_AZURE_PREVIEW_ENABLED == 'true'))
+    if: inputs.mode != 'media-copy' && github.ref == 'refs/heads/main' && (vars.CDN_DEPLOY_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && vars.CDN_AZURE_PREVIEW_ENABLED == 'true'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,3 +87,44 @@ jobs:
           CDN_EXPECT_RELEASE: ${{ github.sha }}
           CDN_EXPECT_PAUSED: ${{ vars.CDN_DEPLOY_TARGET != 'azure' && 'true' || '' }}
         run: node cdn/scripts/verify-deployment.cjs
+
+  media-copy:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'media-copy' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: cdn-media-copy
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - name: Install, audit and test
+        working-directory: cdn
+        run: |
+          npm ci
+          npm audit --omit=dev
+          npm test
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_MEDIA_COPY_CLIENT_ID }}
+          tenant-id: 21634e14-74fa-410a-8886-4c3f808b58cb
+          subscription-id: 29b24248-1990-4592-b25d-e6ee8e9db784
+      - name: Copy source CDN prefix and verify every destination byte
+        working-directory: cdn
+        env:
+          CDN_COPY_SOURCE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+          CDN_COPY_REPORT_DIR: ${{ runner.temp }}/cdn-media-copy
+        run: node scripts/copy-media.cjs
+      - name: Preserve sanitized inventory and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdn-media-copy-${{ github.run_id }}
+          path: ${{ runner.temp }}/cdn-media-copy/
+          if-no-files-found: ignore
+          retention-days: 90
