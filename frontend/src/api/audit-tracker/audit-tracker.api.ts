@@ -6,6 +6,8 @@ import type {
   AuditTrackerActivity,
   AuditTrackerActivityReadModel,
   AuditTrackerEscalationTarget,
+  AuditTrackerDepartmentOption,
+  AuditTrackerAssignmentCandidate,
   AuditTrackerIssue,
   AuditTrackerHistoricalActivityReadModel,
   AuditTrackerIssueHistoryReadModel,
@@ -14,12 +16,56 @@ import type {
 } from './audit-tracker.types'
 
 export const auditTrackerApi = {
+  async departmentIssues(query: MyIssuesQuery, options: RequestOptions): Promise<MyIssuesReadModel> {
+    return (await apiClient.get('/station-audits/tracker/department-issues', { ...requestConfig(options), params: query })).data
+  },
+  async departmentIssue(issueId: string, options: RequestOptions): Promise<{ issue: AuditTrackerIssue }> {
+    return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}`, requestConfig(options))).data
+  },
+  async departmentIssueActivities(issueId: string, options: RequestOptions): Promise<AuditTrackerActivityReadModel> {
+    return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}/activities`, { ...requestConfig(options), params: { limit: 100 } })).data
+  },
+  async addDepartmentIssueActivity(issueId: string, input: AddAuditTrackerActivityInput, options: RequestOptions): Promise<{ activity: AuditTrackerActivity }> {
+    return (await apiClient.post(`/station-audits/tracker/department-issues/${issueId}/activities`, input, requestConfig(options))).data
+  },
+  async updateDepartmentIssueStatus(issueId: string, input: { status: string; comment: string }, options: RequestOptions): Promise<{ issue: AuditTrackerIssue }> {
+    return (await apiClient.post(`/station-audits/tracker/department-issues/${issueId}/status`, input, requestConfig(options))).data
+  },
+  async departmentOptions(issueId: string, options: RequestOptions): Promise<{ departments: AuditTrackerDepartmentOption[] }> {
+    return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}/department-options`, requestConfig(options))).data
+  },
+  async updateDepartmentIssuePriority(issueId: string, priority: string, options: RequestOptions): Promise<{ issue: AuditTrackerIssue }> {
+    return (await apiClient.post(`/station-audits/tracker/department-issues/${issueId}/priority`, { priority }, requestConfig(options))).data
+  },
+  async changeDepartmentIssueDepartment(issueId: string, input: { department: string; comment: string }, options: RequestOptions): Promise<{ issue: AuditTrackerIssue }> {
+    return (await apiClient.post(`/station-audits/tracker/department-issues/${issueId}/department`, input, requestConfig(options))).data
+  },
+  async assignmentOptions(issueId: string, options: RequestOptions): Promise<{ users: AuditTrackerAssignmentCandidate[] }> {
+    return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}/assignment-options`, requestConfig(options))).data
+  },
+  async changeDepartmentIssueAssignments(issueId: string, assignments: Array<{ user: string; role: 'owner' | 'collaborator' }>, options: RequestOptions): Promise<{ issue: AuditTrackerIssue }> {
+    return (await apiClient.post(`/station-audits/tracker/department-issues/${issueId}/assignments`, { assignments }, requestConfig(options))).data
+  },
+  async departmentIssueHistory(issueId: string, options: RequestOptions): Promise<AuditTrackerIssueHistoryReadModel> {
+    return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}/history`, requestConfig(options))).data
+  },
+  async historicalDepartmentIssueActivities(issueId: string, historicalIssueId: string, options: RequestOptions): Promise<AuditTrackerHistoricalActivityReadModel> {
+    return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}/history/${historicalIssueId}/activities`, requestConfig(options))).data
+  },
   async myIssues(query: MyIssuesQuery, options: RequestOptions): Promise<MyIssuesReadModel> {
     return (
       await apiClient.get('/station-audits/tracker/my-issues', {
         ...requestConfig(options),
         params: query,
       })
+    ).data
+  },
+  async myIssue(issueId: string, options: RequestOptions): Promise<{ issue: AuditTrackerIssue }> {
+    return (
+      await apiClient.get(
+        `/station-audits/tracker/my-issues/${issueId}`,
+        requestConfig(options),
+      )
     ).data
   },
   async issueActivities(issueId: string, options: RequestOptions): Promise<AuditTrackerActivityReadModel> {

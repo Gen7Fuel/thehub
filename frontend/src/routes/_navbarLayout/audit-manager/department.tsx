@@ -15,7 +15,6 @@ import {
   ShieldCheck,
   UserRound,
   Users,
-  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -648,6 +647,7 @@ function DepartmentManagementPage() {
                   draft={editDraft}
                   setDraft={setEditDraft}
                   options={options}
+                  department={selected}
                   search={search}
                   setSearch={setSearch}
                   onStrategyHelp={() => setStrategyHelp(true)}
@@ -755,15 +755,17 @@ function DepartmentCard({
 }
 
 function DepartmentCreateForm({ draft, setDraft, options, search, setSearch, onStrategyHelp }: { draft: AuditManagerDepartmentCreate; setDraft: Dispatch<SetStateAction<AuditManagerDepartmentCreate>>; options: AuditManagerDepartmentOptions | null; search: string; setSearch: (value: string) => void; onStrategyHelp: () => void }) {
+  const eligibleAssigneeIds = new Set([draft.departmentHead, ...draft.members].filter(Boolean));
+  const eligibleAssignees = (options?.users || []).filter((user) => eligibleAssigneeIds.has(user._id));
   return <div className="space-y-5">
     <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Department name</Label><Input value={draft.name} maxLength={200} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} /></div><div className="space-y-2"><Label>Initial status</Label><Select value={draft.active ? "active" : "inactive"} onValueChange={(value) => setDraft((current) => ({ ...current, active: value === "active" }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div></div>
     <div className="space-y-2"><Label>Description</Label><Textarea value={draft.description} maxLength={2000} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} /></div>
-    <div className="space-y-2"><Label>Department head</Label><UserSelector users={options?.users || []} selected={draft.departmentHead ? [draft.departmentHead] : []} search={search} setSearch={setSearch} single onChange={(ids) => setDraft((current) => ({ ...current, departmentHead: ids[0] || null }))} /></div>
-    <div className="space-y-2"><Label>Members</Label><UserSelector users={options?.users || []} selected={draft.members} search={search} setSearch={setSearch} onChange={(members) => setDraft((current) => ({ ...current, members }))} /></div>
-    <div className="space-y-2"><Label>Default issue assignees</Label><UserSelector users={options?.users || []} selected={draft.defaultIssueAssignees} search={search} setSearch={setSearch} onChange={(defaultIssueAssignees) => setDraft((current) => ({ ...current, defaultIssueAssignees }))} /></div>
+    <div className="space-y-2"><Label>Department head</Label><UserSelector users={options?.users || []} selected={draft.departmentHead ? [draft.departmentHead] : []} search={search} setSearch={setSearch} single onChange={(ids) => setDraft((current) => { const departmentHead = ids[0] || null; const allowed = new Set([departmentHead, ...current.members].filter(Boolean)); return { ...current, departmentHead, defaultIssueAssignees: current.defaultIssueAssignees.filter((id) => allowed.has(id)) }; })} /></div>
+    <div className="space-y-2"><Label>Members</Label><UserSelector users={options?.users || []} selected={draft.members} search={search} setSearch={setSearch} onChange={(members) => setDraft((current) => { const allowed = new Set([current.departmentHead, ...members].filter(Boolean)); return { ...current, members, defaultIssueAssignees: current.defaultIssueAssignees.filter((id) => allowed.has(id)) }; })} /></div>
+    <div className="space-y-2"><Label>Default issue assignees</Label><p className="text-xs text-slate-500">Choose from the department head and members.</p><UserSelector users={eligibleAssignees} selected={draft.defaultIssueAssignees} search={search} setSearch={setSearch} onChange={(defaultIssueAssignees) => setDraft((current) => ({ ...current, defaultIssueAssignees }))} /></div>
     <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><div className="flex items-center justify-between"><Label>Assignment strategy</Label><Button type="button" variant="ghost" size="sm" onClick={onStrategyHelp}><Info className="mr-1 h-4 w-4" />Help</Button></div><Select value={draft.assignmentStrategy} onValueChange={(assignmentStrategy: AuditManagerDepartmentCreate["assignmentStrategy"]) => setDraft((current) => ({ ...current, assignmentStrategy }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(strategyLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Escalation department</Label><Select value={draft.escalationDepartment || "none"} onValueChange={(value) => setDraft((current) => ({ ...current, escalationDepartment: value === "none" ? null : value }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">No escalation department</SelectItem>{options?.departments.map((department) => <SelectItem key={department._id} value={department._id}>{department.name}</SelectItem>)}</SelectContent></Select></div></div>
-    <div className="space-y-2"><Label>Notification emails</Label><p className="text-xs text-slate-500">Default assignees and the department head are emailed automatically. Add any additional recipients below.</p><EmailChipEditor emails={draft.notificationEmails} onChange={(notificationEmails) => setDraft((current) => ({ ...current, notificationEmails }))} /></div>
-    <div className="space-y-2"><Label>Site notification overrides</Label><SiteNotificationEditor sites={options?.sites || []} entries={draft.siteNotifications} onChange={(value) => setDraft((current) => ({ ...current, siteNotifications: value as Array<{ site: string; emails: string[] }> }))} /></div>
+    <div className="space-y-2"><Label>Notification emails</Label><p className="text-xs text-slate-500">Default assignees and the department head are emailed automatically. Select any additional Hub users below.</p><HubUserEmailSelector users={options?.users || []} emails={draft.notificationEmails} onChange={(notificationEmails) => setDraft((current) => ({ ...current, notificationEmails }))} /></div>
+    <div className="space-y-2"><Label>Site notification overrides</Label><SiteNotificationEditor sites={options?.sites || []} users={options?.users || []} entries={draft.siteNotifications} onChange={(value) => setDraft((current) => ({ ...current, siteNotifications: value as Array<{ site: string; emails: string[] }> }))} /></div>
   </div>;
 }
 
@@ -772,6 +774,7 @@ function DepartmentFieldEditor({
   draft,
   setDraft,
   options,
+  department,
   search,
   setSearch,
   onStrategyHelp,
@@ -780,6 +783,7 @@ function DepartmentFieldEditor({
   draft: EditDraft;
   setDraft: (value: EditDraft) => void;
   options: AuditManagerDepartmentOptions | null;
+  department: AuditManagerDepartmentDetail;
   search: string;
   setSearch: (value: string) => void;
   onStrategyHelp: () => void;
@@ -815,7 +819,12 @@ function DepartmentFieldEditor({
   if (field === "members" || field === "defaultIssueAssignees")
     return (
       <UserSelector
-        users={options?.users || []}
+        users={field === "defaultIssueAssignees"
+          ? (options?.users || []).filter((user) => new Set([
+              department.departmentHead?._id,
+              ...department.members.map((entry) => entry.user?._id),
+            ].filter(Boolean)).has(user._id))
+          : options?.users || []}
         selected={draft as string[]}
         search={search}
         setSearch={setSearch}
@@ -868,11 +877,12 @@ function DepartmentFieldEditor({
       </Select>
     );
   if (field === "notificationEmails")
-    return <EmailEditor emails={draft as string[]} onChange={setDraft} />;
+    return <EmailEditor users={options?.users || []} emails={draft as string[]} onChange={setDraft} />;
   if (field === "siteNotifications")
     return (
       <SiteNotificationEditor
         sites={options?.sites || []}
+        users={options?.users || []}
         entries={draft as Array<{ site: string; emails: string[] }>}
         onChange={setDraft}
       />
@@ -979,21 +989,25 @@ function UserSelector({
 }
 
 function EmailEditor({
+  users,
   emails,
   onChange,
 }: {
+  users: AuditManagerUserSummary[];
   emails: string[];
   onChange: (value: EditDraft) => void;
 }) {
-  return <div className="space-y-3"><p className="text-xs text-slate-500">Default assignees and the department head are emailed automatically. Add any additional recipients below.</p><EmailChipEditor emails={emails} onChange={(next) => onChange(next)} /></div>;
+  return <div className="space-y-3"><p className="text-xs text-slate-500">Default assignees and the department head are emailed automatically. Select any additional Hub users below.</p><HubUserEmailSelector users={users} emails={emails} onChange={(next) => onChange(next)} /></div>;
 }
 
 function SiteNotificationEditor({
   sites,
+  users,
   entries,
   onChange,
 }: {
   sites: AuditManagerDepartmentOptions["sites"];
+  users: AuditManagerUserSummary[];
   entries: Array<{ site: string; emails: string[] }>;
   onChange: (value: EditDraft) => void;
 }) {
@@ -1006,9 +1020,9 @@ function SiteNotificationEditor({
           <div key={site._id} className="rounded-xl border p-3">
             <Label>{site.site || site.stationName}</Label>
             <div className="mt-2">
-              <EmailChipEditor
+              <HubUserEmailSelector
+                users={users}
                 emails={bySite.get(site._id) || []}
-                compact
                 onChange={(emails) => {
                 const next = entries.filter((entry) => entry.site !== site._id);
                 if (emails.length) next.push({ site: site._id, emails });
@@ -1023,24 +1037,24 @@ function SiteNotificationEditor({
   );
 }
 
-function EmailChipEditor({ emails, onChange, compact = false }: { emails: string[]; onChange: (emails: string[]) => void; compact?: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
-  function addEmail() {
-    const value = email.trim().toLowerCase();
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return setEmailError("Enter a valid email address.");
-    if (emails.some((entry) => entry.toLowerCase() === value)) return setEmailError("This email is already listed.");
-    onChange([...emails, value]);
-    setEmail(""); setEmailError(""); setOpen(false);
-  }
-  return <div className={compact ? "space-y-2" : "space-y-3"}>
-    <div className="flex flex-wrap items-center gap-2">
-      {emails.map((entry) => <span key={entry} className="inline-flex items-center gap-1 rounded-full border bg-slate-50 py-1 pl-2.5 pr-1 text-xs text-slate-700">{entry}<button type="button" className="rounded-full p-1 hover:bg-slate-200" aria-label={`Remove ${entry}`} onClick={() => onChange(emails.filter((item) => item !== entry))}><X className="h-3 w-3" /></button></span>)}
-      <Button type="button" variant="outline" size="sm" onClick={() => { setEmail(""); setEmailError(""); setOpen(true); }}><Plus className="mr-1.5 h-3.5 w-3.5" />Add email</Button>
+function HubUserEmailSelector({ users, emails, onChange }: { users: AuditManagerUserSummary[]; emails: string[]; onChange: (emails: string[]) => void }) {
+  const [search, setSearch] = useState("");
+  const selected = new Set(emails.map((email) => email.toLowerCase()));
+  const term = search.trim().toLowerCase();
+  const filtered = users.filter((user) => `${user.firstName} ${user.lastName} ${user.email} ${user.role?.role_name || ""}`.toLowerCase().includes(term));
+  return <div className="space-y-3">
+    <Input value={search} placeholder="Search active Hub users…" onChange={(event) => setSearch(event.target.value)} />
+    <div className="max-h-64 space-y-1 overflow-y-auto rounded-xl border p-2">
+      {filtered.map((user) => {
+        const email = user.email.trim().toLowerCase();
+        const checked = selected.has(email);
+        return <label key={user._id} className="flex cursor-pointer items-start gap-3 rounded-lg p-2 hover:bg-slate-50">
+          <Checkbox checked={checked} onCheckedChange={(value) => onChange(value === true ? [...new Set([...emails.map((entry) => entry.toLowerCase()), email])] : emails.filter((entry) => entry.toLowerCase() !== email))} />
+          <span className="min-w-0"><strong className="block text-sm">{userName(user)}</strong><span className="block truncate text-xs text-slate-500">{user.email} · {user.role?.role_name || "No role"}</span></span>
+        </label>;
+      })}
+      {filtered.length === 0 && <p className="p-5 text-center text-sm text-slate-500">No Hub users match your search.</p>}
     </div>
-    {emails.length === 0 && <p className="text-xs text-slate-500">No emails added.</p>}
-    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="sm:max-w-sm"><DialogHeader><DialogTitle>Add notification email</DialogTitle></DialogHeader><div className="space-y-3"><div className="space-y-2"><Label>Email address</Label><Input type="email" autoFocus value={email} placeholder="name@example.com" onChange={(event) => { setEmail(event.target.value); setEmailError(""); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addEmail(); } }} /></div>{emailError && <p className="text-sm text-red-600">{emailError}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button><Button type="button" onClick={addEmail}>Add</Button></div></div></DialogContent></Dialog>
   </div>;
 }
 

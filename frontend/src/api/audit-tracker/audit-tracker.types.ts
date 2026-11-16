@@ -31,6 +31,8 @@ export interface AuditTrackerIssue {
     role: 'owner' | 'collaborator'
     assignedBy?: string | null
     assignedAt: string
+    read: boolean
+    readAt?: string | null
   }>
   escalation: {
     level: 'none' | 'department' | 'head_office'
@@ -68,18 +70,21 @@ export interface MyIssuesQuery {
   priority?: 'all' | AuditTrackerIssuePriority
   page?: number
   limit?: number
+  department?: string
 }
 
 export interface MyIssuesReadModel {
   issues: AuditTrackerIssue[]
   summary: { total: number; created: number; inProgress: number; onHold: number }
   sites: Array<{ _id: string; name: string }>
+  departments?: Array<{ _id: string; name: string; isAdminDepartment: boolean }>
   pagination: { page: number; limit: number; total: number; pages: number }
-  filters: { search: string; site: string; status: string; priority: string }
+  filters: { search: string; site: string; status: string; priority: string; department?: string }
 }
 
 export type AuditTrackerActivityEventType =
   | 'issue_raised'
+  | 'issue_viewed'
   | 'comment_added'
   | 'photos_added'
   | 'status_changed'
@@ -119,6 +124,18 @@ export interface AddAuditTrackerActivityInput {
 export interface AuditTrackerEscalationTarget {
   department: { _id: string; name: string; isAdminDepartment: boolean }
   assignees: AuditTrackerPerson[]
+}
+
+export interface AuditTrackerDepartmentOption {
+  _id: string
+  name: string
+  isAdminDepartment: boolean
+  current: boolean
+  assignees: AuditTrackerPerson[]
+}
+
+export interface AuditTrackerAssignmentCandidate extends AuditTrackerPerson {
+  departments: Array<{ _id: string; name: string; current: boolean }>
 }
 
 export interface AuditTrackerHistoricalIssue {

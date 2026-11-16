@@ -25,6 +25,7 @@ const StationAuditIssueActivitySchema = new mongoose.Schema(
       type: String,
       enum: [
         "issue_raised",
+        "issue_viewed",
         "comment_added",
         "photos_added",
         "status_changed",

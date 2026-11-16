@@ -17,15 +17,17 @@ const statusPresentation = {
   resolved: { label: 'Resolved', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' },
 } as const
 
-export function IssueHistoryPanel({ issue }: { issue: AuditTrackerIssue }) {
+export function IssueHistoryPanel({ issue, scope = 'myIssues' }: { issue: AuditTrackerIssue; scope?: 'myIssues' | 'departmentIssues' }) {
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null)
   const historyQuery = useQuery({
-    queryKey: ['audit-tracker', 'issue-history', issue._id],
-    queryFn: () => auditTrackerService.issueHistory(issue._id),
+    queryKey: ['audit-tracker', scope, 'issue-history', issue._id],
+    queryFn: () => scope === 'departmentIssues' ? auditTrackerService.departmentIssueHistory(issue._id) : auditTrackerService.issueHistory(issue._id),
   })
   const activityQuery = useQuery({
-    queryKey: ['audit-tracker', 'historical-issue-activity', issue._id, selectedIssueId],
-    queryFn: () => auditTrackerService.historicalIssueActivities(issue._id, selectedIssueId as string),
+    queryKey: ['audit-tracker', scope, 'historical-issue-activity', issue._id, selectedIssueId],
+    queryFn: () => scope === 'departmentIssues'
+      ? auditTrackerService.historicalDepartmentIssueActivities(issue._id, selectedIssueId as string)
+      : auditTrackerService.historicalIssueActivities(issue._id, selectedIssueId as string),
     enabled: Boolean(selectedIssueId),
   })
 

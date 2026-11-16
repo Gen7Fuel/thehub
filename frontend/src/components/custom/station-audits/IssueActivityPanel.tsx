@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { formatDistanceToNow } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import {
   Camera,
   CheckCircle2,
@@ -23,7 +23,7 @@ import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { stationAuditPhotoUrl } from '@/lib/stationAuditPhotos'
-import { hasAuditTrackerMyIssuesAction } from '@/lib/auditTrackerPermissions'
+import { hasAuditTrackerDepartmentIssuesAction, hasAuditTrackerMyIssuesAction } from '@/lib/auditTrackerPermissions'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 
@@ -33,7 +33,7 @@ interface PendingImage {
   preview: string
 }
 
-export function IssueActivityPanel({ issueId }: { issueId: string }) {
+export function IssueActivityPanel({ issueId, scope = 'myIssues' }: { issueId: string; scope?: 'myIssues' | 'departmentIssues' }) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -44,13 +44,15 @@ export function IssueActivityPanel({ issueId }: { issueId: string }) {
   const pendingImagesRef = useRef<PendingImage[]>([])
 
   const activityQuery = useQuery({
-    queryKey: ['audit-tracker', 'issue-activity', issueId],
-    queryFn: () => auditTrackerService.issueActivities(issueId),
+    queryKey: ['audit-tracker', scope, 'issue-activity', issueId],
+    queryFn: () => scope === 'departmentIssues' ? auditTrackerService.departmentIssueActivities(issueId) : auditTrackerService.issueActivities(issueId),
     enabled: Boolean(issueId),
   })
 
   const recentActivities = [...(activityQuery.data?.activities || [])].slice(-2).reverse()
-  const mayPostComments = hasAuditTrackerMyIssuesAction(user?.access, 'postComments')
+  const mayPostComments = scope === 'departmentIssues'
+    ? hasAuditTrackerDepartmentIssuesAction(user?.access, 'postComments')
+    : hasAuditTrackerMyIssuesAction(user?.access, 'postComments')
 
   const postMutation = useMutation({
     mutationFn: async () => {
@@ -59,7 +61,9 @@ export function IssueActivityPanel({ issueId }: { issueId: string }) {
         form.append('file', file)
         return (await cdnService.uploadAuditPhoto(form)).filename
       }))
-      return auditTrackerService.addIssueActivity(issueId, { body: body.trim(), photos })
+      return scope === 'departmentIssues'
+        ? auditTrackerService.addDepartmentIssueActivity(issueId, { body: body.trim(), photos })
+        : auditTrackerService.addIssueActivity(issueId, { body: body.trim(), photos })
     },
     onSuccess: async () => {
       pendingImages.forEach((image) => URL.revokeObjectURL(image.preview))
@@ -67,8 +71,8 @@ export function IssueActivityPanel({ issueId }: { issueId: string }) {
       setBody('')
       setInputKey((value) => value + 1)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['audit-tracker', 'issue-activity', issueId] }),
-        queryClient.invalidateQueries({ queryKey: ['audit-tracker', 'my-issues'] }),
+        queryClient.invalidateQueries({ queryKey: ['audit-tracker', scope, 'issue-activity', issueId] }),
+        queryClient.invalidateQueries({ queryKey: ['audit-tracker', scope === 'departmentIssues' ? 'department-issues' : 'my-issues'] }),
       ])
       toast.success('Activity added to the issue')
     },
@@ -201,16 +205,30 @@ export function IssueActivityPanel({ issueId }: { issueId: string }) {
 
 export function ActivityEntry({ activity, compact = false }: { activity: AuditTrackerActivity; compact?: boolean }) {
   const metadata = activityMetadata(activity)
+  const userColor = activityUserColor(activity)
   const photos = activity.photos || []
   const changeLabels = activityChangeLabels(activity)
+  const timestamp = activityTimestamp(activity.createdAt)
+  if (activity.eventType === 'issue_viewed') {
+    return <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-2 py-1 text-xs text-slate-400">
+      <span className={cn('h-1.5 w-1.5 rounded-full', userColor.badge.split(' ')[0])} />
+      <span><strong className="font-medium text-slate-500">{actorName(activity)}</strong> viewed the issue</span>
+      <span className="cursor-help text-[11px]" title={timestamp.exact}>{timestamp.display}</span>
+    </div>
+  }
   return (
-    <div className={cn('rounded-xl border bg-white', compact ? 'p-3' : 'p-4 shadow-sm')}>
+    <div className={cn('rounded-xl border border-l-4 bg-white', userColor.border, compact ? 'p-3' : 'p-4 shadow-sm')}>
       <div className="flex items-start gap-3">
         <div className={cn('mt-0.5 rounded-full p-2', metadata.iconClass)}>{metadata.icon}</div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <p className="text-sm font-semibold text-slate-800">{actorName(activity)} {metadata.label}</p>
-            <span className="text-[11px] text-slate-400">{formatDistanceToNow(new Date(activity.createdAt), { addSuffix: true })}</span>
+            <p className="flex flex-wrap items-center gap-1.5 text-sm font-semibold text-slate-800">
+              <span className={cn('inline-flex rounded-full px-2 py-0.5 text-xs font-bold', userColor.badge)} title={activity.actor?.email || actorName(activity)}>
+                {actorName(activity)}
+              </span>
+              <span>{metadata.label}</span>
+            </p>
+            <span className="cursor-help text-[11px] text-slate-400" title={timestamp.exact}>{timestamp.display}</span>
           </div>
           {activity.body && <p className={cn('mt-1 whitespace-pre-wrap text-sm leading-5 text-slate-600', compact && 'line-clamp-2')}>{activity.body}</p>}
           {changeLabels.length > 0 && (
@@ -236,10 +254,45 @@ export function ActivityEntry({ activity, compact = false }: { activity: AuditTr
   )
 }
 
+const activityUserColors = [
+  { border: 'border-l-blue-200', badge: 'bg-blue-50 text-blue-700' },
+  { border: 'border-l-emerald-200', badge: 'bg-emerald-50 text-emerald-700' },
+  { border: 'border-l-violet-200', badge: 'bg-violet-50 text-violet-700' },
+  { border: 'border-l-amber-200', badge: 'bg-amber-50 text-amber-700' },
+  { border: 'border-l-rose-200', badge: 'bg-rose-50 text-rose-700' },
+  { border: 'border-l-cyan-200', badge: 'bg-cyan-50 text-cyan-700' },
+  { border: 'border-l-fuchsia-200', badge: 'bg-fuchsia-50 text-fuchsia-700' },
+  { border: 'border-l-lime-200', badge: 'bg-lime-50 text-lime-700' },
+] as const
+
+function activityUserColor(activity: AuditTrackerActivity) {
+  if (!activity.actor) return { border: 'border-l-slate-200', badge: 'bg-slate-100 text-slate-600' }
+  const identity = activity.actor._id || activity.actor.email || 'unknown'
+  let hash = 0
+  for (let index = 0; index < identity.length; index += 1) {
+    hash = ((hash << 5) - hash + identity.charCodeAt(index)) | 0
+  }
+  return activityUserColors[Math.abs(hash) % activityUserColors.length]
+}
+
+function activityTimestamp(value: string) {
+  const date = new Date(value)
+  const exact = format(date, "MMM d, yyyy 'at' h:mm a")
+  const isAtLeastOneDayOld = Date.now() - date.getTime() >= 24 * 60 * 60 * 1000
+  return {
+    display: isAtLeastOneDayOld
+      ? exact
+      : formatDistanceToNow(date, { addSuffix: true }),
+    exact,
+  }
+}
+
 function activityMetadata(activity: AuditTrackerActivity) {
   switch (activity.eventType) {
     case 'issue_raised':
       return { label: 'raised this issue', icon: <History className="h-4 w-4" />, iconClass: 'bg-rose-100 text-rose-700' }
+    case 'issue_viewed':
+      return { label: 'viewed the issue', icon: <History className="h-4 w-4" />, iconClass: 'bg-sky-100 text-sky-700' }
     case 'comment_added':
       return { label: 'added a comment', icon: <MessageSquareText className="h-4 w-4" />, iconClass: 'bg-violet-100 text-violet-700' }
     case 'photos_added':

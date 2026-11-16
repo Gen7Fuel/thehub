@@ -49,6 +49,30 @@ function normalizeEmails(value, label) {
   return { value: emails };
 }
 
+async function allEmailsBelongToActiveUsers(emails = []) {
+  const uniqueEmails = [...new Set(emails.map((email) => String(email).trim().toLowerCase()).filter(Boolean))];
+  if (!uniqueEmails.length) return true;
+  // User.email predates normalization in this model, so existing records may
+  // contain uppercase characters even though new department payloads are
+  // normalized to lowercase. Compare normalized values in application code
+  // instead of relying on MongoDB's case-sensitive string equality.
+  const [result] = await User.aggregate([
+    { $match: { is_active: true, email: { $type: "string" } } },
+    { $project: { normalizedEmail: { $toLower: { $trim: { input: "$email" } } } } },
+    { $match: { normalizedEmail: { $in: uniqueEmails } } },
+    { $group: { _id: "$normalizedEmail" } },
+    { $count: "matchedEmails" },
+  ]);
+  return (result?.matchedEmails || 0) === uniqueEmails.length;
+}
+
+function allowedDefaultAssigneeIds(departmentHead, members = []) {
+  return new Set([
+    ...(departmentHead ? [departmentHead] : []),
+    ...members.map((entry) => entry.user || entry),
+  ].map((id) => String(id)));
+}
+
 function normalizeDepartmentUpdate(body = {}) {
   const fields = Object.keys(body).filter((field) => body[field] !== undefined);
   if (fields.length !== 1 || !EDITABLE_FIELDS.has(fields[0])) {
@@ -222,6 +246,17 @@ router.post("/", async (req, res) => {
     if (await User.countDocuments({ _id: { $in: uniqueUserIds }, is_active: true }) !== uniqueUserIds.length) {
       return res.status(400).json({ error: "Every selected user must be active" });
     }
+    const allowedAssignees = allowedDefaultAssigneeIds(value.departmentHead, value.members);
+    if (value.defaultIssueAssignees.some((id) => !allowedAssignees.has(id.toString()))) {
+      return res.status(400).json({ error: "Default assignees must be the department head or a department member" });
+    }
+    const configuredEmails = [
+      ...value.notificationEmails,
+      ...value.siteNotifications.flatMap((entry) => entry.emails),
+    ];
+    if (!await allEmailsBelongToActiveUsers(configuredEmails)) {
+      return res.status(400).json({ error: "Notification recipients must be active Hub users" });
+    }
     if (value.escalationDepartment && !await StationAuditDepartment.exists({ _id: value.escalationDepartment, active: true })) {
       return res.status(400).json({ error: "Escalation department must be active" });
     }
@@ -303,6 +338,12 @@ router.put("/:departmentId", async (req, res) => {
         update.value = update.value.map((entry) => ({ ...entry, addedBy: userId, addedAt: new Date() }));
       }
     }
+    if (update.field === "defaultIssueAssignees") {
+      const allowedAssignees = allowedDefaultAssigneeIds(before.departmentHead, before.members);
+      if (update.value.some((id) => !allowedAssignees.has(id.toString()))) {
+        return res.status(400).json({ error: "Default assignees must be the department head or a department member" });
+      }
+    }
     if (update.field === "escalationDepartment" && update.value) {
       if (update.value.toString() === departmentId) return res.status(400).json({ error: "A department cannot escalate to itself" });
       if (!await StationAuditDepartment.exists({ _id: update.value, active: true })) return res.status(400).json({ error: "Escalation department must be active" });
@@ -311,10 +352,24 @@ router.put("/:departmentId", async (req, res) => {
       const siteIds = update.value.map((entry) => entry.site);
       if (await Location.countDocuments({ _id: { $in: siteIds }, type: "store" }) !== siteIds.length) return res.status(400).json({ error: "Every notification override must reference a store" });
     }
+    if (update.field === "notificationEmails" && !await allEmailsBelongToActiveUsers(update.value)) {
+      return res.status(400).json({ error: "Notification recipients must be active Hub users" });
+    }
+    if (update.field === "siteNotifications" && !await allEmailsBelongToActiveUsers(update.value.flatMap((entry) => entry.emails))) {
+      return res.status(400).json({ error: "Site notification recipients must be active Hub users" });
+    }
 
+    const updateFields = { [update.field]: update.value };
+    if (update.field === "members" || update.field === "departmentHead") {
+      const nextHead = update.field === "departmentHead" ? update.value : before.departmentHead;
+      const nextMembers = update.field === "members" ? update.value : before.members;
+      const allowedAssignees = allowedDefaultAssigneeIds(nextHead, nextMembers);
+      updateFields.defaultIssueAssignees = (before.defaultIssueAssignees || [])
+        .filter((id) => allowedAssignees.has(id.toString()));
+    }
     await StationAuditDepartment.updateOne(
       { _id: departmentId },
-      { $set: { [update.field]: update.value } },
+      { $set: updateFields },
       { runValidators: true }
     );
     const after = await StationAuditDepartment.findById(departmentId).lean();

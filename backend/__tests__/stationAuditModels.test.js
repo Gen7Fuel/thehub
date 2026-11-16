@@ -174,7 +174,16 @@ describe("station audit models", () => {
     expect(response.validateSync()).toBeUndefined();
     expect(issue.validateSync()).toBeUndefined();
     expect(issue.priority).toBe("low");
+    expect(issue.assignees[0].read).toBe(false);
+    expect(issue.assignees[0].readAt).toBeNull();
     expect(activity.validateSync()).toBeUndefined();
+
+    const viewedActivity = new StationAuditIssueActivity({
+      issue: issue._id,
+      eventType: "issue_viewed",
+      actor: userId,
+    });
+    expect(viewedActivity.validateSync()).toBeUndefined();
 
     issue.priority = "urgent";
     expect(issue.validateSync()?.errors.priority).toBeDefined();

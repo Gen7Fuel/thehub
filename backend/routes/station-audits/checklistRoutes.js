@@ -324,6 +324,8 @@ async function ensureIssueForResponse({ response, run, checklist, section, locat
       user: user._id,
       role: index === 0 ? "owner" : "collaborator",
       assignedBy: null,
+      read: false,
+      readAt: null,
     })),
     previousIssue: previousIssue?._id || null,
     occurrenceNumber: (previousIssue?.occurrenceNumber || 0) + 1,

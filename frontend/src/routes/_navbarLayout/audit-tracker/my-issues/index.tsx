@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, Navigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import {
@@ -9,7 +9,6 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
-  CircleDot,
   ExternalLink,
   History,
   ImageIcon,
@@ -18,6 +17,7 @@ import {
   MapPin,
   MessageSquareText,
   Search,
+  SlidersHorizontal,
   ShieldAlert,
   UserRound,
   UsersRound,
@@ -27,10 +27,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -49,6 +51,7 @@ import type {
   AuditTrackerIssueStatus,
 } from "@/api/audit-tracker/audit-tracker.types";
 import {
+  hasAuditTrackerDepartmentIssuesAction,
   hasAuditTrackerAccess,
   hasAuditTrackerPermission,
 } from "@/lib/auditTrackerPermissions";
@@ -57,13 +60,19 @@ import { stationAuditPhotoUrl } from "@/lib/stationAuditPhotos";
 import { IssueActivityPanel } from "@/components/custom/station-audits/IssueActivityPanel";
 import { IssueActionDialogs } from "@/components/custom/station-audits/IssueActionDialogs";
 import { IssueHistoryPanel } from "@/components/custom/station-audits/IssueHistoryPanel";
+import { IssueAssignmentDialog } from "@/components/custom/station-audits/IssueAssignmentDialog";
 
-export const Route = createFileRoute("/_navbarLayout/audit-tracker/my-issues")({
+export const Route = createFileRoute("/_navbarLayout/audit-tracker/my-issues/")({
   component: MyIssuesPage,
 });
 
 function MyIssuesPage() {
+  return <IssueQueuePage scope="myIssues" />;
+}
+
+export function IssueQueuePage({ scope }: { scope: "myIssues" | "departmentIssues" }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [site, setSite] = useState("all");
@@ -73,9 +82,13 @@ function MyIssuesPage() {
   const [priority, setPriority] = useState<"all" | AuditTrackerIssuePriority>(
     "all",
   );
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [draftSite, setDraftSite] = useState("all");
+  const [draftStatus, setDraftStatus] = useState<typeof status>("all");
+  const [draftPriority, setDraftPriority] = useState<typeof priority>("all");
+  const [department, setDepartment] = useState("all");
+  const [draftDepartment, setDraftDepartment] = useState("all");
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [detailTab, setDetailTab] = useState<"details" | "history">("details");
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -85,7 +98,7 @@ function MyIssuesPage() {
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  useEffect(() => setPage(1), [debouncedSearch, site, status, priority]);
+  useEffect(() => setPage(1), [debouncedSearch, site, status, priority, department]);
 
   const query = useQuery({
     queryKey: [
@@ -95,41 +108,56 @@ function MyIssuesPage() {
       site,
       status,
       priority,
+      department,
       page,
     ],
     queryFn: () =>
-      auditTrackerService.myIssues({
+      (scope === "departmentIssues" ? auditTrackerService.departmentIssues : auditTrackerService.myIssues)({
         search: debouncedSearch || undefined,
         site,
         status,
         priority,
+        department: scope === "departmentIssues" ? department : undefined,
         page,
         limit: 30,
       }),
     enabled: Boolean(
       user &&
       hasAuditTrackerAccess(user.access) &&
-      hasAuditTrackerPermission(user.access, "myIssues"),
+      hasAuditTrackerPermission(user.access, scope),
     ),
     placeholderData: (previous) => previous,
   });
 
-  const selected = useMemo(
-    () => query.data?.issues.find((issue) => issue._id === selectedId) || null,
-    [query.data?.issues, selectedId],
-  );
-
   if (!user) return null;
   if (
     !hasAuditTrackerAccess(user.access) ||
-    !hasAuditTrackerPermission(user.access, "myIssues")
+    !hasAuditTrackerPermission(user.access, scope)
   ) {
     return <Navigate to="/no-access" replace />;
   }
 
   function selectIssue(issue: AuditTrackerIssue) {
-    setSelectedId(issue._id);
-    setDetailTab("details");
+    navigate({
+      to: scope === "departmentIssues" ? "/audit-tracker/department-issues/$issueId" : "/audit-tracker/my-issues/$issueId",
+      params: { issueId: issue._id },
+    });
+  }
+
+  function openFilters() {
+    setDraftSite(site);
+    setDraftStatus(status);
+    setDraftPriority(priority);
+    setDraftDepartment(department);
+    setFiltersOpen(true);
+  }
+
+  function applyFilters() {
+    setSite(draftSite);
+    setStatus(draftStatus);
+    setPriority(draftPriority);
+    setDepartment(draftDepartment);
+    setFiltersOpen(false);
   }
 
   const summary = query.data?.summary || {
@@ -151,10 +179,10 @@ function MyIssuesPage() {
                 </div>
                 <div>
                   <h1 className="text-xl font-black tracking-tight text-slate-900">
-                    My issue queue
+                    {scope === "departmentIssues" ? "Department issue queue" : "My issue queue"}
                   </h1>
                   <p className="text-sm text-slate-500">
-                    Open audit issues currently assigned to you.
+                    {scope === "departmentIssues" ? "Open audit issues belonging to your accessible departments." : "Open audit issues currently assigned to you."}
                   </p>
                 </div>
               </div>
@@ -175,8 +203,8 @@ function MyIssuesPage() {
               </div>
             </div>
 
-            <div className="mt-4 grid gap-2 md:grid-cols-[minmax(240px,1fr)_180px_170px_160px]">
-              <div className="relative">
+            <div className="mt-4 flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input
                   value={search}
@@ -185,156 +213,114 @@ function MyIssuesPage() {
                   className="h-10 bg-white pl-9"
                 />
               </div>
-              <Select value={site} onValueChange={setSite}>
-                <SelectTrigger className="h-10 bg-white">
-                  <SelectValue placeholder="All sites" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All accessible sites</SelectItem>
-                  {(query.data?.sites || []).map((entry) => (
-                    <SelectItem key={entry._id} value={entry._id}>
-                      {entry.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={status}
-                onValueChange={(value) => setStatus(value as typeof status)}
-              >
-                <SelectTrigger className="h-10 bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All open statuses</SelectItem>
-                  <SelectItem value="created">New</SelectItem>
-                  <SelectItem value="in_progress">In progress</SelectItem>
-                  <SelectItem value="on_hold">On hold</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select
-                value={priority}
-                onValueChange={(value) => setPriority(value as typeof priority)}
-              >
-                <SelectTrigger className="h-10 bg-white">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All priorities</SelectItem>
-                  <SelectItem value="low">Low priority</SelectItem>
-                  <SelectItem value="normal">Normal priority</SelectItem>
-                  <SelectItem value="high">High priority</SelectItem>
-                  <SelectItem value="critical">Critical priority</SelectItem>
-                </SelectContent>
-              </Select>
+              <Button type="button" variant="outline" className="h-10 shrink-0 px-3 sm:px-4" onClick={openFilters} aria-label="Open issue filters">
+                <SlidersHorizontal className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Filters</span>
+                {[site, status, priority, ...(scope === "departmentIssues" ? [department] : [])].filter((value) => value !== "all").length > 0 && (
+                  <Badge className="ml-2 hidden h-5 min-w-5 justify-center rounded-full px-1.5 sm:inline-flex">
+                    {[site, status, priority, ...(scope === "departmentIssues" ? [department] : [])].filter((value) => value !== "all").length}
+                  </Badge>
+                )}
+              </Button>
             </div>
           </div>
 
-          <div className="grid min-h-[560px] lg:grid-cols-[minmax(330px,0.85fr)_minmax(0,1.4fr)]">
-            <div
-              className={cn(
-                "border-r border-slate-200",
-                selected ? "hidden lg:block" : "block",
-              )}
-            >
-              <div className="flex items-center justify-between border-b bg-slate-50 px-4 py-2.5 text-xs text-slate-500">
-                <span>{query.data?.pagination.total || 0} matching issues</span>
-                {query.isFetching && (
-                  <Loader2 className="h-4 w-4 animate-spin text-violet-600" />
-                )}
+          <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Filter my issues</DialogTitle>
+                <DialogDescription>Narrow the queue by site, status, or priority.</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                {scope === "departmentIssues" && <div className="space-y-2">
+                  <Label>Department</Label>
+                  <Select value={draftDepartment} onValueChange={setDraftDepartment}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All accessible departments</SelectItem>
+                      {(query.data?.departments || []).map((entry) => <SelectItem key={entry._id} value={entry._id}>{entry.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>}
+                <div className="space-y-2">
+                  <Label>Site</Label>
+                  <Select value={draftSite} onValueChange={setDraftSite}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All accessible sites</SelectItem>
+                      {(query.data?.sites || []).map((entry) => <SelectItem key={entry._id} value={entry._id}>{entry.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={draftStatus} onValueChange={(value) => setDraftStatus(value as typeof draftStatus)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All open statuses</SelectItem>
+                      <SelectItem value="created">New</SelectItem>
+                      <SelectItem value="in_progress">In progress</SelectItem>
+                      <SelectItem value="on_hold">On hold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Priority</Label>
+                  <Select value={draftPriority} onValueChange={(value) => setDraftPriority(value as typeof draftPriority)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All priorities</SelectItem>
+                      <SelectItem value="low">Low priority</SelectItem>
+                      <SelectItem value="normal">Normal priority</SelectItem>
+                      <SelectItem value="high">High priority</SelectItem>
+                      <SelectItem value="critical">Critical priority</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={() => { setDraftSite("all"); setDraftStatus("all"); setDraftPriority("all"); setDraftDepartment("all"); }}>Clear</Button>
+                <Button type="button" onClick={applyFilters}>Apply filters</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
-              {query.isLoading ? (
-                <QueueState
-                  icon={Loader2}
-                  title="Loading your issues"
-                  description="Checking your assigned audit work…"
-                  spinning
-                />
-              ) : query.isError ? (
-                <QueueState
-                  icon={AlertTriangle}
-                  title="Unable to load issues"
-                  description="Please refresh and try again."
-                  tone="error"
-                />
-              ) : !query.data?.issues.length ? (
-                <QueueState
-                  icon={Inbox}
-                  title="Your queue is clear"
-                  description="No open assigned issues match these filters."
-                />
-              ) : (
-                <div className="divide-y divide-slate-100">
-                  {query.data.issues.map((issue) => (
-                    <IssueRow
-                      key={issue._id}
-                      issue={issue}
-                      selected={issue._id === selectedId}
-                      onClick={() => selectIssue(issue)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {(query.data?.pagination.pages || 0) > 1 && (
-                <div className="flex items-center justify-between border-t bg-white px-4 py-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={page <= 1 || query.isFetching}
-                    onClick={() => setPage((value) => value - 1)}
-                  >
-                    <ChevronLeft className="mr-1 h-4 w-4" />
-                    Previous
-                  </Button>
-                  <span className="text-xs font-medium text-slate-500">
-                    Page {page} of {query.data?.pagination.pages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={
-                      page >= (query.data?.pagination.pages || 1) ||
-                      query.isFetching
-                    }
-                    onClick={() => setPage((value) => value + 1)}
-                  >
-                    Next
-                    <ChevronRight className="ml-1 h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+          <div className="min-h-[420px] bg-slate-50/70">
+            <div className="flex items-center justify-between border-b bg-white px-4 py-2.5 text-xs text-slate-500">
+              <span>{query.data?.pagination.total || 0} matching issues</span>
+              {query.isFetching && <Loader2 className="h-4 w-4 animate-spin text-violet-600" />}
             </div>
 
-            <div
-              className={cn(
-                "min-w-0 bg-slate-50/50",
-                selected ? "block" : "hidden lg:block",
-              )}
-            >
-              {selected ? (
-                <IssueDetail
-                  issue={selected}
-                  tab={detailTab}
-                  onTabChange={setDetailTab}
-                  onBack={() => setSelectedId(null)}
-                />
-              ) : (
-                <div className="flex h-full min-h-[560px] items-center justify-center p-8 text-center">
-                  <div>
-                    <CircleDot className="mx-auto h-10 w-10 text-slate-300" />
-                    <h2 className="mt-3 font-semibold text-slate-700">
-                      Select an issue
-                    </h2>
-                    <p className="mt-1 max-w-sm text-sm text-slate-500">
-                      Choose an item from your queue to review the original
-                      store submission and ownership details.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
+            {query.isLoading ? (
+              <QueueState icon={Loader2} title="Loading your issues" description="Checking your assigned audit work…" spinning />
+            ) : query.isError ? (
+              <QueueState icon={AlertTriangle} title="Unable to load issues" description="Please refresh and try again." tone="error" />
+            ) : !query.data?.issues.length ? (
+              <QueueState icon={Inbox} title="Your queue is clear" description="No open assigned issues match these filters." />
+            ) : (
+              <div className="grid gap-3 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-3">
+                {query.data.issues.map((issue) => (
+                  <IssueCard
+                    key={issue._id}
+                    issue={issue}
+                    unread={issue.assignees.some((entry) => entry.user._id === user.id && entry.read !== true)}
+                    onClick={() => selectIssue(issue)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {(query.data?.pagination.pages || 0) > 1 && (
+              <div className="flex items-center justify-between border-t bg-white px-4 py-3">
+                <Button variant="outline" size="sm" disabled={page <= 1 || query.isFetching} onClick={() => setPage((value) => value - 1)}>
+                  <ChevronLeft className="mr-1 h-4 w-4" />Previous
+                </Button>
+                <span className="text-xs font-medium text-slate-500">Page {page} of {query.data?.pagination.pages}</span>
+                <Button variant="outline" size="sm" disabled={page >= (query.data?.pagination.pages || 1) || query.isFetching} onClick={() => setPage((value) => value + 1)}>
+                  Next<ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -391,13 +377,13 @@ const priorityStyle: Record<AuditTrackerIssuePriority, string> = {
   critical: "bg-red-600",
 };
 
-function IssueRow({
+function IssueCard({
   issue,
-  selected,
+  unread,
   onClick,
 }: {
   issue: AuditTrackerIssue;
-  selected: boolean;
+  unread: boolean;
   onClick: () => void;
 }) {
   const status =
@@ -406,13 +392,9 @@ function IssueRow({
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        "w-full border-l-4 px-4 py-3 text-left transition hover:bg-violet-50/60",
-        selected
-          ? "border-l-violet-600 bg-violet-50"
-          : "border-l-transparent bg-white",
-      )}
+      className="group relative w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md"
     >
+      {unread && <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-violet-600 ring-4 ring-violet-100" title="Unread issue" />}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="line-clamp-2 text-sm font-bold leading-5 text-slate-900">
@@ -427,6 +409,7 @@ function IssueRow({
           className={cn(
             "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
             priorityStyle[issue.priority],
+            unread && "mr-6",
           )}
           title={`${issue.priority} priority`}
         />
@@ -445,21 +428,29 @@ function IssueRow({
           {formatDistanceToNow(new Date(issue.updatedAt), { addSuffix: true })}
         </span>
       </div>
+      <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs text-slate-500">
+        <span className="truncate">{issue.currentDepartment?.name || issue.snapshot.departmentName}</span>
+        <span className="flex items-center font-medium text-violet-700">Open issue<ChevronRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" /></span>
+      </div>
     </button>
   );
 }
 
-function IssueDetail({
+export function IssueDetail({
   issue,
   tab,
   onTabChange,
   onBack,
+  scope = "myIssues",
 }: {
   issue: AuditTrackerIssue;
   tab: "details" | "history";
   onTabChange: (tab: "details" | "history") => void;
   onBack: () => void;
+  scope?: "myIssues" | "departmentIssues";
 }) {
+  const { user } = useAuth();
+  const canChangeAssignment = scope === "departmentIssues" && hasAuditTrackerDepartmentIssuesAction(user?.access, "changeAssignment");
   const [commentOpen, setCommentOpen] = useState(false);
   const [photoIndex, setPhotoIndex] = useState<number | null>(null);
   const originalComment =
@@ -475,7 +466,7 @@ function IssueDetail({
       <button
         type="button"
         onClick={onBack}
-        className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-violet-700 lg:hidden"
+        className="mb-3 inline-flex items-center gap-1 text-sm font-medium text-violet-700 hover:text-violet-900"
       >
         <ArrowLeft className="h-4 w-4" />
         Back to issues
@@ -547,11 +538,11 @@ function IssueDetail({
             Historical issues
           </button>
         </div>
-        <IssueActionDialogs issue={issue} />
+        <IssueActionDialogs issue={issue} scope={scope} />
       </div>
 
       {tab === "history" ? (
-        <IssueHistoryPanel issue={issue} />
+        <IssueHistoryPanel issue={issue} scope={scope} />
       ) : (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -578,7 +569,7 @@ function IssueDetail({
               value={
                 issue.escalation?.level === "none"
                   ? "Not escalated"
-                  : capitalize(issue.escalation.level.replace("_", " "))
+                  : issue.currentDepartment?.name || "Escalated"
               }
             />
           </div>
@@ -647,14 +638,14 @@ function IssueDetail({
             </Card>
 
             <div className="min-h-0 overflow-y-auto">
-              <IssueActivityPanel issueId={issue._id} />
+              <IssueActivityPanel issueId={issue._id} scope={scope} />
             </div>
           </div>
 
           <Card className="p-4 shadow-none">
-            <div className="flex items-center gap-2">
-              <UsersRound className="h-4 w-4 text-violet-600" />
-              <h3 className="text-sm font-bold text-slate-800">Assigned team</h3>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2"><UsersRound className="h-4 w-4 text-violet-600" /><h3 className="text-sm font-bold text-slate-800">Assigned team</h3></div>
+              {canChangeAssignment && <IssueAssignmentDialog issue={issue} />}
             </div>
             <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
               {issue.assignees.map((assignee) => (

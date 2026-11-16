@@ -442,6 +442,8 @@ async function applyPlan(plan) {
         role: index === 0 ? "owner" : "collaborator",
         assignedBy: null,
         assignedAt: entry.raisedAt,
+        read: false,
+        readAt: null,
       })),
       previousIssue,
       occurrenceNumber: entry.occurrenceNumber,

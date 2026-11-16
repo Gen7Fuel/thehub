@@ -7,6 +7,10 @@ const IssueAssigneeSchema = new mongoose.Schema(
     // null means the assignment was produced automatically when the issue was raised.
     assignedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     assignedAt: { type: Date, default: Date.now },
+    // Read tracking belongs to the assignment, not the issue globally. A new
+    // assignee therefore starts unread even when another assignee viewed it.
+    read: { type: Boolean, default: false },
+    readAt: { type: Date, default: null },
   },
   { _id: false }
 );
