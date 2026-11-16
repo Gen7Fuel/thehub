@@ -1,0 +1,81 @@
+name: Deploy CDN to Azure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cdn/**'
+      - '.github/workflows/cdn-azure.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cdn-azure-production
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/main' && (vars.CDN_DEPLOY_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && vars.CDN_AZURE_PREVIEW_ENABLED == 'true'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - name: Install and test CDN
+        working-directory: cdn
+        run: |
+          npm ci
+          npm test
+      - name: Package source for Linux App Service build
+        working-directory: cdn
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+        run: |
+          node -e 'require("node:fs").writeFileSync("release.json", JSON.stringify({commit:process.env.RELEASE_COMMIT}))'
+          zip ../cdn-azure.zip index.js app.js storage.js runtime.js package.json package-lock.json release.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cdn-azure
+          path: cdn-azure.zip
+          retention-days: 7
+
+  deploy:
+    needs: package
+    runs-on: ubuntu-latest
+    environment: cdn-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: cdn-azure
+      - name: Check deployment configuration
+        env:
+          CLIENT_ID: ${{ vars.AZURE_CDN_CLIENT_ID }}
+        run: test -n "$CLIENT_ID"
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CDN_CLIENT_ID }}
+          tenant-id: 21634e14-74fa-410a-8886-4c3f808b58cb
+          subscription-id: 29b24248-1990-4592-b25d-e6ee8e9db784
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: gen7erp-cdn-prod-29b24248
+          package: cdn-azure.zip
+      - name: Resolve app hostname
+        run: |
+          hostname=$(az webapp show --resource-group Gen7ERP --name gen7erp-cdn-prod-29b24248 --query defaultHostName --output tsv)
+          test -n "$hostname"
+          echo "CDN_HEALTH_URL=https://${hostname}/cdn/health" >> "$GITHUB_ENV"
+      - name: Verify deployed release and storage readiness
+        env:
+          CDN_EXPECT_RELEASE: ${{ github.sha }}
+          CDN_EXPECT_PAUSED: ${{ vars.CDN_DEPLOY_TARGET != 'azure' && 'true' || '' }}
+        run: node cdn/scripts/verify-deployment.cjs

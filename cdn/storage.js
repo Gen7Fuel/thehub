@@ -20,12 +20,23 @@ function modified(metadata, fallback) {
   return date.toISOString();
 }
 function azureContainer(env = process.env) {
-  if (!env.AZURE_STORAGE_CONNECTION_STRING || !env.AZURE_CONTAINER) {
-    throw new Error('Azure storage requires AZURE_STORAGE_CONNECTION_STRING and AZURE_CONTAINER');
+  if (!env.AZURE_CONTAINER || (!env.AZURE_STORAGE_CONNECTION_STRING && !env.AZURE_STORAGE_ACCOUNT_URL)) {
+    throw new Error('Azure storage requires AZURE_CONTAINER and a connection string or account URL');
+  }
+  if (env.AZURE_STORAGE_CONNECTION_STRING && env.AZURE_STORAGE_ACCOUNT_URL) {
+    throw new Error('Configure only one Azure storage authentication mode');
   }
   const { BlobServiceClient } = require('@azure/storage-blob');
-  return BlobServiceClient.fromConnectionString(env.AZURE_STORAGE_CONNECTION_STRING)
-    .getContainerClient(env.AZURE_CONTAINER);
+  if (env.AZURE_STORAGE_ACCOUNT_URL) {
+    const url = new URL(env.AZURE_STORAGE_ACCOUNT_URL);
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+      throw new Error('AZURE_STORAGE_ACCOUNT_URL must be an HTTPS account root URL');
+    }
+    const { ManagedIdentityCredential } = require('@azure/identity');
+    const credential = env.CDN_AZURE_CLIENT_ID ? new ManagedIdentityCredential({ clientId: env.CDN_AZURE_CLIENT_ID }) : new ManagedIdentityCredential();
+    return new BlobServiceClient(url.href, credential).getContainerClient(env.AZURE_CONTAINER);
+  }
+  return BlobServiceClient.fromConnectionString(env.AZURE_STORAGE_CONNECTION_STRING).getContainerClient(env.AZURE_CONTAINER);
 }
 function createStorage({ env = process.env, container } = {}) {
   const mode = env.CDN_STORAGE || 'local';
@@ -35,6 +46,10 @@ function createStorage({ env = process.env, container } = {}) {
   if (mode === 'azure') container ||= azureContainer(env);
   return {
     mode, uploadsDir,
+    async check() {
+      if (mode === 'azure') await container.getProperties();
+      else await fs.promises.access(uploadsDir);
+    },
     async put(filename, buffer) {
       if (!validFilename(filename)) throw new Error('Invalid filename');
       if (mode === 'local') {

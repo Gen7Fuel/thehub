@@ -7,6 +7,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const { setTimeout: delay } = require('node:timers/promises');
 const { createStorage, validFilename, CONTROL_FILE } = require('./storage');
+const { adminTokenReady, releaseId } = require('./runtime');
 
 function createApp({ env = process.env, storage = createStorage({ env }) } = {}) {
   const app = express();
@@ -47,7 +48,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
       if (typeof state.paused !== 'boolean' || typeof state.drained !== 'boolean') throw new Error('Invalid maintenance state');
       return state;
     }
-    catch (err) { if (err.code === 'ENOENT') return { paused: false, drained: false }; throw err; }
+    catch (err) { if (err.code === 'ENOENT') return { paused: env.CDN_START_PAUSED === 'true', drained: false }; throw err; }
   }
   function setPause(state) {
     const temp = controlPath + '.tmp';
@@ -57,7 +58,7 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
   if (pauseState().paused) setPause({ paused: true, drained: true });
   const route = fn => (req, res, next) => Promise.resolve(fn(req, res)).catch(next);
   function admin(req, res, next) {
-    if (!env.CDN_ADMIN_TOKEN) return res.status(503).json({ error: 'Admin token not configured on server' });
+    if (!adminTokenReady(env)) return res.status(503).json({ error: 'Admin token not configured on server' });
     if (req.get('Authorization') !== `Bearer ${env.CDN_ADMIN_TOKEN}`) return res.status(401).json({ error: 'Unauthorized' });
     next();
   }
@@ -79,6 +80,13 @@ function createApp({ env = process.env, storage = createStorage({ env }) } = {})
   app.use(cors());
   app.use(express.json({ limit: '50mb' }));
   app.get('/cdn', (req, res) => res.send('Upload service running'));
+  app.get('/cdn/health', route(async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!adminTokenReady(env)) return res.status(503).json({ error: 'CDN configuration is not ready' });
+    await storage.check();
+    const state = pauseState();
+    res.json({ status: 'ok', storage: storage.mode, paused: state.paused, drained: state.drained, release: releaseId() });
+  }));
   app.get('/cdn/maintenance', admin, route(async (req, res) => {
     res.json({ ...pauseState(), activeWrites, storage: storage.mode });
   }));
