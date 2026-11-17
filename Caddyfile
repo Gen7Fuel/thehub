@@ -66,7 +66,10 @@
 
     # === CDN routes ===
     handle /cdn/* {
-        reverse_proxy cdn:5001
+        reverse_proxy {$CDN_PUBLIC_UPSTREAM:cdn:5001} {
+            # Azure App Service needs its own host for TLS and site routing.
+            header_up Host {upstream_hostport}
+        }
     }
 
     # === Frontend routing (React SPA) ===

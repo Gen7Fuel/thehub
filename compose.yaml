@@ -58,6 +58,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - UPLOAD_SERVICE_URL=http://cdn:5001
+      - CDN_SERVICE_URL=${CDN_SERVICE_URL:-}
       - REDIS_URL=${REDIS_URL}
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
       - AZURE_CONTAINER=${AZURE_CONTAINER}
@@ -154,6 +155,8 @@ services:
   caddy:
     container_name: webserver
     image: caddy:latest
+    environment:
+      - CDN_PUBLIC_UPSTREAM=${CDN_PUBLIC_UPSTREAM:-cdn:5001}
     ports:
       - "3000:3000"
     volumes:

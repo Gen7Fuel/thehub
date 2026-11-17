@@ -1,3 +1,4 @@
+const { cdnServiceUrl } = require('./cdnService');
 // const fs = require("fs");
 // const path = require("path");
 // const axios = require("axios");
@@ -389,7 +390,7 @@ async function uploadBufferToCDN(buffer, filename) {
   const formData = new FormData();
   formData.append("file", buffer, { filename });
 
-  const response = await axios.post("http://cdn:5001/cdn/upload", formData, {
+  const response = await axios.post(cdnServiceUrl('upload'), formData, {
     headers: formData.getHeaders(),
   });
 
@@ -688,7 +689,7 @@ async function processInvoiceAutomation({ invoiceId, io }) {
           continue;
         }
 
-        const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
+        const cdnUrl = cdnServiceUrl(`download/${encodeURIComponent(filename)}`);
 
         const response = await axios.get(cdnUrl, {
           responseType: "arraybuffer",

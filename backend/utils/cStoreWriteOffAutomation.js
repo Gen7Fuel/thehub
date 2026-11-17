@@ -1,3 +1,4 @@
+const { cdnServiceUrl } = require('./cdnService');
 const fs = require("fs");
 const { chromium } = require("playwright-extra");
 const stealth = require("puppeteer-extra-plugin-stealth")();
@@ -77,7 +78,7 @@ async function syncWriteOffToCStore({
       new Blob([buffer], { type: "image/png" }),
       originalName,
     );
-    const response = await fetch("http://cdn:5001/cdn/upload", {
+    const response = await fetch(cdnServiceUrl('upload'), {
       method: "POST",
       body: formData,
     });

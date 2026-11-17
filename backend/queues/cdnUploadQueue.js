@@ -1,3 +1,4 @@
+const { cdnServiceUrl } = require('../utils/cdnService');
 const { Queue, Worker } = require('bullmq')
 const connection = require('../utils/redisClient')
 
@@ -33,7 +34,7 @@ async function uploadToCdn(fileBuffer, originalName, mimeType = 'image/jpeg') {
   const fileBlob = new Blob([Buffer.from(fileBuffer)], { type: mimeType })
   formData.append('file', fileBlob, originalName)
 
-  const response = await fetch('http://cdn:5001/cdn/upload', {
+  const response = await fetch(cdnServiceUrl('upload'), {
     method: 'POST',
     body: formData,
   })

@@ -1,3 +1,4 @@
+const { cdnServiceUrl } = require('../utils/cdnService');
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
@@ -56,7 +57,7 @@ async function migrateInvoiceImagesToSubdocuments() {
 
         if (!filename) continue;
 
-        const cdnUrl = `http://cdn:5001/cdn/download/${filename}`;
+        const cdnUrl = cdnServiceUrl(`download/${encodeURIComponent(filename)}`);
         const tempFilePath = path.join(tempDir, `${Date.now()}-${filename}`);
 
         let laplacianScore = null;

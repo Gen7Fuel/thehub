@@ -1,3 +1,4 @@
+const { cdnServiceUrl } = require('../utils/cdnService');
 const { Queue, Worker } = require("bullmq");
 const connection = require("../utils/redisClient");
 const CsoInvoice = require("../models/CsoInvoice");
@@ -47,7 +48,7 @@ const invoiceProcessingWorker = new Worker(
         const fileBlob = new Blob([buffer], { type: mime });
         formData.append("file", fileBlob, originalName);
 
-        const response = await fetch("http://cdn:5001/cdn/upload-png", {
+        const response = await fetch(cdnServiceUrl('upload-png'), {
           method: "POST",
           body: formData,
         });

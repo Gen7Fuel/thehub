@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   rollback-image:
-    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'rollback-image' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps'
+    if: vars.CDN_MIGRATION_FREEZE != 'true' && (github.event_name == 'workflow_dispatch' && inputs.mode == 'rollback-image' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps')
     runs-on: ubuntu-latest
     environment: cdn-production
     permissions:
@@ -63,7 +63,7 @@ jobs:
           tags: ghcr.io/gen7fuel/thehub-cdn-rollback:${{ github.sha }}
 
   package:
-    if: inputs.mode != 'media-copy' && inputs.mode != 'rollback-image' && github.ref == 'refs/heads/main' && (vars.CDN_DEPLOY_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && vars.CDN_AZURE_PREVIEW_ENABLED == 'true'))
+    if: vars.CDN_MIGRATION_FREEZE != 'true' && (inputs.mode != 'media-copy' && inputs.mode != 'rollback-image' && github.ref == 'refs/heads/main' && (vars.CDN_DEPLOY_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && vars.CDN_AZURE_PREVIEW_ENABLED == 'true')))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,6 +91,7 @@ jobs:
           retention-days: 7
 
   deploy:
+    if: vars.CDN_MIGRATION_FREEZE != 'true'
     needs: package
     runs-on: ubuntu-latest
     environment: cdn-production
@@ -127,7 +128,7 @@ jobs:
         run: node cdn/scripts/verify-deployment.cjs
 
   media-copy:
-    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'media-copy' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
+    if: vars.CDN_MIGRATION_FREEZE != 'true' && (github.event_name == 'workflow_dispatch' && inputs.mode == 'media-copy' && github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: cdn-media-copy-v2

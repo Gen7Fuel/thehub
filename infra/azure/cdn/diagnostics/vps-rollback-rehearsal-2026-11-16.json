@@ -1,0 +1,17 @@
+{
+  "startedAt": 1794866040.6935732,
+  "sourceRelease": "6e638442b45424b16570294672eb0c4a5e1066c4",
+  "baselineFiles": 10402,
+  "checks": [
+    "VPS write readable through Azure upstream in the same new storage",
+    "Fallback accepts uploads after route switch; Linux PNG conversion and Azure cross-read pass",
+    "Standby pause persists across an actual container restart"
+  ],
+  "routingAndActivationSeconds": 1.095,
+  "success": true,
+  "temporaryFilesRemoved": 2,
+  "finalStandbyPaused": true,
+  "azurePaused": true,
+  "productionContainerUnchanged": true,
+  "finishedAt": 1794866054.3988261
+}
