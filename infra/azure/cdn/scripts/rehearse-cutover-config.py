@@ -18,6 +18,15 @@ import urllib.request
 AZURE = 'https://gen7erp-cdn-prod-29b24248.azurewebsites.net'
 
 
+def validate_stopped_azure(proof, target, now):
+    expected = '/subscriptions/29b24248-1990-4592-b25d-e6ee8e9db784/resourceGroups/Gen7ERP/providers/Microsoft.Web/sites/gen7erp-cdn-prod-29b24248'
+    assert target == 'standby', 'Stopped Azure proof is only valid for standby recovery'
+    assert proof.get('id', '').lower() == expected.lower(), 'Wrong App Service in stopped-state proof'
+    assert proof.get('state', '').lower() == 'stopped', 'App Service must be confirmed stopped'
+    observed = datetime.fromisoformat(proof['observedAt'].replace('Z', '+00:00')).timestamp()
+    assert 0 <= now - observed <= 180, 'Fresh control-plane stopped-state proof required'
+
+
 def inspect(name):
     return json.loads(subprocess.run(['docker', 'inspect', name], capture_output=True,
                                     text=True, timeout=20, check=True).stdout)[0]
@@ -53,6 +62,7 @@ def main():
     parser.add_argument('--execute-production', action='store_true')
     parser.add_argument('--activate-selected-writer', action='store_true')
     parser.add_argument('--verified-backup-proof')
+    parser.add_argument('--azure-stopped-proof')
     args = parser.parse_args()
     assert bool(args.apply_target) == args.execute_production, 'Production execution requires an explicit target and flag'
     names = ['backend', 'auth-backend', 'cdn', 'webserver', 'postgres', 'desk-api', 'desk-cdn-backup', 'desk-caddy']
@@ -73,6 +83,11 @@ def main():
             assert verified_at >= Path('/home/gen7fuel/.hub-cdn-deploy-freeze').stat().st_mtime, 'Fresh frozen backup proof required for initial cutover'
         lock = open('/home/gen7fuel/.hub-deploy.lock', 'a')
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    stopped_proof = None
+    if args.azure_stopped_proof:
+        assert args.apply_target and args.execute_production
+        stopped_proof = json.loads(Path(args.azure_stopped_proof).read_text())
+        validate_stopped_azure(stopped_proof, args.apply_target, datetime.now(timezone.utc).timestamp())
     hub = Path('/home/gen7fuel/thehub')
     desk = Path('/home/gen7fuel/desk')
     environments = {name: env(item) for name, item in before.items()}
@@ -122,6 +137,11 @@ def main():
     if args.apply_target:
         token = environments['cdn']['CDN_ADMIN_TOKEN']
         for base in ['http://127.0.0.1:5001', AZURE, 'http://127.0.0.1:15001']:
+            if base == 'http://127.0.0.1:5001' and not before['cdn']['State']['Running']:
+                continue
+            if base == AZURE and stopped_proof:
+                validate_stopped_azure(stopped_proof, args.apply_target, datetime.now(timezone.utc).timestamp())
+                continue
             request = urllib.request.Request(base + '/cdn/maintenance', headers={'Authorization': 'Bearer ' + token})
             with urllib.request.urlopen(request, timeout=30) as response:
                 state = json.load(response)
@@ -166,6 +186,8 @@ def main():
                 json.dump({'target': args.apply_target, 'manifestSha256': proof['manifestSha256'],
                            'activationAttemptAt': datetime.now(timezone.utc).isoformat()}, file)
                 file.flush(); os.fsync(file.fileno())
+        if stopped_proof:
+            validate_stopped_azure(stopped_proof, args.apply_target, datetime.now(timezone.utc).timestamp())
         maintenance(False)
         try:
             up(hub, values, candidates[args.apply_target], ['backend'])

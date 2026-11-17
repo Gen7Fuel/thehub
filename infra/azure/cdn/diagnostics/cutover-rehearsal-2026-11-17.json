@@ -34,6 +34,6 @@
     "months": ["2026-09", "2026-10", "2026-11"],
     "finalFrozenPlanRequired": true
   },
-  "tests": { "cutoverPassed": 8, "existingCdnPassed": 32, "existingCdnSkipped": 3 },
+  "tests": { "cutoverPassed": 8, "routingAndControlPlaneGuardsPassed": 10, "existingCdnPassed": 32, "existingCdnSkipped": 3 },
   "liveFullFrozenBackupVerified": false
 }

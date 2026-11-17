@@ -19,4 +19,4 @@ jobs:
           cache-dependency-path: cdn/package-lock.json
       - run: npm ci --prefix cdn --ignore-scripts
       - run: node --test infra/azure/cdn/test/*.test.cjs
-      - run: python3 -m unittest discover -s infra/azure/cdn/scripts -p test_routing_plan.py
+      - run: python3 -m unittest discover -s infra/azure/cdn/scripts -p 'test_*.py'

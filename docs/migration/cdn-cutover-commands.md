@@ -90,6 +90,15 @@ fixed window based on the quick routing rehearsal.
    variable** `CDN_MIGRATION_FREEZE=true`; wait for real in-flight jobs to finish.
    Monitor the known stale queued run; abort on unexpected jobs. Do not assume
    this variable cancels older runs. Keep Desk deployments idle separately.
+   Before the actual window, fence the old deployment credential as a separately
+   reviewed prerequisite. Use a new environment-scoped deployment key that old
+   workflow revisions cannot access, then retire the old authorized server key
+   only after checking whether Desk or personal access shares it and testing
+   replacement access. That credential change is not implemented by this PR.
+   A repository-secret update alone is not enough to establish fencing:
+   [GitHub reads repository secrets when a run queues](https://docs.github.com/en/actions/reference/security/secrets#when-github-actions-reads-secrets),
+   and this run's abnormal internal state is unresolved. Do not assume its secret
+   snapshot state or rely only on its displayed queued status.
    Install the server marker:
 
    ```powershell
@@ -215,6 +224,26 @@ Desk's live source stays on the new account. Use the existing initial full-backu
 proof as a checkpoint; this hosting rollback does not copy media back to old
 storage. After any new-account writes, never simply reactivate old `cdn:5001`.
 See [the rollback runbook](../../infra/azure/rollback-vps/README.md) for conditions.
+Keep deployment freezes active while standby is the writer; an Azure redeploy
+must not restart an unfenced Azure writer. Returning to normal deployments needs
+a reviewed active-writer guard or a confirmed return to Azure first.
+
+If Azure's API cannot drain, stop the App Service through the control plane and
+capture fresh state using the authorized Azure CLI, for example:
+
+```powershell
+$stopped = az webapp show --resource-group Gen7ERP --name gen7erp-cdn-prod-29b24248 --query '{id:id,state:state}' -o json | ConvertFrom-Json
+if ($stopped.state -ne 'Stopped') { throw 'Azure writer not fenced' }
+$stopped | Add-Member observedAt ([DateTime]::UtcNow.ToString('o'))
+$stopped | ConvertTo-Json | ssh gen7fuel@app.gen7fuel.com 'umask 077; cat > /home/gen7fuel/.hub-cdn-azure-stop-proof.json'
+```
+
+For target `standby`, append `--azure-stopped-proof
+/home/gen7fuel/.hub-cdn-azure-stop-proof.json` to the runtime helper arguments.
+The guard accepts only the exact CDN App Service, `Stopped` state and an
+observation at most three minutes old; it rechecks freshness before activation.
+It also accepts an already stopped original CDN as fenced. These data guards
+were tested; no real Azure control-plane stop was performed in rehearsal.
 
 The exact production apply path, large frozen copy/deletion behavior against live
 Azure and full month-backup completion must still be observed during the actual
