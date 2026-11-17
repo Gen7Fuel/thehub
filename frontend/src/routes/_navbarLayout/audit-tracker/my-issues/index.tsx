@@ -103,7 +103,7 @@ export function IssueQueuePage({ scope }: { scope: "myIssues" | "departmentIssue
   const query = useQuery({
     queryKey: [
       "audit-tracker",
-      "my-issues",
+      scope === "departmentIssues" ? "department-issues" : "my-issues",
       debouncedSearch,
       site,
       status,
@@ -126,7 +126,6 @@ export function IssueQueuePage({ scope }: { scope: "myIssues" | "departmentIssue
       hasAuditTrackerAccess(user.access) &&
       hasAuditTrackerPermission(user.access, scope),
     ),
-    placeholderData: (previous) => previous,
   });
 
   if (!user) return null;

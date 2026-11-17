@@ -138,6 +138,14 @@ export interface AuditTrackerAssignmentCandidate extends AuditTrackerPerson {
   departments: Array<{ _id: string; name: string; current: boolean }>
 }
 
+export interface AuditTrackerBoardReadModel {
+  sections: Record<AuditTrackerIssueStatus, { issues: AuditTrackerIssue[]; total: number }>
+  sites: Array<{ _id: string; name: string }>
+  departments: Array<{ _id: string; name: string }>
+  filters: { site: string; department: string; priority: string; search: string }
+  resolvedWindowDays: number
+}
+
 export interface AuditTrackerHistoricalIssue {
   _id: string
   status: AuditTrackerIssueStatus

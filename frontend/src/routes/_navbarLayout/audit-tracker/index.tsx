@@ -21,6 +21,9 @@ function AuditTrackerIndex() {
   if (hasAuditTrackerPermission(access, 'departmentIssues')) {
     return <Navigate to="/audit-tracker/department-issues" replace />
   }
+  if (hasAuditTrackerPermission(access, 'issuesBoard')) {
+    return <Navigate to="/audit-tracker/issues-board" replace />
+  }
   if (hasAuditTrackerPermission(access, 'report')) {
     return <Navigate to="/audit-tracker/report" replace />
   }

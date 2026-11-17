@@ -3,6 +3,12 @@ import { auditTrackerApi } from './audit-tracker.api'
 import type { AddAuditTrackerActivityInput, MyIssuesQuery } from './audit-tracker.types'
 
 export const auditTrackerService = {
+  issuesBoard(query: { search?: string; site?: string; department?: string; priority?: string }) {
+    return auditTrackerApi.issuesBoard(query, actionOptions('auditTracker.issuesBoard', 'audit-tracker.issues-board', 'read', 'station-audit-issue', 'Station Audit Issues Board viewed'))
+  },
+  issuesBoardActivity(issueId: string) {
+    return auditTrackerApi.issuesBoardActivity(issueId, actionOptions('auditTracker.issuesBoard', 'audit-tracker.issues-board.activity', 'read', 'station-audit-issue-activity', 'Issues Board activity viewed'))
+  },
   departmentIssues(query: MyIssuesQuery) {
     return auditTrackerApi.departmentIssues(query, actionOptions('auditTracker.departmentIssues', 'audit-tracker.department-issues', 'read', 'station-audit-issue', 'Department Station Audit issues viewed'))
   },

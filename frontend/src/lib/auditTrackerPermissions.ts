@@ -1,4 +1,4 @@
-export type AuditTrackerPermission = 'myIssues' | 'departmentIssues' | 'report'
+export type AuditTrackerPermission = 'myIssues' | 'departmentIssues' | 'issuesBoard' | 'report'
 export type AuditTrackerMyIssuesAction = 'updateStatus' | 'escalateIssue' | 'postComments'
 export type AuditTrackerDepartmentIssuesAction = 'updateStatus' | 'postComments' | 'changeDepartment' | 'changeAssignment' | 'changePriority'
 

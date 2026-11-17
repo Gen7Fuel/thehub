@@ -12,12 +12,13 @@ export const Route = createFileRoute('/_navbarLayout/audit-tracker')({
 })
 
 const links: Array<{
-  to: '/audit-tracker/my-issues' | '/audit-tracker/department-issues' | '/audit-tracker/report'
+  to: '/audit-tracker/my-issues' | '/audit-tracker/department-issues' | '/audit-tracker/issues-board' | '/audit-tracker/report'
   label: string
   permission: AuditTrackerPermission
 }> = [
   { to: '/audit-tracker/my-issues', label: 'My Issues', permission: 'myIssues' },
   { to: '/audit-tracker/department-issues', label: 'Department Issues', permission: 'departmentIssues' },
+  { to: '/audit-tracker/issues-board', label: 'Issues Board', permission: 'issuesBoard' },
   { to: '/audit-tracker/report', label: 'Report', permission: 'report' },
 ]
 

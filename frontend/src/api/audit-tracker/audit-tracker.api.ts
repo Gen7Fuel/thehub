@@ -8,6 +8,7 @@ import type {
   AuditTrackerEscalationTarget,
   AuditTrackerDepartmentOption,
   AuditTrackerAssignmentCandidate,
+  AuditTrackerBoardReadModel,
   AuditTrackerIssue,
   AuditTrackerHistoricalActivityReadModel,
   AuditTrackerIssueHistoryReadModel,
@@ -16,6 +17,12 @@ import type {
 } from './audit-tracker.types'
 
 export const auditTrackerApi = {
+  async issuesBoard(query: { search?: string; site?: string; department?: string; priority?: string }, options: RequestOptions): Promise<AuditTrackerBoardReadModel> {
+    return (await apiClient.get('/station-audits/tracker/issues-board', { ...requestConfig(options), params: query })).data
+  },
+  async issuesBoardActivity(issueId: string, options: RequestOptions): Promise<AuditTrackerActivityReadModel> {
+    return (await apiClient.get(`/station-audits/tracker/issues-board/${issueId}/activities`, requestConfig(options))).data
+  },
   async departmentIssues(query: MyIssuesQuery, options: RequestOptions): Promise<MyIssuesReadModel> {
     return (await apiClient.get('/station-audits/tracker/department-issues', { ...requestConfig(options), params: query })).data
   },

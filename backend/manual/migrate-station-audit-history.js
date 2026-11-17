@@ -114,6 +114,17 @@ async function activeAdminHeads() {
   return activeUsersByIds(departments.map((department) => department.departmentHead));
 }
 
+async function activeHoAdminHead() {
+  const department = await StationAuditDepartment.findOne({
+    name: /^HO Admin$/i,
+    isAdminDepartment: true,
+    active: true,
+    departmentHead: { $ne: null },
+  }).select("departmentHead").lean();
+  if (!department) return [];
+  return activeUsersByIds([department.departmentHead]);
+}
+
 async function fallbackAssignees(department) {
   const defaults = await activeUsersByIds(department.defaultIssueAssignees || []);
   if (defaults.length) return defaults;
@@ -125,7 +136,9 @@ async function fallbackAssignees(department) {
 
 async function initialAssignees(department, location) {
   if (department.assignmentStrategy === "station_manager") {
-    const emails = [...(location.managerEmails || []), location.email]
+    // A station's general email account must never own or collaborate on an
+    // issue. Only users explicitly configured in managerEmails are eligible.
+    const emails = [...(location.managerEmails || [])]
       .map((email) => key(email))
       .filter(Boolean);
     if (emails.length) {
@@ -137,6 +150,9 @@ async function initialAssignees(department, location) {
       const ordered = uniqueIds(emails.map((email) => usersByEmail.get(email)).filter(Boolean));
       if (ordered.length) return ordered;
     }
+    // Station Manager issues bypass the department defaults/head when no
+    // manager can be resolved and go directly to the active HO Admin head.
+    return activeHoAdminHead();
   }
   return fallbackAssignees(department);
 }
