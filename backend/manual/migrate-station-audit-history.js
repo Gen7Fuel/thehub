@@ -25,6 +25,7 @@ const User = require("../models/User");
 const {
   StationAuditSection,
   StationAuditChecklist,
+  StationAuditChecklistRevision,
   StationAuditStatusOptionSet,
   StationAuditDepartment,
   StationAuditRun,
@@ -158,12 +159,13 @@ async function initialAssignees(department, location) {
 }
 
 async function loadConfiguration() {
-  const [sections, checklists, optionSets, departments, locations] = await Promise.all([
+  const [sections, checklists, revisions, optionSets, departments, locations] = await Promise.all([
     StationAuditSection.find({ legacyTemplateId: { $exists: true } }).lean(),
     StationAuditChecklist.find({
       legacyTemplateId: { $exists: true },
       legacyItemId: { $exists: true },
     }).lean(),
+    StationAuditChecklistRevision.find({ current: true }).lean(),
     StationAuditStatusOptionSet.find({}).lean(),
     StationAuditDepartment.find({}).lean(),
     Location.find({}).select("_id stationName site email managerEmails").lean(),
@@ -176,9 +178,14 @@ async function loadConfiguration() {
     }
   }
 
+  const revisionByChecklist = new Map(
+    revisions.map((revision) => [id(revision.checklist), revision])
+  );
+
   return {
     sectionByTemplate: new Map(sections.map((section) => [id(section.legacyTemplateId), section])),
     checklistByLegacyItem: new Map(checklists.map((checklist) => [id(checklist.legacyItemId), checklist])),
+    revisionByChecklist,
     checklistsByTemplate: checklists.reduce((map, checklist) => {
       const templateId = id(checklist.legacyTemplateId);
       if (!map.has(templateId)) map.set(templateId, []);
@@ -300,7 +307,14 @@ function buildPlan(legacy, config, occurrences) {
         errors.push(`Item ${item._id} ("${item.item}"): department "${item.assignedTo}" was not found`);
         continue;
       }
-      mappedItems.push({ item, checklist, department });
+      const checklistRevision = config.revisionByChecklist.get(id(checklist));
+      if (!checklistRevision) {
+        errors.push(
+          `Item ${item._id} ("${item.item}"): no current checklist revision exists for ${checklist._id}; run the configuration migration first`
+        );
+        continue;
+      }
+      mappedItems.push({ item, checklist, checklistRevision, department });
     }
     if (!mappedItems.length) continue;
 
@@ -328,7 +342,7 @@ function buildPlan(legacy, config, occurrences) {
     };
     runs.push(run);
 
-    for (const { item, checklist, department } of mappedItems) {
+    for (const { item, checklist, checklistRevision, department } of mappedItems) {
       const status = selectedStatus(item, checklist, config, warnings);
       const response = {
         source: item,
@@ -337,6 +351,7 @@ function buildPlan(legacy, config, occurrences) {
         department,
         document: {
           checklist: checklist._id,
+          checklistRevision: checklistRevision._id,
           checklistSnapshot: {
             item: normalize(item.item) || checklist.item,
             description: checklist.description || "",

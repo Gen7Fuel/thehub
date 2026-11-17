@@ -8,6 +8,7 @@ const {
   StationAuditStatusOptionSet,
 } = require("../../../models/station-audits");
 const { normalizeOptions } = require("./statusOptionRoutes");
+const { createChecklistRevision } = require("../../../services/stationAuditChecklistRevision");
 
 const router = express.Router();
 const EDIT_PERMISSION = "auditManager.checklist.edit";
@@ -383,6 +384,11 @@ router.post("/sections/:sectionId/checklists", async (req, res) => {
       sortOrder,
       createdBy: userId,
     });
+    await createChecklistRevision(created.toObject(), {
+      changedBy: userId,
+      changeType: "created",
+      at: created.createdAt,
+    });
     const checklist = await populatedChecklist(created._id);
     const { logChange } = require("../../../middleware/changeLogger");
     await logChange(req, {
@@ -507,6 +513,13 @@ router.put("/sections/:sectionId/reorder", async (req, res) => {
       { section: sectionId, active: false, sortOrder: { $ne: null } },
       { $set: { sortOrder: null } },
     );
+    const changedChecklistIds = normalized.checklistIds.filter((checklistId, sortOrder) => {
+      const before = activeBefore.find((entry) => entry._id.toString() === checklistId);
+      return before?.sortOrder !== sortOrder;
+    });
+    for (const checklistId of changedChecklistIds) {
+      await createChecklistRevision(checklistId, { changedBy: userId });
+    }
     const { logChange } = require("../../../middleware/changeLogger");
     await logChange(req, {
       action: "update",
@@ -578,6 +591,7 @@ router.post(
         { _id: checklistId },
         { $set: { statusOptionSet: created._id } },
       );
+      await createChecklistRevision(checklistId, { changedBy: userId });
       const updated = await populatedChecklist(checklistId);
       const { logChange } = require("../../../middleware/changeLogger");
       await logChange(req, {
@@ -642,6 +656,7 @@ router.put("/sections/:sectionId/checklists/:checklistId", async (req, res) => {
       section: sectionId,
     }).lean();
     if (!before) return res.status(404).json({ error: "Checklist not found" });
+    const revisionChecklistIds = new Set([checklistId]);
 
     if (update.field === "assignedSites") {
       const allowed = new Set(
@@ -703,6 +718,9 @@ router.put("/sections/:sectionId/checklists/:checklistId", async (req, res) => {
         .sort({ sortOrder: 1, item: 1 })
         .lean();
       const now = new Date();
+      remaining.forEach((item, sortOrder) => {
+        if (item.sortOrder !== sortOrder) revisionChecklistIds.add(item._id.toString());
+      });
       await StationAuditChecklist.bulkWrite([
         ...remaining.map((item, sortOrder) => ({
           updateOne: {
@@ -755,6 +773,9 @@ router.put("/sections/:sectionId/checklists/:checklistId", async (req, res) => {
         }).sort({ sortOrder: -1 }).select("sortOrder").lean(),
       ]);
       const now = new Date();
+      remainingOld.forEach((item, sortOrder) => {
+        if (item.sortOrder !== sortOrder) revisionChecklistIds.add(item._id.toString());
+      });
       await StationAuditChecklist.bulkWrite([
         ...remainingOld.map((item, sortOrder) => ({
           updateOne: {
@@ -792,6 +813,15 @@ router.put("/sections/:sectionId/checklists/:checklistId", async (req, res) => {
       { section: sectionId, active: false, sortOrder: { $ne: null } },
       { $set: { sortOrder: null } },
     );
+    const primaryChangeType = update.field === "active"
+      ? (update.value ? "reactivated" : "deactivated")
+      : "updated";
+    for (const revisedChecklistId of revisionChecklistIds) {
+      await createChecklistRevision(revisedChecklistId, {
+        changedBy: userId,
+        changeType: revisedChecklistId === checklistId ? primaryChangeType : "updated",
+      });
+    }
     const after = await StationAuditChecklist.findById(checklistId).lean();
     const checklist = await populatedChecklist(checklistId);
     const { logChange } = require("../../../middleware/changeLogger");

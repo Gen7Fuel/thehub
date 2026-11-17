@@ -1,8 +1,14 @@
 import { actionOptions } from '@/api/resources/action-options'
 import { auditTrackerApi } from './audit-tracker.api'
-import type { AddAuditTrackerActivityInput, MyIssuesQuery } from './audit-tracker.types'
+import type { AddAuditTrackerActivityInput, AuditReportFrequency, MyIssuesQuery } from './audit-tracker.types'
 
 export const auditTrackerService = {
+  reportAvailability(query: { site: string; frequency: AuditReportFrequency; anchor: string }) {
+    return auditTrackerApi.reportAvailability(query, actionOptions('auditTracker.report', 'audit-tracker.report.availability', 'read', 'station-audit-run', 'Station Audit report availability viewed'))
+  },
+  reportOverview(query: { site: string; frequency: AuditReportFrequency; date: string }) {
+    return auditTrackerApi.reportOverview(query, actionOptions('auditTracker.report', 'audit-tracker.report.overview', 'read', 'station-audit-run', 'Station Audit report overview viewed'))
+  },
   issuesBoard(query: { search?: string; site?: string; department?: string; priority?: string }) {
     return auditTrackerApi.issuesBoard(query, actionOptions('auditTracker.issuesBoard', 'audit-tracker.issues-board', 'read', 'station-audit-issue', 'Station Audit Issues Board viewed'))
   },

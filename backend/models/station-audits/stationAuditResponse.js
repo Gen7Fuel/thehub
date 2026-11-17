@@ -4,6 +4,11 @@ const StationAuditResponseSchema = new mongoose.Schema(
   {
     run: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditRun", required: true },
     checklist: { type: mongoose.Schema.Types.ObjectId, ref: "StationAuditChecklist", required: true },
+    checklistRevision: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "StationAuditChecklistRevision",
+      required: true,
+    },
     checklistSnapshot: {
       item: { type: String, required: true },
       description: { type: String, default: "" },
@@ -33,6 +38,7 @@ const StationAuditResponseSchema = new mongoose.Schema(
 );
 
 StationAuditResponseSchema.index({ run: 1, checklist: 1 }, { unique: true });
+StationAuditResponseSchema.index({ checklistRevision: 1 });
 StationAuditResponseSchema.index({ checklist: 1, checkedAt: -1 });
 
 module.exports = mongoose.model("StationAuditResponse", StationAuditResponseSchema);

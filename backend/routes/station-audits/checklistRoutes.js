@@ -13,6 +13,7 @@ const {
 const {
   StationAuditSection,
   StationAuditChecklist,
+  StationAuditChecklistRevision,
   StationAuditDepartment,
   StationAuditRun,
   StationAuditResponse,
@@ -436,6 +437,15 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
     if (!checklist.department || !checklist.statusOptionSet) {
       return res.status(409).json({ error: "Checklist configuration is incomplete" });
     }
+    const checklistRevision = await StationAuditChecklistRevision.findOne({
+      checklist: checklist._id,
+      current: true,
+    }).select("_id").lean();
+    if (!checklistRevision) {
+      return res.status(409).json({
+        error: "Checklist revision history is missing. Ask an administrator to repair the checklist configuration.",
+      });
+    }
 
     const selectedOption = checklist.statusOptionSet?.options?.find(
       (option) => String(option._id) === input.statusOptionId
@@ -528,6 +538,7 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
       { run: run._id, checklist: checklist._id },
       {
         $set: {
+          checklistRevision: checklistRevision._id,
           checklistSnapshot: {
             item: checklist.item,
             description: checklist.description || "",

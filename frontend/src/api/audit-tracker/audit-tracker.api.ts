@@ -12,11 +12,20 @@ import type {
   AuditTrackerIssue,
   AuditTrackerHistoricalActivityReadModel,
   AuditTrackerIssueHistoryReadModel,
+  AuditReportFrequency,
+  AuditReportAvailability,
+  AuditReportOverview,
   MyIssuesQuery,
   MyIssuesReadModel,
 } from './audit-tracker.types'
 
 export const auditTrackerApi = {
+  async reportAvailability(query: { site: string; frequency: AuditReportFrequency; anchor: string }, options: RequestOptions): Promise<AuditReportAvailability> {
+    return (await apiClient.get('/station-audits/tracker/reports/availability', { ...requestConfig(options), params: query })).data
+  },
+  async reportOverview(query: { site: string; frequency: AuditReportFrequency; date: string }, options: RequestOptions): Promise<AuditReportOverview> {
+    return (await apiClient.get('/station-audits/tracker/reports/overview', { ...requestConfig(options), params: query })).data
+  },
   async issuesBoard(query: { search?: string; site?: string; department?: string; priority?: string }, options: RequestOptions): Promise<AuditTrackerBoardReadModel> {
     return (await apiClient.get('/station-audits/tracker/issues-board', { ...requestConfig(options), params: query })).data
   },

@@ -171,3 +171,36 @@ export interface AuditTrackerHistoricalActivityReadModel {
   issue: AuditTrackerHistoricalIssue
   activities: AuditTrackerActivity[]
 }
+
+export type AuditReportFrequency = 'daily' | 'weekly' | 'monthly'
+
+export interface AuditReportAvailability {
+  frequency: AuditReportFrequency
+  anchor: string
+  periods: Array<{
+    periodKey: string
+    date: string
+    endDate?: string
+    label: string
+    runCount: number
+    completedRunCount: number
+    hasData: boolean
+  }>
+}
+
+export interface AuditReportOverview {
+  type: 'store'
+  frequency: AuditReportFrequency
+  location: { _id: string; name: string; timezone: string }
+  sites: Array<{ _id: string; name: string }>
+  period: { periodKey: string; start: string; end: string; label: string }
+  summary: { total: number; completed: number; pending: number }
+  sections: Array<{
+    _id: string
+    name: string
+    description: string
+    sortOrder: number | null
+    run: { _id: string; state: 'in_progress' | 'completed'; completedAt?: string | null } | null
+    summary: { total: number; completed: number; pending: number }
+  }>
+}

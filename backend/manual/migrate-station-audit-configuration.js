@@ -28,9 +28,14 @@ const User = require("../models/User");
 const {
   StationAuditSection,
   StationAuditChecklist,
+  StationAuditChecklistRevision,
   StationAuditStatusOptionSet,
   StationAuditDepartment,
 } = require("../models/station-audits");
+const {
+  checklistSnapshot,
+  revisionScopeKeys,
+} = require("../services/stationAuditChecklistRevision");
 
 const apply = process.argv.includes("--apply");
 const RESERVED_SELECT_TEMPLATES = new Set(["assigned to", "category", "follow up"]);
@@ -357,7 +362,7 @@ async function upsertDocuments(documents) {
       ...document
     } = sourceChecklist;
 
-    await StationAuditChecklist.findOneAndUpdate(
+    const saved = await StationAuditChecklist.findOneAndUpdate(
       {
         legacyTemplateId: document.legacyTemplateId,
         legacyItemId: document.legacyItemId,
@@ -370,6 +375,33 @@ async function upsertDocuments(documents) {
           department: departmentIds.get(lookupKey(departmentLegacyName)),
         },
         $unset: { followUpInstructions: "" },
+      },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
+    );
+
+    const existingCurrent = await StationAuditChecklistRevision.findOne({
+      checklist: saved._id,
+      current: true,
+    }).select("_id version").lean();
+    if (existingCurrent && existingCurrent.version !== "v1.0") {
+      throw new Error(
+        `Checklist ${saved._id} already has current revision ${existingCurrent.version}; `
+        + "the initial configuration migration will not overwrite revision history"
+      );
+    }
+    await StationAuditChecklistRevision.findOneAndUpdate(
+      { checklist: saved._id, version: "v1.0" },
+      {
+        $set: {
+          section: saved.section,
+          current: true,
+          effectiveFrom: saved.createdAt,
+          effectiveTo: null,
+          snapshot: checklistSnapshot(saved.toObject()),
+          scopeKeys: revisionScopeKeys(saved.toObject()),
+          changedBy: saved.createdBy,
+          changeType: "migrated",
+        },
       },
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );
@@ -406,6 +438,7 @@ async function run() {
   console.log("\nMigration summary:");
   console.log(`  StationAuditSection:         ${documents.sections.length}`);
   console.log(`  StationAuditChecklist:       ${documents.checklists.length}`);
+  console.log(`  Checklist revision v1.0:     ${documents.checklists.length}`);
   console.log(`  StationAuditStatusOptionSet: ${documents.statusSets.length}`);
   console.log(`  StationAuditDepartment:      ${documents.departments.length}`);
 

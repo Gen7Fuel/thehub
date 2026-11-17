@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import mongoose from "mongoose";
 import stationAuditModels from "../models/station-audits/index.js";
+import checklistRevisionService from "../services/stationAuditChecklistRevision.js";
 
 const {
   StationAuditSection,
   StationAuditChecklist,
+  StationAuditChecklistRevision,
   StationAuditStatusOptionSet,
   StationAuditDepartment,
   StationAuditRun,
@@ -14,8 +16,17 @@ const {
 } = stationAuditModels;
 
 const id = () => new mongoose.Types.ObjectId();
+const { revisionVersionAfter } = checklistRevisionService;
 
 describe("station audit models", () => {
+  it("increments checklist versions through minor and major revisions", () => {
+    expect(revisionVersionAfter()).toBe("v1.0");
+    expect(revisionVersionAfter("v1.0")).toBe("v1.1");
+    expect(revisionVersionAfter("v1.8")).toBe("v1.9");
+    expect(revisionVersionAfter("v1.9")).toBe("v2.0");
+    expect(revisionVersionAfter("v12.9")).toBe("v13.0");
+  });
+
   it("omits the legacy template key for manually created sections", () => {
     const section = new StationAuditSection({
       name: "Manual section",
@@ -119,6 +130,7 @@ describe("station audit models", () => {
     const userId = id();
     const sectionId = id();
     const checklistId = id();
+    const checklistRevisionId = id();
     const departmentId = id();
     const run = new StationAuditRun({
       section: sectionId,
@@ -131,6 +143,7 @@ describe("station audit models", () => {
     const response = new StationAuditResponse({
       run: run._id,
       checklist: checklistId,
+      checklistRevision: checklistRevisionId,
       checklistSnapshot: {
         item: "Inspect fuel pumps",
         frequency: "daily",
@@ -187,5 +200,30 @@ describe("station audit models", () => {
 
     issue.priority = "urgent";
     expect(issue.validateSync()?.errors.priority).toBeDefined();
+  });
+
+  it("validates checklist revision versions and snapshots", () => {
+    const checklistId = id();
+    const revision = new StationAuditChecklistRevision({
+      checklist: checklistId,
+      section: id(),
+      version: "v1.0",
+      current: true,
+      snapshot: {
+        item: "Inspect fuel pumps",
+        frequency: "daily",
+        auditTypes: ["store", "visitor"],
+        department: id(),
+        statusOptionSet: id(),
+        assignedSites: [id()],
+        active: true,
+      },
+      changedBy: id(),
+      changeType: "created",
+    });
+
+    expect(revision.validateSync()).toBeUndefined();
+    revision.version = "1.0";
+    expect(revision.validateSync()?.errors.version).toBeDefined();
   });
 });
