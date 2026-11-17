@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "productionApplyPathExecuted": false,
+  "githubSettingsChanged": false,
+  "productionMediaWrites": 0,
+  "productionContainersUnchanged": true,
+  "configurationRehearsal": {
+    "azureAndStandbyCandidatesPassed": true,
+    "existingHubSettingsPreserved": true,
+    "deskArchiveDestinationPreserved": true,
+    "credentialsKeptInMemory": true,
+    "productionComposeUpCalls": 0
+  },
+  "syntheticSequence": {
+    "realCdnAndProxyImages": true,
+    "oldWriterFencedBeforeSwitch": true,
+    "newWriterEnabledAfterRouteVerification": true,
+    "base64AndPngPassed": true,
+    "sameStorageStandbyRollbackPassed": true,
+    "pauseSurvivedFixtureRestart": true,
+    "resourcesRemoved": true
+  },
+  "disposableCompose": {
+    "caddyRecreatedWhileBackendStayedStopped": true,
+    "backendRestartWaitedForHealth": true,
+    "proxyReadPassedAfterRestart": true,
+    "resourcesRemoved": true
+  },
+  "readOnlyOnlinePlan": {
+    "files": 10461,
+    "sourceBytes": 34417464696,
+    "proposedDeletions": 0,
+    "writersFenced": false,
+    "months": ["2026-09", "2026-10", "2026-11"],
+    "finalFrozenPlanRequired": true
+  },
+  "tests": { "cutoverPassed": 8, "routingAndControlPlaneGuardsPassed": 10, "existingCdnPassed": 32, "existingCdnSkipped": 3 },
+  "liveFullFrozenBackupVerified": false
+}
