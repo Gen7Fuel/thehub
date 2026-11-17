@@ -23,6 +23,13 @@ assumptions:
     verification: cdn/test/live.test.js passed for multipart, base64 and PNG uploads, full and ranged downloads, original-date listing and deletion of only temporary UUID files. A separate isolated migration test passed resumable copy, delta upload, checksum verification and stale-file reconciliation; all temporary test objects were removed. The configured account returns hierarchical directory entries with hdi_isfolder metadata; listings and migration reconciliation exclude them. On 2026-11-13 the VPS completed production cutover after matching final manifests for 10,099 files and successful public-download and upload checks; see cdn/MIGRATION.md for the deployment record and remaining lifecycle-policy limitation.
     source: https://learn.microsoft.com/en-us/javascript/api/overview/azure/storage-blob-readme
     updated_at: '2026-11-13'
+  - id: cutover-rehearsal-2026-11-17
+    status: supported
+    claim: The rehearsed command ordering fences the old writer, validates routing before activating the new writer, and supports rollback to a writer sharing the new storage.
+    reason: Real CDN and Caddy images ran with synthetic local files on an isolated internal Docker network. Disposable Compose commands separately proved Caddy can be recreated while its backend stays stopped and the backend can restart with a health wait. No live production writer was paused or enabled.
+    verification: On 2026-11-17 both disposable rehearsals passed and resources were removed. Production Compose candidates rendered with existing credentials kept in memory. Eight in-memory final-delta/backup-proof tests passed; a real Azure metadata-only plan listed 10461 source files with zero proposed deletions. Live conditional deletion execution, full frozen backup coverage and production apply remain untested in this step.
+    source: infra/azure/cdn/diagnostics/cutover-rehearsal-2026-11-17.json; docs/migration/cdn-cutover-commands.md
+    updated_at: '2026-11-17'
 fingerprints:
   - id: cdn-azure-migration
     date: '2026-11-13'

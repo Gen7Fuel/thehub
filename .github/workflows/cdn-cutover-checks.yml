@@ -1,0 +1,22 @@
+name: Check CDN cutover tools
+on:
+  pull_request:
+    paths: ['infra/azure/cdn/**', '.github/workflows/main.yml', '.github/workflows/cdn-cutover-checks.yml']
+  push:
+    branches: [main]
+    paths: ['infra/azure/cdn/**', '.github/workflows/main.yml', '.github/workflows/cdn-cutover-checks.yml']
+permissions:
+  contents: read
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: cdn/package-lock.json
+      - run: npm ci --prefix cdn --ignore-scripts
+      - run: node --test infra/azure/cdn/test/*.test.cjs
+      - run: python3 -m unittest discover -s infra/azure/cdn/scripts -p test_routing_plan.py

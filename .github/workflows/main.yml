@@ -249,6 +249,10 @@ jobs:
     if: |
       always() &&
       vars.CDN_MIGRATION_FREEZE != 'true' &&
+      (needs.check-changes.outputs.backend == 'true' ||
+       needs.check-changes.outputs.auth-backend == 'true' ||
+       needs.check-changes.outputs.cdn == 'true' ||
+       needs.check-changes.outputs.frontend == 'true') &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     steps:
