@@ -28,12 +28,14 @@ async function main() {
   assert.equal(manifest(files), expected, 'Frozen source differs from final-copy manifest');
   const months = [...new Set(files.map(f => f.lastModified.slice(0, 7)))].sort();
   const verified = new Set();
+  const reused = new Set();
   for await (const blob of c.listBlobsFlat({ prefix: 'cdn_backup/automated/monthly/' })) {
     if (!blob.name.endsWith('.json')) continue;
     const receiptBlob = c.getBlobClient(blob.name);
     const props = await receiptBlob.getProperties();
     const receipt = JSON.parse((await receiptBlob.downloadToBuffer(0, undefined, { conditions: { ifMatch: props.etag } })).toString());
-    if (!months.includes(receipt.month) || Date.parse(receipt.verifiedAt) < Date.parse(since) || !Number.isFinite(Date.parse(receipt.verifiedAt))) continue;
+    const verifiedAt = Date.parse(receipt.verifiedAt);
+    if (!months.includes(receipt.month) || !Number.isFinite(verifiedAt) || verifiedAt > Date.now()) continue;
     const selected = files.filter(f => f.lastModified.startsWith(receipt.month));
     if (receipt.fileCount !== selected.length || !Array.isArray(receipt.files) || receipt.blobName !== blob.name.replace(/\.json$/, '.tar')) continue;
     const canonical = list => list.map(f => [f.name, f.size, f.etag, f.lastModified, f.sha256 || f.sourceSha256]).sort((a, b) => a[0].localeCompare(b[0]));
@@ -41,6 +43,7 @@ async function main() {
     const archive = await c.getBlobClient(receipt.blobName).getProperties();
     if (archive.etag !== receipt.etag || archive.contentLength !== receipt.size || archive.metadata.sha256 !== receipt.sha256) continue;
     verified.add(receipt.month);
+    if (verifiedAt < Date.parse(since)) reused.add(receipt.month);
   }
   assert.deepEqual([...verified].sort(), months, 'A verified frozen month archive is still missing');
   const after = await backup.inventory(c);
@@ -48,7 +51,7 @@ async function main() {
   assert.deepEqual(after.map(f => f.etag), files.map(f => f.etag));
   await fenced();
   console.log(JSON.stringify({ fullBackupVerified: true, manifestSha256: expected, files: files.length,
-    sourceBytes: files.reduce((n, f) => n + f.size, 0), months, since, verifiedAt: new Date().toISOString(),
+    sourceBytes: files.reduce((n, f) => n + f.size, 0), months, since, reusedArchiveMonths: [...reused].sort(), verifiedAt: new Date().toISOString(),
     archiveReadbackEstablishedByWorker: true, verificationMode: 'receipt-and-current-etag', productionCutover: false }, null, 2));
 }
 main().catch(error => {

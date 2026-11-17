@@ -76,7 +76,10 @@ window below, the proof tool checks every month's exact filename/size/date/SHA/
 source-ETag inventory and current archive ETag. Stale earlier archives are ignored
 if a later matching archive exists. Regenerate any changed/missing month while
 frozen using `b.enqueue('YYYY-MM')` above. This allows unchanged staged month
-archives to be reused without pretending an earlier current-month archive covers
+archives, including older verified archives, to be reused only when their exact
+frozen source inventory and current archive properties still match. The proof
+reports which months reuse an archive verified before staging began. This avoids
+pretending an earlier current-month archive covers
 new uploads. Keep archive creation/checking outside public CI logs.
 
 ## Window commands — do not run during preparation

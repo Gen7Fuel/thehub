@@ -6,17 +6,18 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const code = fs.readFileSync(path.join(__dirname, '../scripts/verify-frozen-backups.cjs'), 'utf8');
 
-async function verify({ omitMonth, changedArchive, activeWriter = false } = {}) {
+async function verify({ omitMonth, changedArchive, activeWriter = false, receiptTime, changedSource = false } = {}) {
   const files = ['09', '10', '11'].map(month => ({ source: `cdn/synthetic-${month}.txt`, name: `synthetic-${month}.txt`,
     size: 1, etag: 'source-etag-' + month, lastModified: `2026-${month}-01T00:00:00.000Z`, sourceSha256: 'a'.repeat(64) }));
   const hash = crypto.createHash('sha256');
   for (const f of files) hash.update(JSON.stringify([f.source, f.size, f.lastModified, f.sourceSha256]) + '\n');
   const expected = hash.digest('hex');
   const receipts = files.filter(f => f.lastModified.slice(0, 7) !== omitMonth).map(f => ({
-    month: f.lastModified.slice(0, 7), verifiedAt: '2026-11-17T12:00:00.000Z', fileCount: 1,
+    month: f.lastModified.slice(0, 7), verifiedAt: receiptTime || '2026-11-17T12:00:00.000Z', fileCount: 1,
     blobName: `cdn_backup/automated/monthly/date/id/cdn-${f.lastModified.slice(0, 7)}.tar`,
     files: [{ ...f, sha256: f.sourceSha256 }], etag: 'archive-etag', size: 2048, sha256: 'b'.repeat(64),
   }));
+  if (changedSource) files[0].etag = 'new-source-etag';
   const c = { url: 'https://gen7fuel.blob.core.windows.net/hub',
     async *listBlobsFlat() { for (const r of receipts) yield { name: r.blobName.replace(/\.tar$/, '.json') }; },
     getBlobClient(name) {
@@ -59,5 +60,21 @@ test('missing September archive cannot be hidden by successful October and Novem
 test('changed archive ETag or an active writer prevents a frozen-backup proof', async () => {
   for (const options of [{ changedArchive: true }, { activeWriter: true }]) {
     const result = await verify(options); assert.equal(result.exitCode, 1); assert.equal(result.output.length, 0);
+  }
+});
+
+test('older verified archives are reusable only when the frozen source and archive still match', async () => {
+  const result = await verify({ receiptTime: '2026-11-16T12:00:00.000Z' });
+  assert.equal(result.exitCode, 0);
+  assert.deepEqual(result.output[0].reusedArchiveMonths, ['2026-09', '2026-10', '2026-11']);
+  for (const options of [{ changedSource: true }, { changedArchive: true }]) {
+    const failed = await verify({ receiptTime: '2026-11-16T12:00:00.000Z', ...options });
+    assert.equal(failed.exitCode, 1);
+    assert.equal(failed.output.length, 0);
+  }
+});
+test('invalid or future archive verification timestamps cannot establish backup coverage', async () => {
+  for (const receiptTime of ['invalid', '2999-01-01T00:00:00.000Z']) {
+    assert.equal((await verify({ receiptTime })).exitCode, 1);
   }
 });
