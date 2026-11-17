@@ -1,0 +1,19 @@
+{
+  "auditCompleted": true,
+  "fencingPerformed": false,
+  "changesMade": false,
+  "hubDeploymentKey": "SHA256:7w8AVaiYcjTXsl/LYcIaO0a2wNSS0hyxCSfmpbc8+PY",
+  "deskAndOperatorKey": "SHA256:sNUPGZ5sUEiFRdqkLwRSxuFXwoBAeOBYXGwpKBDWN7s",
+  "hubKeyIsDistinctFromDeskAndOperator": true,
+  "hubAuthenticationObservedAt": "2026-11-17T15:14:22Z",
+  "deskAuthenticationObservedAt": "2026-11-17T15:02:25Z",
+  "legacyRepositorySecretUpdatedAt": "2025-10-08T19:32:40Z",
+  "queuedRunCreatedAt": "2026-11-11T20:27:24Z",
+  "queuedWorkflowKeyReferences": ["SERVER_SSH_KEY"],
+  "queuedWorkflowDeclaresEnvironment": false,
+  "staticAuthorizationSourcesVerified": true,
+  "alternateAuthorizedKeysFileExists": false,
+  "activeLegacySshSessionsObserved": 0,
+  "replacementEnvironmentExists": false,
+  "localSafetyTestsPassed": 11
+}
