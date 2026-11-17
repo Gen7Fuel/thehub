@@ -52,6 +52,14 @@ the tiny-format upload checks and streaming historical-read checks.
 
 ## Final window and rollback boundary
 
+A separate VPS standby now uses the same new media account as Azure. Its
+[localhost routing rehearsal](../../infra/azure/rollback-vps/README.md) passed,
+including cross-host fresh writes and restart persistence; it remains paused.
+Use `cdn-rollback-vps:5001` for this fallback, not the existing `cdn:5001` container
+that still uses old storage. Public routing and internal callers still need
+their reviewed cutover changes before the measured test can become an
+operational rollback procedure.
+
 Coordinate Hub/Desk maintenance, uploads, queue workers, scheduled producers,
 backup jobs and deletion actions. Pause/drain the old CDN; preserve the verified
 source configuration and image. Capture a fresh backup and source inventory,
@@ -66,7 +74,8 @@ an already-running workflow may have captured the previous variable. Retire the
 Compose service definition so a later generic startup cannot recreate it.
 
 Before Azure accepts production writes, the original source remains a rollback
-option after carefully restoring routing. After any destination production
-writes/deletes, rollback requires data reconciliation; switching back blindly
-would lose those changes. No production routing, source pause, worker changes,
-shared environment changes or VPS shutdown is performed by this preparation.
+option after restoring routing. After new-account writes/deletes, choosing the
+old-storage container requires reconciliation. The prepared new-account VPS
+standby avoids that reverse copy for a hosting rollback, provided the Azure
+writer is fenced before standby activation. No public routing, source pause,
+worker changes, shared environment changes or VPS shutdown occurred in rehearsal.
