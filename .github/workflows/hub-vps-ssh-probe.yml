@@ -1,0 +1,114 @@
+name: Verify Hub VPS deployment access
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: hub-vps-production-v2
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate replacement configuration
+        env:
+          DEPLOY_KEY: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
+          KEY_FP: ${{ vars.HUB_DEPLOY_KEY_FINGERPRINT_V2 }}
+          HOST_FP: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          assert os.environ['DEPLOY_KEY'].startswith('-----BEGIN')
+          for name in ['KEY_FP','HOST_FP']:
+              assert re.fullmatch(r'SHA256:[A-Za-z0-9+/]{43}',os.environ[name])
+          PY
+      - name: Prepare public probe file
+        run: printf '%s:%s\n' "$GITHUB_RUN_ID" "$GITHUB_SHA" > hub-vps-ssh-probe.txt
+      - name: Prepare protected remote probe directory
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
+          fingerprint: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+          script: |
+            python3 - <<'PY'
+            import os
+            from pathlib import Path
+            base=Path('/tmp/hub-vps-ssh-probe')
+            if not base.exists(): base.mkdir(mode=0o700)
+            assert not base.is_symlink() and base.is_dir()
+            assert base.stat().st_uid==os.getuid() and base.stat().st_mode & 0o022==0
+            directory=base/'${{ github.run_id }}'
+            assert not directory.exists() and not directory.is_symlink()
+            directory.mkdir(mode=0o700)
+            PY
+      - name: Verify SCP access
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
+          fingerprint: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+          source: hub-vps-ssh-probe.txt
+          target: /tmp/hub-vps-ssh-probe/${{ github.run_id }}
+      - name: Verify SSH, repository and Docker access
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
+          fingerprint: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+          script: |
+            set -e
+            test "$(id -un)" = gen7fuel
+            git -C /home/gen7fuel/thehub ls-remote --exit-code origin HEAD >/dev/null
+            docker inspect --format '{{.State.Health.Status}}' backend
+            sudo -n true
+            python3 - <<'PY'
+            from pathlib import Path
+            path=Path('/tmp/hub-vps-ssh-probe/${{ github.run_id }}/hub-vps-ssh-probe.txt')
+            assert path.read_text().strip()=='${{ github.run_id }}:${{ github.sha }}'
+            print('hub_vps_ssh_and_scp_probe_ok')
+            PY
+      - name: Remove public probe file
+        if: always()
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
+          fingerprint: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+          script: |
+            python3 - <<'PY'
+            import os
+            from pathlib import Path
+            base=Path('/tmp/hub-vps-ssh-probe')
+            if base.exists():
+                assert not base.is_symlink() and base.stat().st_uid==os.getuid()
+            directory=base/'${{ github.run_id }}'
+            assert not directory.is_symlink()
+            path=directory/'hub-vps-ssh-probe.txt'
+            if path.exists():
+                assert not path.is_symlink() and path.stat().st_uid==os.getuid()
+                path.unlink()
+            if directory.exists(): directory.rmdir()
+            PY
+      - name: Record public proof only
+        env:
+          KEY_FP: ${{ vars.HUB_DEPLOY_KEY_FINGERPRINT_V2 }}
+          HOST_FP: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          Path('hub-vps-ssh-probe.json').write_text(json.dumps({
+            'environment':'hub-vps-production-v2','commit':os.environ['GITHUB_SHA'],
+            'runId':os.environ['GITHUB_RUN_ID'],'keyFingerprint':os.environ['KEY_FP'],
+            'hostFingerprint':os.environ['HOST_FP'],'sshAndScpSucceeded':True}))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hub-vps-ssh-probe
+          path: hub-vps-ssh-probe.json
+          retention-days: 14

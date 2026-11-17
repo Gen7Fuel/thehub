@@ -1,0 +1,27 @@
+name: Check Hub deployment key controls
+on:
+  pull_request:
+    paths: ['infra/azure/cdn/scripts/deployment-key-fence.py', 'infra/azure/cdn/key-tests/**', '.github/workflows/main.yml', '.github/workflows/hub-vps-ssh-probe.yml', '.github/workflows/hub-deploy-key-checks.yml']
+  push:
+    branches: [main]
+    paths: ['infra/azure/cdn/scripts/deployment-key-fence.py', 'infra/azure/cdn/key-tests/**', '.github/workflows/main.yml', '.github/workflows/hub-vps-ssh-probe.yml', '.github/workflows/hub-deploy-key-checks.yml']
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m pip install cryptography==48.0.1 PyNaCl==1.6.2 paramiko==5.0.0 PyYAML==6.0.3
+      - run: python3 -m unittest discover -s infra/azure/cdn/key-tests -p 'test_*.py'
+      - name: Check actual deployment credential contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import runpy
+          module=runpy.run_path('infra/azure/cdn/scripts/deployment-key-fence.py',run_name='key_fence_checks')
+          module['workflow_contract'](Path('.github/workflows/main.yml').read_text())
+          PY
