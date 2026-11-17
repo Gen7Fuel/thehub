@@ -1,3 +1,4 @@
+const { cdnServiceBaseUrl } = require('../utils/cdnService');
 const { DateTime } = require('luxon')
 const Location = require('../models/Location')
 const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
@@ -19,7 +20,7 @@ const {
 const { emailQueue } = require('../queues/emailQueue')
 
 const CUTOFF_DATE_STR = '2026-09-02'
-const CDN_BASE_URL = process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || 'http://cdn:5001'
+const CDN_BASE_URL = cdnServiceBaseUrl(process.env.CDN_BASE_URL || process.env.PUBLIC_CDN_BASE_URL || undefined)
 const CASH_SUMMARY_EMAILS = (process.env.CASH_SUMMARY_EMAILS || 'reports@bosservicesltd.com')
   .split(',')
   .map(e => e.trim())

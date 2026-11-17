@@ -20,6 +20,10 @@ on:
           - cdn
           - all
 
+concurrency:
+  group: hub-vps-deployment
+  cancel-in-progress: false
+
 jobs:
   check-changes:
     runs-on: ubuntu-latest
@@ -244,6 +248,7 @@ jobs:
     needs: [check-changes, build-frontend, build-backend, build-auth-backend, build-cdn] # 👈 Added build-cdn
     if: |
       always() &&
+      vars.CDN_MIGRATION_FREEZE != 'true' &&
       !contains(needs.*.result, 'failure') &&
       !contains(needs.*.result, 'cancelled')
     steps:
@@ -279,6 +284,11 @@ jobs:
           command_timeout: 10m
           script: |
             set -e
+            # Shared with the future manual cutover. The marker also blocks runs
+            # started before the GitHub freeze variable changed.
+            exec 9>/home/gen7fuel/.hub-deploy.lock
+            flock -n 9 || { echo "Another Hub deployment/cutover holds the lock"; exit 1; }
+            test ! -e /home/gen7fuel/.hub-cdn-deploy-freeze || { echo "CDN migration freeze active"; exit 1; }
             cd /home/gen7fuel/thehub
 
             # ---- 1. Sync Core Configuration Files First ----
@@ -299,6 +309,9 @@ jobs:
             export POSTGRES_USER="${{ secrets.POSTGRES_USER }}"
             export POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
             export REDIS_URL="${{ secrets.REDIS_URL }}"
+            export CDN_DEPLOY_TARGET="${{ vars.CDN_DEPLOY_TARGET }}"
+            export CDN_MIGRATION_FREEZE="${{ vars.CDN_MIGRATION_FREEZE }}"
+            export CDN_SERVICE_URL="${{ secrets.CDN_SERVICE_URL }}"
             export AZURE_STORAGE_CONNECTION_STRING="${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}"
             export AZURE_CONTAINER="${{ secrets.AZURE_CONTAINER }}"
             export LOG_ARCHIVE_DOCUMENT_THRESHOLD="${{ secrets.LOG_ARCHIVE_DOCUMENT_THRESHOLD }}"
@@ -328,6 +341,10 @@ jobs:
             export GVM_SYNC_ENABLED="${{ secrets.GVM_SYNC_ENABLED }}"
             export PUSHOVER_API_TOKEN="${{ secrets.PUSHOVER_API_TOKEN }}"
 
+            # Reject stale/mismatched settings before changing any services.
+            CDN_ROUTE_ENV=$(python3 infra/azure/cdn/scripts/routing-plan.py --check-backend --backend-changing "${{ needs.check-changes.outputs.backend }}") || exit 1
+            eval "$CDN_ROUTE_ENV"
+
             # ---- 3. Infrastructure Isolation Guard ----
             echo "Verifying database infrastructure..."
             docker compose up -d postgres
@@ -354,7 +371,7 @@ jobs:
 
             if [ "${{ needs.check-changes.outputs.backend }}" = "true" ]; then
                 echo "Swapping Main Backend instance..."
-                docker compose up -d --no-deps backend
+                docker compose up -d --no-deps --wait --wait-timeout 120 backend
                 
                 if docker compose ps --services | grep -q '^postgres$'; then
                     echo "Running relational engine incremental schemas..."
@@ -368,16 +385,20 @@ jobs:
             fi
 
             # ---- 6. Atomic Routing Layer Refresh (Caddy) ----
+            test ! -e /home/gen7fuel/.hub-cdn-deploy-freeze || { echo "CDN migration freeze active"; exit 1; }
             echo "Validating edge-routing runtime config..."
             docker exec -i webserver sh -c "cat > /etc/caddy/Caddyfile.new" < /home/gen7fuel/thehub/Caddyfile
-            if docker exec webserver caddy validate --config /etc/caddy/Caddyfile.new; then
+            if docker exec -e CDN_PUBLIC_UPSTREAM="$CDN_PUBLIC_UPSTREAM" webserver caddy validate --config /etc/caddy/Caddyfile.new --adapter caddyfile; then
                 docker exec webserver sh -c "cat /etc/caddy/Caddyfile.new > /etc/caddy/Caddyfile"
-                docker exec webserver caddy reload --config /etc/caddy/Caddyfile
-                docker exec webserver rm /etc/caddy/Caddyfile.new
-                echo "Routing engine hot-reloaded seamlessly."
+                # Environment changes require container recreation. Unchanged
+                # settings preserve the existing container and use hot reload.
+                docker compose up -d --no-deps caddy
+                docker exec webserver caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+                docker exec webserver rm -f /etc/caddy/Caddyfile.new
+                echo "Routing configuration applied."
             else
                 echo "CRITICAL: Validation errors caught inside new routing config context."
-                docker exec webserver rm /etc/caddy/Caddyfile.new
+                docker exec webserver rm -f /etc/caddy/Caddyfile.new
                 exit 1
             fi
 

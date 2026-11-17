@@ -1,10 +1,11 @@
+const { cdnServiceUrl } = require('./cdnService');
 async function uploadToCdn(fileBuffer, originalName) {
   try {
     const formData = new FormData();
     const fileBlob = new Blob([fileBuffer], { type: "image/png" });
     formData.append("file", fileBlob, originalName);
 
-    const response = await fetch("http://cdn:5001/cdn/upload", {
+    const response = await fetch(cdnServiceUrl('upload'), {
       method: "POST",
       body: formData,
     });
@@ -30,7 +31,7 @@ async function downloadFromCdn(filename) {
   if (!filename) return null;
 
   try {
-    const response = await fetch(`http://cdn:5001/cdn/download/${filename}`);
+    const response = await fetch(cdnServiceUrl(`download/${encodeURIComponent(filename)}`));
 
     if (!response.ok) {
       throw new Error(`CDN download failed with status: ${response.status}`);

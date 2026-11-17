@@ -1,0 +1,11 @@
+{
+  "checks": [
+    { "target": "legacy", "validCaddyConfig": true, "pathRangeAndMimePreserved": true, "readBytes": 32 },
+    { "target": "azure", "validCaddyConfig": true, "pathRangeAndMimePreserved": true, "readBytes": 32 },
+    { "target": "standby", "validCaddyConfig": true, "pathRangeAndMimePreserved": true, "readBytes": 32 }
+  ],
+  "productionUnchanged": true,
+  "mediaWrites": 0,
+  "success": true,
+  "temporaryProxyRemoved": true
+}

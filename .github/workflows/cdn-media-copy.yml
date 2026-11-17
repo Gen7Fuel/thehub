@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   copy:
-    if: github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true'
+    if: vars.CDN_MIGRATION_FREEZE != 'true' && (github.ref == 'refs/heads/main' && vars.CDN_DEPLOY_TARGET == 'vps' && vars.CDN_MEDIA_COPY_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 180
     environment: cdn-media-copy-v2

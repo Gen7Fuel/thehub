@@ -1,0 +1,17 @@
+{
+  "success": true,
+  "sourceAccount": "gen7erpmedia29b24248",
+  "identityClientId": "8dec8f37-a249-4fd6-98e6-9643c7f87f5a",
+  "sourceFilesListed": 10402,
+  "sourceBytesListed": 34253603616,
+  "conditionalReadPassed": true,
+  "sourceChecksumChecked": true,
+  "preparedArchiveAndMemoryReadbackPassed": true,
+  "sourceProvenanceAndDatesPassed": true,
+  "originalBackupStatusReadable": true,
+  "existingBackupPhase": "succeeded",
+  "azureWrites": 0,
+  "workerConfigurationChanged": false,
+  "productionContainersAndEnvironmentsUnchanged": true,
+  "fullNewSourceBackupCreated": false
+}

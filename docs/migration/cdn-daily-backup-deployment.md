@@ -1,5 +1,23 @@
 # Desk CDN daily backup deployment — 2026-11-16
 
+## Migration preparation — 17 November
+
+Prepared source/destination separation in isolated Desk branch
+`codex/cdn-backup-source`, local commit
+`7f4326efb215c52d9cba06328ff34614451b871d`, at
+`C:/Users/MohammadHasan/AppData/Local/Temp/desk-cdn-source`. Not pushed or deployed.
+Live `cdn/` reads can use a separately authenticated Entra source; archives and
+control stay on the original account. Academy/shared settings remain unchanged.
+The running worker is unchanged. Leave the five new Desk `CDN_BACKUP_SOURCE_*`
+GitHub Secrets unset until the coordinated cutover; see that checkout's
+`docs/cdn-backup-source-migration.md` for values and activation sequence.
+
+Backup checks: 12 passed. Desk backend: 241 passed. Actual Azure SDK against the
+local Postman simulation rejected lock and source-list HTTP 503 without claiming
+success. Reader credentials/role and successful live new-account access still
+require preparation/verification before activation. No production recovery point
+from the new source is claimed by these tests.
+
 ## Follow-up: first full run succeeded
 
 Read-only follow-up on 16 November at 20:06 UTC confirmed phase `succeeded`,
