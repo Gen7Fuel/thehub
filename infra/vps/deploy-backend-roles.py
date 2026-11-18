@@ -32,6 +32,11 @@ def environment(item):
     return dict(value.split('=', 1) for value in item['Config']['Env'] if '=' in value)
 
 
+def runtime_user():
+    # Bind-mounted checkpoint files must stay readable by the VPS operator.
+    return str(os.getuid()) + ':' + str(os.getgid())
+
+
 def checkpoint_directory(run_id):
     assert re.fullmatch(r'[0-9]+', run_id), 'Numeric deployment ID required'
     parent = (Path.home() / '.hub-backend-runtime').resolve()
@@ -79,7 +84,7 @@ def recover(run_id):
     assert metadata['network'] in inspect('redis')['NetworkSettings']['Networks']
     helper_name = 'hub-runtime-cutover-' + run_id + '-recovery-resume'
     try:
-        command(['docker', 'run', '--rm', '--name', helper_name, '--label', 'com.gen7.runtime=cutover',
+        command(['docker', 'run', '--rm', '--user', runtime_user(), '--name', helper_name, '--label', 'com.gen7.runtime=cutover',
                  '--network', metadata['network'], '-e', 'REDIS_URL', '-v', str(directory) + ':/checkpoint',
                  metadata['helperImage'], 'node', 'scripts/runtime-cutover.cjs', 'resume'], timeout=660)
     finally:
@@ -140,7 +145,7 @@ def main():
         name = 'hub-runtime-cutover-' + run_id + '-' + action
         assert inspect(name, optional=True) is None, 'Previous cutover helper still exists'
         try:
-            command(['docker', 'run', '--rm', '--name', name, '--network', network, '--label', 'com.gen7.runtime=cutover',
+            command(['docker', 'run', '--rm', '--user', runtime_user(), '--name', name, '--network', network, '--label', 'com.gen7.runtime=cutover',
                      '-e', 'REDIS_URL', '-v', str(directory) + ':/checkpoint', image,
                      'node', 'scripts/runtime-cutover.cjs', action], timeout=660)
         finally:

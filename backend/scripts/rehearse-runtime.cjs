@@ -86,9 +86,21 @@ async function main() {
     assert.equal(await priorPaused.isPaused(), true);
     assert.equal(await (await emailQueue.getJob(result.jobId)).getState(), 'waiting');
     await priorPaused.resume(); await priorPaused.close();
+    // Linux container filesystem reproduces the VPS bind-mount permissions:
+    // the helper runs as the deployment user, not the image's default root.
+    const ownerDirectory = '/tmp/runtime-checkpoint-nonroot';
+    fs.mkdirSync(ownerDirectory, { mode: 0o700 }); fs.chownSync(ownerDirectory, 1000, 1000);
+    const ownerEnv = { ...process.env, HUB_RUNTIME_CHECKPOINT: ownerDirectory + '/state.json' };
+    for (const action of ['prepare', 'resume']) {
+      execFileSync(process.execPath, ['scripts/runtime-cutover.cjs', action], { uid: 1000, gid: 1000, env: ownerEnv, stdio: 'inherit' });
+      const state = fs.statSync(ownerEnv.HUB_RUNTIME_CHECKPOINT);
+      assert.equal(state.uid, 1000); assert.equal(state.mode & 0o777, 0o600);
+    }
+    execFileSync(process.execPath, ['-e', "const fs=require('fs');if(JSON.parse(fs.readFileSync(process.env.HUB_RUNTIME_CHECKPOINT)).phase!=='resumed')process.exit(1)"], { uid: 1000, gid: 1000, env: ownerEnv });
     await checkSchedulerLease();
     console.log('PASS: authenticated API queues work without consuming it; attachment survives producer file deletion');
     console.log('PASS: real Redis cutover pauses/drains 15 queues, preserves jobs, and restores a previously paused queue');
+    console.log('PASS: non-root cutover helper owns its private checkpoint and can read it on the next operation');
     console.log('PASS: real Redis scheduler lease admits one leader and deduplicates a tick across leader handoff');
   } else if (action === 'verify') {
     for (const [key, state] of [['success', 'completed'], ['attachment', 'completed'], ['failure', 'failed']]) {

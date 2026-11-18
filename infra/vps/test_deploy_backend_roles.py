@@ -40,6 +40,7 @@ class RolloutTests(unittest.TestCase):
             if args[:3] == ['docker', 'compose', 'config']:
                 return json.dumps({'services': rendered})
             if args[:3] == ['docker', 'run', '--rm']:
+                self.assertEqual(args[args.index('--user') + 1], '1000:1000')
                 action = args[-1]
                 self.events.append(action)
                 checkpoint = Path(args[args.index('-v') + 1].removesuffix(':/checkpoint')) / 'state.json'
@@ -69,6 +70,7 @@ class RolloutTests(unittest.TestCase):
             return ''
 
         with tempfile.TemporaryDirectory() as temp, patch.object(Path, 'home', return_value=Path(temp)), \
+                patch.object(rollout, 'runtime_user', return_value='1000:1000'), \
                 patch.object(rollout, 'inspect', side_effect=inspect), patch.object(rollout, 'command', side_effect=command), \
                 patch.dict(os.environ, {'BACKEND_IMAGE': image + 'b' * 40, 'HUB_RUNTIME_DEPLOYMENT_ID': '123'}), \
                 patch.object(sys, 'argv', ['rollout', '--execute']), contextlib.redirect_stdout(io.StringIO()):
@@ -121,9 +123,12 @@ class RolloutTests(unittest.TestCase):
                 self.assertEqual(json.loads(payload)['services']['backend']['command'], ['node', 'app.js'])
                 self.assertEqual(json.loads(payload)['services']['backend']['image'], image + 'a' * 40)
                 self.assertIn('--wait', args)
-            elif args[:2] == ['docker', 'run']: events.append('resume')
+            elif args[:2] == ['docker', 'run']:
+                self.assertEqual(args[args.index('--user') + 1], '1000:1000')
+                events.append('resume')
             return ''
         with tempfile.TemporaryDirectory() as temp, patch.object(Path, 'home', return_value=Path(temp)), \
+                patch.object(rollout, 'runtime_user', return_value='1000:1000'), \
                 patch.object(rollout, 'inspect', side_effect=inspect), patch.object(rollout, 'command', side_effect=command), \
                 patch.dict(os.environ, {}, clear=True), contextlib.redirect_stdout(io.StringIO()):
             directory = rollout.checkpoint_directory('123'); directory.mkdir(parents=True)
