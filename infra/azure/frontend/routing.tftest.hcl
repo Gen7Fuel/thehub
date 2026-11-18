@@ -15,6 +15,13 @@ run "preview_can_use_existing_app_domain" {
     condition     = azurerm_linux_web_app.frontend.site_config[0].websockets_enabled
     error_message = "The Azure frontend must accept upgraded Socket.IO and signaling connections."
   }
+  assert {
+    condition = (
+      azurerm_linux_web_app.frontend.app_settings["WEBSITE_WARMUP_STATUSES"] == "200,404" &&
+      azurerm_linux_web_app.frontend.site_config[0].health_check_path == "/frontend-health"
+    )
+    error_message = "Allow the Azure MSI helper's 404 warmup without changing the application's health endpoint."
+  }
 }
 
 run "reject_plaintext_token_transport" {
