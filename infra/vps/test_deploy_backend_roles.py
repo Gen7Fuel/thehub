@@ -106,6 +106,32 @@ class RolloutTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 rollout.checkpoint_directory(value)
 
+    def test_manual_recovery_stops_roles_and_verifies_backend_before_resuming(self):
+        image = 'ghcr.io/gen7fuel/thehub-backend:'
+        current = {'Config': {'Env': ['REDIS_URL=redis://fixture'], 'Labels': {
+            'com.docker.compose.project': 'thehub', 'com.docker.compose.service': 'backend'}},
+            'State': {'Running': False}, 'NetworkSettings': {'Networks': {'thehub_default': {}}}}
+        events = []
+        def inspect(name, optional=False):
+            return None if optional else current
+        def command(args, payload=None, timeout=180):
+            if 'stop' in args: events.append('stop')
+            elif 'up' in args:
+                events.append('healthy-backend')
+                self.assertEqual(json.loads(payload)['services']['backend']['command'], ['node', 'app.js'])
+                self.assertEqual(json.loads(payload)['services']['backend']['image'], image + 'a' * 40)
+                self.assertIn('--wait', args)
+            elif args[:2] == ['docker', 'run']: events.append('resume')
+            return ''
+        with tempfile.TemporaryDirectory() as temp, patch.object(Path, 'home', return_value=Path(temp)), \
+                patch.object(rollout, 'inspect', side_effect=inspect), patch.object(rollout, 'command', side_effect=command), \
+                patch.dict(os.environ, {}, clear=True), contextlib.redirect_stdout(io.StringIO()):
+            directory = rollout.checkpoint_directory('123'); directory.mkdir(parents=True)
+            (directory / 'operation.json').write_text(json.dumps({'previousImage': image + 'a' * 40,
+                'helperImage': image + 'b' * 40, 'project': 'thehub', 'network': 'thehub_default'}))
+            rollout.recover('123')
+        self.assertEqual(events, ['stop', 'healthy-backend', 'resume'])
+
 
 if __name__ == '__main__':
     unittest.main()

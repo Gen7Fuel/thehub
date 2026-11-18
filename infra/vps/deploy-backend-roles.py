@@ -21,7 +21,7 @@ def command(args, payload=None, timeout=180):
 
 def inspect(name, optional=False):
     result = subprocess.run(['docker', 'inspect', name], capture_output=True, text=True, timeout=20)
-    if result.returncode and optional:
+    if result.returncode and optional and any(message in result.stderr for message in ['No such object: ' + name, 'No such container: ' + name]):
         return None
     if result.returncode:
         raise RuntimeError('Container unavailable')
@@ -58,6 +58,15 @@ def recover(run_id):
     # Rehydrate only this process; never print or persist the credentials.
     os.environ.update(values)
     os.environ.update(BACKEND_IMAGE=metadata['helperImage'], AUTH_BACKEND_IMAGE='fixture:unused', CDN_IMAGE='fixture:unused')
+    for action in ['prepare', 'resume', 'recovery-resume']:
+        helper_name = 'hub-runtime-cutover-' + run_id + '-' + action
+        helper = inspect(helper_name, optional=True)
+        if helper:
+            assert helper['Config']['Labels'].get('com.gen7.runtime') == 'cutover'
+            if helper['State']['Running']:
+                command(['docker', 'stop', '--time', '10', helper_name], timeout=30)
+            helper = inspect(helper_name, optional=True)
+            assert not helper or not helper['State']['Running'], 'Cutover helper still running; recovery stopped'
     command(['docker', 'compose', 'stop', '--timeout', '600', 'backend', 'worker', 'scheduler'], timeout=660)
     for name in ['backend', 'backend-worker', 'backend-scheduler']:
         item = inspect(name, optional=True)
@@ -68,8 +77,17 @@ def recover(run_id):
     command(['docker', 'compose', '-f', 'compose.yaml', '-f', '-', 'up', '-d', '--no-deps', '--wait', '--wait-timeout', '180', 'backend'],
             json.dumps(override), timeout=240)
     assert metadata['network'] in inspect('redis')['NetworkSettings']['Networks']
-    command(['docker', 'run', '--rm', '--network', metadata['network'], '-e', 'REDIS_URL',
-             '-v', str(directory) + ':/checkpoint', metadata['helperImage'], 'node', 'scripts/runtime-cutover.cjs', 'resume'], timeout=660)
+    helper_name = 'hub-runtime-cutover-' + run_id + '-recovery-resume'
+    try:
+        command(['docker', 'run', '--rm', '--name', helper_name, '--label', 'com.gen7.runtime=cutover',
+                 '--network', metadata['network'], '-e', 'REDIS_URL', '-v', str(directory) + ':/checkpoint',
+                 metadata['helperImage'], 'node', 'scripts/runtime-cutover.cjs', 'resume'], timeout=660)
+    finally:
+        helper = inspect(helper_name, optional=True)
+        if helper and helper['State']['Running']:
+            command(['docker', 'stop', '--time', '10', helper_name], timeout=30)
+            helper = inspect(helper_name, optional=True)
+            assert not helper or not helper['State']['Running'], 'Recovery helper still running'
     print(json.dumps({'recoveredPreviousCombinedBackend': True, 'previousQueuePauseStatesRestored': True}))
 
 
@@ -128,13 +146,14 @@ def main():
         finally:
             # A timed-out Docker CLI can leave its container running. Never let
             # an old prepare process pause queues after recovery has resumed them.
+            helper_safe = False
             item = inspect(name, optional=True)
             if item and item['State']['Running']:
                 helper_safe = False
                 command(['docker', 'stop', '--time', '10', name], timeout=30)
                 item = inspect(name, optional=True)
                 assert not item or not item['State']['Running'], 'Cutover helper still running'
-                helper_safe = True
+            helper_safe = True
 
     def up(services, override=None):
         cli = ['docker', 'compose', '-f', 'compose.yaml']
