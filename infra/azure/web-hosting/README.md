@@ -20,6 +20,9 @@ guarantee for the proposed plan. Monitor both new apps together during preview.
 - Auth Relay connectivity, excess registry storage, state storage, network
   egress, tax and other usage are additional. Relay is owned by the auth session.
   These are public retail estimates, not the subscription's negotiated bill.
+  With auth's separately proposed Relay baseline (about CA$13.72/month), the
+  combined new hosting/registry/connectivity subtotal is about CA$39.30/month,
+  before usage and tax and excluding the existing CDN.
 - Read-only regional quota API returned Total Regional VMs 0/31. It did not
   return a B1-specific allocation. This does **not** guarantee B1 placement;
   provisioning can still fail on SKU capacity or subscription restrictions.
