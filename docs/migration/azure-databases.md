@@ -6,12 +6,18 @@ this change creates no paid database resources and changes no live connection.
 The independent frontend preview can proceed while still proxying the VPS API
 and auth routes. The new shared App Service plan is not a database host.
 
+Scope expanded by the user: this is part of the [complete Hub, Desk and shared
+services migration](azure-platform-migration.md), including remaining containers,
+queues, routing, integrations and recovery. The database work is the first phase,
+not the whole migration.
+
 ## Proposed targets
 
 | Source | Proposed destination | Compatibility boundary |
 | --- | --- | --- |
 | MongoDB 8.0.15, `main` | MongoDB Atlas on Microsoft Azure, MongoDB 8-compatible dedicated cluster; evaluate Canada East first | Actual MongoDB, preserving BSON, collection options and indexes. Validate exact version, region, tier, availability and cost before provisioning. |
 | PostgreSQL 16.11, `hub_sql` | Azure Database for PostgreSQL Flexible Server, major version 16; evaluate Canada East first | Preserve schema, data, constraints, sequences, migration history and application privileges. Choose tier from workload measurements, not database size alone. |
+| Desk MongoDB 8.0.15, `desk` | Separate logical database and credentials on an Azure-hosted MongoDB target | Preserve isolation from Hub; evaluate shared Atlas cluster capacity and privileges before deciding placement. |
 
 Atlas is a separate managed MongoDB service hosted on Azure and needs an Atlas
 organization/project and billing/API access. It is not Azure Blob Storage or a
@@ -44,13 +50,16 @@ Consumers that must be updated together at each respective database cutover:
 | Auth | `MONGO_URI` | None | VPS `auth-backend` |
 | Fleet Portal | `MONGO_URI`, currently hard-coded private IP in runtime configuration | None | VPS `fleet-portal` |
 
-Hub PostgreSQL is not Desk PostgreSQL. Initial scope is Hub's two stores and
-their consumers. Desk's separate database needs its own inventory, owner,
-connection rollout and restore test before inclusion. The image-based live
-inventory did not identify Desk's database; that is an inventory gap, not proof
-it is absent. Docmost, n8n and Wekan own unrelated stores and are excluded.
-Redis queues and caches stay on the VPS in this phase. Moving these databases
-does not remove API dependencies on Redis, email, SFTP or other services.
+Desk uses **MongoDB, not PostgreSQL**. Live inspection of `desk-db-1` confirms
+MongoDB 8.0.15, standalone database `desk`: 29 collections, 3,580,595 data bytes,
+4,132,864 storage bytes and 1,167,360 index bytes. Desk API and any scheduled/
+backup process that uses its models need their own connection rollout and restore
+test. Do not merge Hub and Desk data or reuse unrestricted credentials. Desk is
+now in scope, with its own migration window. The prior PostgreSQL image filter
+missed it because it is MongoDB. Docmost, n8n and Wekan remain unrelated stores.
+Redis stays on the VPS during this first database phase but is included in the
+complete platform migration. Moving these databases alone does not remove API
+dependencies on Redis, email, SFTP or other services.
 
 `Microsoft.DBforPostgreSQL`, `Microsoft.Compute` and `Microsoft.Network` are
 registered. `Microsoft.DocumentDB` and `Microsoft.Relay` are not. Registration
