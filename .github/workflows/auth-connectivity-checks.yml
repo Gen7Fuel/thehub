@@ -1,0 +1,30 @@
+name: Check auth private connectivity
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/azure/auth-connectivity/**'
+      - '.github/workflows/auth-connectivity-checks.yml'
+permissions:
+  contents: read
+jobs:
+  relay-plan-and-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.0
+          terraform_wrapper: false
+      - name: Validate metadata-only resources without Azure credentials
+        working-directory: infra/azure/auth-connectivity
+        run: |
+          terraform init -backend=false -input=false -lockfile=readonly
+          terraform fmt -check -recursive
+          terraform validate
+          terraform test
+      - name: Build verified Microsoft relay agent
+        run: docker build -t hub-auth-hcm:1.3.0 infra/azure/auth-connectivity/agent
+      - name: Rehearse isolated agent without Relay credentials
+        run: python3 infra/azure/auth-connectivity/rehearse-agent.py

@@ -1,0 +1,33 @@
+services:
+  auth-mongo-relay:
+    image: ${AUTH_HCM_IMAGE:?Set a reviewed HCM image}
+    container_name: auth-mongo-relay
+    user: "10001:10001"
+    restart: unless-stopped
+    stop_grace_period: 45s
+    mem_limit: 384m
+    cpus: 0.5
+    pids_limit: 128
+    logging:
+      driver: local
+      options: {max-size: 10m, max-file: "3"}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=64m]
+    volumes:
+      - hcm_config:/usr/share/HybridConnectionManager
+      - hcm_home:/data
+    # No published ports, host networking, Docker socket, database changes,
+    # credentials in Compose/environment, or HCM management API exposed to peers.
+    extra_hosts:
+      - "hub-mongo.internal:172.22.0.10"
+    networks: [hub]
+
+networks:
+  hub:
+    external: true
+    name: thehub_default
+volumes:
+  hcm_config:
+  hcm_home:
