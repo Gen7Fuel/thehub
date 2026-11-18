@@ -3,7 +3,7 @@ const Location = require("../models/Location");
 const ProductCategory = require("../models/ProductCategory");
 const { getSanitizationBackupData } = require("../services/sqlService");
 const { format } = require("date-fns");
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('itemBkSanitizationCron');
 
 const toNullableNumber = (value) => {
   if (value === null || value === undefined || value === "") return null;

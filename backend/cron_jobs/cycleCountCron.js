@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('cycleCountCron');
 const { DateTime } = require("luxon");
 
 const CycleCount = require("../models/CycleCount");

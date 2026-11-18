@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const Location = require("../models/Location");
 const { sendOperationalFuelAlarm } = require("../utils/sendPushOverNotification");
@@ -17,7 +18,7 @@ const fuelNotificationQueue = new Queue("fuelNotificationQueue", {
   },
 });
 
-const fuelNotificationWorker = new Worker(
+const fuelNotificationWorker = createWorker(
   "fuelNotificationQueue",
   async (job) => {
     const { locationId, stationName } = job.data;
@@ -47,7 +48,7 @@ const fuelNotificationWorker = new Worker(
   }
 );
 
-fuelNotificationWorker.on("failed", (job, err) => {
+fuelNotificationWorker?.on("failed", (job, err) => {
   console.error(`❌ [Notification Worker] Job ${job?.id} failed processing exception:`, err);
 });
 

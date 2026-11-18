@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('cycleCountReportCron');
 const { DateTime } = require("luxon");
 const { getPg } = require("../config/pg");
 const Location = require("../models/Location"); // Source of truth for timezones

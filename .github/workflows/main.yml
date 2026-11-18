@@ -47,6 +47,8 @@ jobs:
           filters: |
             backend:
               - 'backend/**'
+              - 'compose.yaml'
+              - 'infra/vps/**'
             auth-backend:
               - 'auth-backend/**'
             cdn:
@@ -290,7 +292,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
           fingerprint: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
-          command_timeout: 10m
+          command_timeout: 40m
           script: |
             set -e
             # Shared with the future manual cutover. The marker also blocks runs
@@ -372,20 +374,16 @@ jobs:
                 docker pull $CDN_IMAGE
             fi
 
-            # ---- 5. Hot Swapping Container Lifecycles (<1s Downtime) ----
+            # ---- 5. Replace application containers ----
             if [ "${{ needs.check-changes.outputs.auth-backend }}" = "true" ]; then
                 echo "Swapping Auth-backend instance..."
                 docker compose up -d --no-deps auth-backend
             fi
 
             if [ "${{ needs.check-changes.outputs.backend }}" = "true" ]; then
-                echo "Swapping Main Backend instance..."
-                docker compose up -d --no-deps --wait --wait-timeout 120 backend
-                
-                if docker compose ps --services | grep -q '^postgres$'; then
-                    echo "Running relational engine incremental schemas..."
-                    docker compose exec -T backend node scripts/pg-migrate.js
-                fi
+                echo "Draining queues and deploying API, worker, and scheduler..."
+                export HUB_RUNTIME_DEPLOYMENT_ID="${{ github.run_id }}"
+                python3 infra/vps/deploy-backend-roles.py --execute
             fi
 
             if [ "${{ needs.check-changes.outputs.cdn }}" = "true" ]; then

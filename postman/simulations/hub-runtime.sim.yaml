@@ -1,0 +1,6 @@
+simulation: hub-runtime
+routing: path
+mocks:
+  - name: hub-email
+    routeKey: email
+    path: postman/mocks/hub-email/config.yaml

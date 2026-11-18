@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { uploadInventoryToPetrosoft } = require("../utils/cStoreCountScrapper");
 
@@ -16,7 +17,7 @@ const petrosoftQueue = new Queue("petrosoftQueue", {
   },
 });
 
-const petrosoftWorker = new Worker(
+const petrosoftWorker = createWorker(
   "petrosoftQueue",
   async (job) => {
     const { targetStationCsoCode, csvBase64 } = job.data;
@@ -41,7 +42,7 @@ const petrosoftWorker = new Worker(
   }
 );
 
-petrosoftWorker.on("failed", (job, err) => {
+petrosoftWorker?.on("failed", (job, err) => {
   console.error(`❌ [Petrosoft Worker] Background Execution Job ${job?.id} failed with exception:`, err);
 });
 

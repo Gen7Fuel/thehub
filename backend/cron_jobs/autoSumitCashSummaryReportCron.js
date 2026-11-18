@@ -7,7 +7,7 @@ const { CashSummary, CashSummaryReport } = require('../models/CashSummaryNew')
 const LotteryModule = require('../models/Lottery')
 const Lottery = LotteryModule.default || LotteryModule.Lottery || LotteryModule
 
-const cron = require('node-cron')
+const cron = require('../runtime/scheduler').forModule('autoSumitCashSummaryReportCron')
 const { generateCashSummaryPdf } = require('../utils/cashSummaryPdf')
 const { generateEodReportPdf } = require('../utils/eodReport')
 const { generateChickenDelightEodReportPdf } = require('../utils/eodCDReportWavers')

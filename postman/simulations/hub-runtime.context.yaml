@@ -1,0 +1,23 @@
+purpose:
+  stands_in_for: Hub email service POST /send, using synthetic messages only.
+  unblocks: Checks email worker HTTP success and failure during backend process separation.
+assumptions:
+  - id: email-handoff
+    status: supported
+    claim: The existing email processor completes on HTTP 200 and rejects an HTTP 503 JSON error in the scenarios run.
+    reason: The actual processor made HTTP calls to the local stand-in. This establishes caller behavior, not real mail delivery.
+    verification: On 2026-11-18 Postman CLI 1.75.0 logged POST /send responses 200 and 503. The transport-only script asserted success and rejection. The separate Docker rehearsal exercised real BullMQ retention with Redis and confirmed the failed job remains failed.
+    source: backend/queues/emailQueue.js; backend/scripts/check-email-http.cjs; backend/scripts/rehearse-runtime.cjs; postman/mocks/hub-email/default.js
+    updated_at: '2026-11-18'
+  - id: real-mail-delivery
+    status: unknown
+    claim: A successful response from the real email service delivers mail to the intended recipient.
+    reason: This change does not alter that service. No real mail was sent during rehearsal. The mock was written from the caller; owner mock discovery was skipped because the installed CLI does not implement postman status.
+    verification: Only synthetic local HTTP traffic was exercised; production delivery remains a post-deployment observation.
+    source: backend/queues/emailQueue.js; postman/mocks/hub-email/default.js
+    updated_at: '2026-11-18'
+fingerprints:
+  - id: backend-role-separation
+    date: '2026-11-18'
+    commit: codex/backend-runtime-roles
+    cli: 1.75.0

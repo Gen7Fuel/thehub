@@ -1,5 +1,5 @@
 const Notification = require('../models/notification/notification'); // Adjust path as needed
-const cron = require('node-cron');
+const cron = require('../runtime/scheduler').forModule('archiveOldNotification');
 
 async function cleanUpNotifications() {
   console.log('--- Starting Notification Cleanup Job ---');

@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('fetchBullochShiftsCron');
 const moment = require("moment-timezone");
 const Location = require("../models/Location");
 const { CashSummary } = require("../models/CashSummaryNew");

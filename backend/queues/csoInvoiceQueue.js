@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { processInvoiceAutomation } = require("../utils/csoInvoiceUpload");
 
@@ -26,7 +27,7 @@ let csoInvoiceWorker = null;
 const initCsoInvoiceWorker = (io) => {
   if (csoInvoiceWorker) return csoInvoiceWorker;
 
-  csoInvoiceWorker = new Worker(
+  csoInvoiceWorker = createWorker(
     "csoInvoiceQueue",
     async (job) => {
       const { invoiceId } = job.data;
@@ -50,7 +51,7 @@ const initCsoInvoiceWorker = (io) => {
     },
   );
 
-  csoInvoiceWorker.on("failed", (job, err) => {
+  csoInvoiceWorker?.on("failed", (job, err) => {
     console.error(
       `❌ [Invoice Worker] Background Execution Job ${job?.id} failed with error statement:`,
       err.message,

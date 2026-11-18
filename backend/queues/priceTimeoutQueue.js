@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { getPg } = require("../config/pg");
 const { emailQueue } = require("./emailQueue");
@@ -17,7 +18,7 @@ const priceTimeoutQueue = new Queue("priceTimeoutQueue", {
   },
 });
 
-const priceTimeoutWorker = new Worker(
+const priceTimeoutWorker = createWorker(
   "priceTimeoutQueue",
   async (job) => {
     const db = getPg();
@@ -62,7 +63,7 @@ const priceTimeoutWorker = new Worker(
   { connection }
 );
 
-priceTimeoutWorker.on("failed", (job, err) => {
+priceTimeoutWorker?.on("failed", (job, err) => {
   console.error(`❌ Verification job ${job?.id} error track:`, err);
 });
 

@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('postgresParquetExportCron');
 const parquet = require("parquetjs-lite");
 const { BlobServiceClient } = require("@azure/storage-blob");
 const { getPg } = require("../config/pg");

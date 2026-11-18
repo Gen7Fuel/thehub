@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('weeklyArReportCron');
 const fs = require("fs");
 const path = require("path");
 const archiver = require("archiver");

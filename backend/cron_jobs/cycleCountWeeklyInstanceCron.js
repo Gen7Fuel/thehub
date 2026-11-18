@@ -5,7 +5,7 @@ const Event = require("../models/Event");
 const { pushNotification } = require('../services/notificationService');
 const { getPg } = require("../config/pg");
 const { format, addDays, nextMonday, getMonth, parseISO, isValid, startOfDay } = require("date-fns");
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('cycleCountWeeklyInstanceCron');
 
 // ----------------------------------------------------------------------
 // 🗓️ STORE SCHEDULE CONFIGURATION MAPPING

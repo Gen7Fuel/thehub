@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('dashboardCacheCron');
 const Location = require("../models/Location");
 const { CashSummary, CashSummaryReport } = require("../models/CashSummaryNew");
 const { getAllSQLData } = require("../services/sqlService");
