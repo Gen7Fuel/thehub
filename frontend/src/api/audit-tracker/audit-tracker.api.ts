@@ -15,16 +15,24 @@ import type {
   AuditReportFrequency,
   AuditReportAvailability,
   AuditReportOverview,
+  AuditReportSection,
+  AuditVisitorComparison,
   MyIssuesQuery,
   MyIssuesReadModel,
 } from './audit-tracker.types'
 
 export const auditTrackerApi = {
-  async reportAvailability(query: { site: string; frequency: AuditReportFrequency; anchor: string }, options: RequestOptions): Promise<AuditReportAvailability> {
+  async reportAvailability(query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; anchor: string }, options: RequestOptions): Promise<AuditReportAvailability> {
     return (await apiClient.get('/station-audits/tracker/reports/availability', { ...requestConfig(options), params: query })).data
   },
-  async reportOverview(query: { site: string; frequency: AuditReportFrequency; date: string }, options: RequestOptions): Promise<AuditReportOverview> {
+  async reportOverview(query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; date: string }, options: RequestOptions): Promise<AuditReportOverview> {
     return (await apiClient.get('/station-audits/tracker/reports/overview', { ...requestConfig(options), params: query })).data
+  },
+  async reportSection(sectionId: string, query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; date: string }, options: RequestOptions): Promise<AuditReportSection> {
+    return (await apiClient.get(`/station-audits/tracker/reports/sections/${sectionId}`, { ...requestConfig(options), params: query })).data
+  },
+  async visitorComparison(sectionId: string, query: { site: string; frequency: AuditReportFrequency; date: string }, options: RequestOptions): Promise<AuditVisitorComparison> {
+    return (await apiClient.get(`/station-audits/tracker/reports/visitor-comparison/${sectionId}`, { ...requestConfig(options), params: query })).data
   },
   async issuesBoard(query: { search?: string; site?: string; department?: string; priority?: string }, options: RequestOptions): Promise<AuditTrackerBoardReadModel> {
     return (await apiClient.get('/station-audits/tracker/issues-board', { ...requestConfig(options), params: query })).data

@@ -56,13 +56,13 @@ function latestRevisionAt(revisions, cutoff) {
   return latest;
 }
 
-async function resolveStoreReportOverview({ site, timezone, frequency, date }) {
+async function resolveStoreReportOverview({ site, timezone, type = "store", frequency, date }) {
   const period = reportPeriod(frequency, date, timezone);
   if (!period) throw new Error("INVALID_REPORT_PERIOD");
   const now = new Date();
   const openPeriod = period.start <= now && period.end >= now;
   const defaultCutoff = openPeriod ? now : period.end;
-  const scopeKey = `${site}:store`;
+  const scopeKey = `${site}:${type}`;
 
   const scopedChecklistIds = await StationAuditChecklistRevision.distinct("checklist", {
     scopeKeys: scopeKey,
@@ -70,7 +70,10 @@ async function resolveStoreReportOverview({ site, timezone, frequency, date }) {
     effectiveFrom: { $lte: defaultCutoff },
   });
   const [runs, revisions] = await Promise.all([
-    StationAuditRun.find({ site, type: "store", frequency, periodKey: period.periodKey }).lean(),
+    StationAuditRun.find({ site, type, frequency, periodKey: period.periodKey })
+      .populate("startedBy", "firstName lastName email")
+      .populate("completedBy", "firstName lastName email")
+      .lean(),
     StationAuditChecklistRevision.find({
       checklist: { $in: scopedChecklistIds },
       effectiveFrom: { $lte: defaultCutoff },
@@ -154,7 +157,13 @@ async function resolveStoreReportOverview({ site, timezone, frequency, date }) {
       name: run?.sectionSnapshot?.name || section.name,
       description: run?.sectionSnapshot?.description || section.description || "",
       sortOrder: section.sortOrder,
-      run: run ? { _id: run._id, state: run.state, completedAt: run.completedAt } : null,
+      run: run ? {
+        _id: run._id,
+        state: run.state,
+        startedBy: run.startedBy,
+        completedBy: run.completedBy,
+        completedAt: run.completedAt,
+      } : null,
       summary: { total, completed, pending: total - completed },
     });
   }
@@ -204,12 +213,12 @@ function availabilityPeriods(frequency, anchor, timezone) {
   return periods;
 }
 
-async function resolveStoreReportAvailability({ site, timezone, frequency, anchor }) {
+async function resolveStoreReportAvailability({ site, timezone, type = "store", frequency, anchor }) {
   const periods = availabilityPeriods(frequency, anchor, timezone);
   if (!periods) throw new Error("INVALID_REPORT_PERIOD");
   const keys = periods.map((period) => period.periodKey);
   const counts = await StationAuditRun.aggregate([
-    { $match: { site, type: "store", frequency, periodKey: { $in: keys } } },
+    { $match: { site, type, frequency, periodKey: { $in: keys } } },
     { $group: {
       _id: "$periodKey",
       runCount: { $sum: 1 },
@@ -225,6 +234,153 @@ async function resolveStoreReportAvailability({ site, timezone, frequency, ancho
   }));
 }
 
+async function resolveReportSection({ sectionId, site, timezone, type, frequency, date }) {
+  const period = reportPeriod(frequency, date, timezone);
+  if (!period) throw new Error("INVALID_REPORT_PERIOD");
+  const now = new Date();
+  const defaultCutoff = period.start <= now && period.end >= now ? now : period.end;
+  const scopeKey = `${site}:${type}`;
+  const run = await StationAuditRun.findOne({
+    section: sectionId,
+    site,
+    type,
+    frequency,
+    periodKey: period.periodKey,
+  })
+    .populate("startedBy", "firstName lastName email")
+    .populate("completedBy", "firstName lastName email")
+    .lean();
+  const cutoff = run?.state === "completed" && run.completedAt
+    ? new Date(run.completedAt)
+    : defaultCutoff;
+  const scopedChecklistIds = await StationAuditChecklistRevision.distinct("checklist", {
+    section: sectionId,
+    scopeKeys: scopeKey,
+    "snapshot.frequency": frequency,
+    effectiveFrom: { $lte: cutoff },
+  });
+  const [revisions, responses, section] = await Promise.all([
+    StationAuditChecklistRevision.find({
+      checklist: { $in: scopedChecklistIds },
+      section: sectionId,
+      effectiveFrom: { $lte: cutoff },
+    }).sort({ checklist: 1, effectiveFrom: 1 }).lean(),
+    run
+      ? StationAuditResponse.find({ run: run._id })
+        .select("checklist checklistRevision checklistSnapshot checked checkedAt checkedBy selectedStatus comment photos requestOrder orderCreated issueRaised issue")
+        .populate("checkedBy", "firstName lastName email")
+        .lean()
+      : [],
+    StationAuditSection.findById(sectionId).select("name description sortOrder sectionType").lean(),
+  ]);
+  if (!section && !run) throw new Error("REPORT_SECTION_NOT_FOUND");
+
+  const revisionsByChecklist = revisions.reduce((map, revision) => {
+    const checklistId = String(revision.checklist);
+    if (!map.has(checklistId)) map.set(checklistId, []);
+    map.get(checklistId).push(revision);
+    return map;
+  }, new Map());
+  const expected = new Map();
+  for (const checklistRevisions of revisionsByChecklist.values()) {
+    const revision = latestRevisionAt(checklistRevisions, cutoff);
+    if (
+      revision?.snapshot.active === true
+      && revision.snapshot.frequency === frequency
+      && revision.scopeKeys.includes(scopeKey)
+    ) expected.set(String(revision.checklist), revision);
+  }
+  const responseByChecklist = new Map(responses.map((response) => [String(response.checklist), response]));
+  for (const response of responses) if (!expected.has(String(response.checklist))) expected.set(String(response.checklist), null);
+
+  const items = [...expected.entries()].map(([checklistId, revision]) => {
+    const response = responseByChecklist.get(checklistId) || null;
+    const snapshot = response?.checked ? response.checklistSnapshot : revision?.snapshot || response?.checklistSnapshot;
+    return {
+      checklist: checklistId,
+      expectedRevision: revision ? { _id: revision._id, version: revision.version } : null,
+      submittedRevision: response?.checklistRevision || null,
+      snapshot: {
+        item: snapshot?.item || "Checklist item",
+        description: snapshot?.description || "",
+        category: snapshot?.category || "",
+        frequency: snapshot?.frequency || frequency,
+        sortOrder: revision?.snapshot?.sortOrder ?? null,
+        departmentName: response?.checklistSnapshot?.departmentName || "",
+      },
+      completed: response?.checked === true,
+      response,
+    };
+  }).sort((left, right) =>
+    (left.snapshot.sortOrder ?? Number.MAX_SAFE_INTEGER) - (right.snapshot.sortOrder ?? Number.MAX_SAFE_INTEGER)
+    || left.snapshot.item.localeCompare(right.snapshot.item, undefined, { sensitivity: "base" })
+  );
+  const completed = items.filter((item) => item.completed).length;
+  return {
+    type,
+    frequency,
+    period: { ...period, start: period.start.toISOString(), end: period.end.toISOString() },
+    section: {
+      _id: sectionId,
+      name: run?.sectionSnapshot?.name || section?.name || "Audit section",
+      description: run?.sectionSnapshot?.description || section?.description || "",
+    },
+    run: run ? {
+      _id: run._id,
+      state: run.state,
+      startedBy: run.startedBy,
+      completedBy: run.completedBy,
+      startedAt: run.startedAt,
+      completedAt: run.completedAt,
+    } : null,
+    summary: { total: items.length, completed, pending: items.length - completed },
+    checklists: items,
+  };
+}
+
+async function resolveVisitorComparison(args) {
+  const [store, visitor] = await Promise.all([
+    resolveReportSection({ ...args, type: "store" }),
+    resolveReportSection({ ...args, type: "visitor" }),
+  ]);
+  const merged = new Map();
+  for (const item of store.checklists) merged.set(String(item.checklist), { checklist: item.checklist, snapshot: item.snapshot, store: item, visitor: null });
+  for (const item of visitor.checklists) {
+    const key = String(item.checklist);
+    const existing = merged.get(key);
+    if (existing) {
+      existing.visitor = item;
+      if (!existing.store?.completed && item.snapshot) existing.snapshot = item.snapshot;
+    } else merged.set(key, { checklist: item.checklist, snapshot: item.snapshot, store: null, visitor: item });
+  }
+  const checklists = [...merged.values()].map((entry) => {
+    const storeStatus = entry.store?.response?.selectedStatus?.key || entry.store?.response?.selectedStatus?.label || "";
+    const visitorStatus = entry.visitor?.response?.selectedStatus?.key || entry.visitor?.response?.selectedStatus?.label || "";
+    const statusDiffers = Boolean(entry.store?.completed || entry.visitor?.completed)
+      && (entry.store?.completed !== entry.visitor?.completed || storeStatus !== visitorStatus);
+    const issueDiffers = Boolean(entry.store?.response?.issueRaised) !== Boolean(entry.visitor?.response?.issueRaised);
+    return { ...entry, statusDiffers, issueDiffers, differs: statusDiffers || issueDiffers };
+  }).sort((left, right) =>
+    (left.snapshot.sortOrder ?? Number.MAX_SAFE_INTEGER) - (right.snapshot.sortOrder ?? Number.MAX_SAFE_INTEGER)
+    || left.snapshot.item.localeCompare(right.snapshot.item, undefined, { sensitivity: "base" })
+  );
+  return {
+    type: "visitor",
+    frequency: visitor.frequency,
+    period: visitor.period,
+    section: visitor.section,
+    storeRun: store.run,
+    visitorRun: visitor.run,
+    summary: {
+      total: checklists.length,
+      differing: checklists.filter((item) => item.differs).length,
+      statusDifferences: checklists.filter((item) => item.statusDiffers).length,
+      issueDifferences: checklists.filter((item) => item.issueDiffers).length,
+    },
+    checklists,
+  };
+}
+
 module.exports = {
   FREQUENCIES,
   availabilityPeriods,
@@ -232,4 +388,6 @@ module.exports = {
   reportPeriod,
   resolveStoreReportAvailability,
   resolveStoreReportOverview,
+  resolveReportSection,
+  resolveVisitorComparison,
 };

@@ -6,6 +6,7 @@ const {
   StationAuditChecklist,
   StationAuditDepartment,
 } = require("../../../models/station-audits");
+const { createChecklistRevision } = require("../../../services/stationAuditChecklistRevision");
 
 const router = express.Router();
 const ADD_PERMISSION = "auditManager.section.add";
@@ -417,6 +418,11 @@ router.put("/:sectionId", async (req, res) => {
     if (update.error) return res.status(400).json({ error: update.error });
     const beforeSection = await StationAuditSection.findById(sectionId).lean();
     if (!beforeSection) return res.status(404).json({ error: "Section not found" });
+    const removedSiteIds = update.field === "sites"
+      ? (beforeSection.sites || []).filter((siteId) =>
+        !update.value.some((selectedId) => selectedId.toString() === siteId.toString())
+      )
+      : [];
 
     if (update.field === "sites") {
       const count = await Location.countDocuments({
@@ -503,6 +509,60 @@ router.put("/:sectionId", async (req, res) => {
       }
     }
 
+    let syncedChecklistCount = 0;
+    if (removedSiteIds.length) {
+      const affectedChecklists = await StationAuditChecklist.find({
+        section: sectionId,
+        assignedSites: { $in: removedSiteIds },
+      })
+        .select("_id item assignedSites")
+        .lean();
+
+      if (affectedChecklists.length) {
+        const now = new Date();
+        await StationAuditChecklist.updateMany(
+          { _id: { $in: affectedChecklists.map((checklist) => checklist._id) } },
+          {
+            $pull: { assignedSites: { $in: removedSiteIds } },
+            $set: { updatedAt: now },
+          },
+          { runValidators: true }
+        );
+        for (const checklist of affectedChecklists) {
+          await createChecklistRevision(checklist._id, {
+            changedBy: req.user._id,
+            changeType: "updated",
+            at: now,
+          });
+        }
+        syncedChecklistCount = affectedChecklists.length;
+        await logSectionChange(req, {
+          action: "update",
+          resourceType: "station-audit-checklist",
+          resourceIds: affectedChecklists.map((checklist) => checklist._id),
+          success: true,
+          statusCode: 200,
+          before: {
+            section: sectionId,
+            removedSites: removedSiteIds,
+            checklists: affectedChecklists.map((checklist) => ({
+              _id: checklist._id,
+              item: checklist.item,
+              assignedSites: checklist.assignedSites,
+            })),
+          },
+          after: {
+            section: sectionId,
+            removedSites: removedSiteIds,
+          },
+          message: `Removed ${removedSiteIds.length} section site(s) from ${affectedChecklists.length} Station Audit checklist(s)`,
+          source: "station-audit.manager.sections.site-sync",
+          bulk: { affectedCount: affectedChecklists.length, truncated: false },
+          diffOptions: { maxChanges: 100 },
+        });
+      }
+    }
+
     const afterSection = await StationAuditSection.findById(sectionId).lean();
     const section = await StationAuditSection.findById(sectionId)
       .select(
@@ -535,6 +595,7 @@ router.put("/:sectionId", async (req, res) => {
         departments: section.departments || [],
         ...counts,
       },
+      syncedChecklistCount,
     });
   } catch (error) {
     console.error("Failed to update Station Audit section:", error);

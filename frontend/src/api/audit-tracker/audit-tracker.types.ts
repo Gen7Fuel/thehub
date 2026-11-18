@@ -175,6 +175,7 @@ export interface AuditTrackerHistoricalActivityReadModel {
 export type AuditReportFrequency = 'daily' | 'weekly' | 'monthly'
 
 export interface AuditReportAvailability {
+  type: 'store' | 'visitor'
   frequency: AuditReportFrequency
   anchor: string
   periods: Array<{
@@ -189,7 +190,7 @@ export interface AuditReportAvailability {
 }
 
 export interface AuditReportOverview {
-  type: 'store'
+  type: 'store' | 'visitor'
   frequency: AuditReportFrequency
   location: { _id: string; name: string; timezone: string }
   sites: Array<{ _id: string; name: string }>
@@ -200,7 +201,61 @@ export interface AuditReportOverview {
     name: string
     description: string
     sortOrder: number | null
-    run: { _id: string; state: 'in_progress' | 'completed'; completedAt?: string | null } | null
+    run: { _id: string; state: 'in_progress' | 'completed'; startedBy?: AuditTrackerPerson | null; completedBy?: AuditTrackerPerson | null; completedAt?: string | null } | null
     summary: { total: number; completed: number; pending: number }
+  }>
+}
+
+export interface AuditReportSection {
+  type: 'store' | 'visitor'
+  frequency: AuditReportFrequency
+  location: { _id: string; name: string; timezone: string }
+  period: { periodKey: string; start: string; end: string; label: string }
+  section: { _id: string; name: string; description: string }
+  run: { _id: string; state: 'in_progress' | 'completed'; startedBy?: AuditTrackerPerson | null; completedBy?: AuditTrackerPerson | null; startedAt: string; completedAt?: string | null } | null
+  summary: { total: number; completed: number; pending: number }
+  checklists: Array<{
+    checklist: string
+    expectedRevision: { _id: string; version: string } | null
+    submittedRevision: string | null
+    snapshot: {
+      item: string
+      description: string
+      category: string
+      frequency: AuditReportFrequency
+      sortOrder: number | null
+      departmentName: string
+    }
+    completed: boolean
+    response: null | {
+      selectedStatus?: { key?: string; label?: string }
+      comment?: string
+      photos?: string[]
+      checkedAt?: string | null
+      checkedBy?: AuditTrackerPerson | null
+      issueRaised?: boolean
+      requestOrder?: boolean
+      orderCreated?: boolean
+    }
+  }>
+}
+
+export interface AuditVisitorComparison {
+  type: 'visitor'
+  frequency: AuditReportFrequency
+  location: { _id: string; name: string; timezone: string }
+  period: AuditReportSection['period']
+  section: AuditReportSection['section']
+  storeRun: AuditReportSection['run']
+  visitorRun: AuditReportSection['run']
+  summary: { total: number; differing: number; statusDifferences: number; issueDifferences: number }
+  checklists: Array<{
+    checklist: string
+    snapshot: AuditReportSection['checklists'][number]['snapshot']
+    store: AuditReportSection['checklists'][number] | null
+    visitor: AuditReportSection['checklists'][number] | null
+    statusDiffers: boolean
+    issueDiffers: boolean
+    differs: boolean
   }>
 }
