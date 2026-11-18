@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('auditIssueReportCron');
 const { emailQueue } = require("../queues/emailQueue");
 const AuditItem = require('../models/audit/auditItem');
 const AuditInstance = require('../models/audit/auditInstance');

@@ -1,4 +1,5 @@
-const { Queue, Worker } = require('bullmq');
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require('bullmq');
 const connection = require('../utils/redisClient');
 const AccessLog = require('../models/AccessLog');
 const { createHash } = require('crypto');
@@ -13,7 +14,7 @@ const accessLogQueue = new Queue('accessLogQueue', {
   },
 });
 
-const accessLogWorker = new Worker(
+const accessLogWorker = createWorker(
   'accessLogQueue',
   async (job) => {
     const { accessGroupId, ...record } = job.data;
@@ -26,7 +27,7 @@ const accessLogWorker = new Worker(
   { connection, concurrency: 5 },
 );
 
-accessLogWorker.on('failed', (job, error) => {
+accessLogWorker?.on('failed', (job, error) => {
   console.error(`Access log job ${job?.id || 'unknown'} failed:`, error.message);
 });
 

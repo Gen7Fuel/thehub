@@ -1,7 +1,7 @@
 const { Transform } = require('json2csv');
 const { BlobServiceClient } = require("@azure/storage-blob");
 const { PassThrough } = require('stream');
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('mongoCsvExportCron');
 const mongoose = require('mongoose');
 const AuditTemplate = require("../models/audit/auditTemplate");
 const AuditInstance = require("../models/audit/auditInstance");

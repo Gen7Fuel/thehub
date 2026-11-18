@@ -1,5 +1,6 @@
+const { createWorker } = require('../runtime/workers');
 const { cdnServiceUrl } = require('../utils/cdnService');
-const { Queue, Worker } = require("bullmq");
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const CsoInvoice = require("../models/CsoInvoice");
 const { calculateLaplacianVariance } = require("../utils/blurDetector");
@@ -19,7 +20,7 @@ const invoiceProcessingQueue = new Queue("invoiceProcessingQueue", {
   },
 });
 
-const invoiceProcessingWorker = new Worker(
+const invoiceProcessingWorker = createWorker(
   "invoiceProcessingQueue",
   async (job) => {
     const {

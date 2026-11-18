@@ -1,8 +1,18 @@
+const { createWorker } = require('../runtime/workers');
 const fs = require("fs");
-const { Queue, Worker } = require("bullmq");
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 
-const emailQueue = new Queue("emailQueue", {
+// Resolve files where the producer runs; workers have a separate filesystem.
+class EmailQueue extends Queue {
+  async add(name, data, options) {
+    const payload = data.attachments
+      ? { ...data, attachments: await resolveAttachments(data.attachments) }
+      : data;
+    return super.add(name, payload, options);
+  }
+}
+const emailQueue = new EmailQueue("emailQueue", {
   connection,
   defaultJobOptions: {
     removeOnComplete: {
@@ -53,7 +63,7 @@ async function processEmailJob(job) {
   }
 }
 
-const emailWorker = new Worker(
+const emailWorker = createWorker(
   "emailQueue",
   async (job) => {
     try {
@@ -68,11 +78,11 @@ const emailWorker = new Worker(
   { connection }
 );
 
-emailWorker.on("failed", (job, err) => {
+emailWorker?.on("failed", (job, err) => {
   console.error(`🚨 Email job ${job?.id || "unknown"} failed:`, err.message);
 });
 
-emailWorker.on("completed", (job) => {
+emailWorker?.on("completed", (job) => {
   console.log(`🎉 Email job ${job.id} completed successfully`);
 });
 

@@ -53,10 +53,13 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
-    "start": "node app.js",
-    "dev": "npx nodemon -L --ignore 'sessions/*' app.js",
+    "start": "node api.js",
+    "dev": "npx nodemon -L --ignore 'sessions/*' api.js",
     "pg:migrate": "node ./scripts/pg-migrate.js",
-    "test": "vitest run"
+    "test": "vitest run && node --test scripts/runtime-checks.cjs",
+    "start:worker": "node worker.js",
+    "start:scheduler": "node scheduler.js",
+    "start:all": "node app.js"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",

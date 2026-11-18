@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('dailyFuelSyncCron');
 const moment = require('moment-timezone');
 const Location = require('../models/Location');
 const FuelStationTank = require('../models/fuel/FuelStationTank');

@@ -5,6 +5,21 @@ on:
     branches: [ main ]
 
 jobs:
+  runtime-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test deployment recovery paths
+        run: python infra/vps/test_deploy_backend_roles.py
+      - name: Build runtime rehearsal image
+        run: docker build -t hub-runtime-rehearsal:local backend
+      - name: Rehearse isolated API, worker, and scheduler
+        run: python infra/vps/rehearse-runtime.py
+
   test:
     runs-on: ubuntu-latest
 

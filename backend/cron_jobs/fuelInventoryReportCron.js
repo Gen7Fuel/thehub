@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('fuelInventoryReportCron');
 const { emailQueue } = require("../queues/emailQueue");
 const { generateFuelInventoryPDF } = require("../utils/pdfGenerator");
 const { getRankedFuelInventory } = require("../services/supaBaseService");

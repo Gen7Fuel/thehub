@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('syncDailyStgLiveFuelCron');
 const mssql = require('mssql');
 const { getPool } = require('../services/sqlService');
 

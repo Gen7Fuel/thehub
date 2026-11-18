@@ -1,5 +1,7 @@
+require('dotenv').config();
+const { getRole } = require('./runtime/role');
+if (!['api', 'all'].includes(getRole())) throw new Error('app.js requires API or legacy all role');
 const express = require("express");
-const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const { connectPG, migratePG } = require("./config/pg");
@@ -9,37 +11,6 @@ const requestId = require("./middleware/requestId");
 const actionAccessLogger = require("./middleware/actionAccessLogger");
 
 // throw new Error("ROLLBACK_TEST_CRASH");
-
-//BullMQ for background email processing running
-require("./queues/emailQueue"); // Just runs the worker
-require("./queues/priceTimeoutQueue"); // Just runs the worker
-require("./queues/gasBuddyQueue"); // Just runs the worker
-require("./queues/gvmQueue"); // Just runs the worker
-require("./queues/fuelOrderDraftQueue"); // Just runs the worker
-const { initWriteOffAutomationWorker } = require("./queues/writeOffAutomationQueue");
-const { initPriceScheduleWorker } = require("./queues/priceScheduleQueue");
-const { initCsoInvoiceWorker } = require("./queues/csoInvoiceQueue"); // 1. Import worker initializer
-require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
-// require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
-require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
-require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data to azure in csv
-require('./cron_jobs/logArchiveCron'); // archives old access/change logs to Azure at 8 AM UTC
-require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing old notifications
-require('./cron_jobs/logoutUsersCron'); //cron job for logging out users daily at 9 AM UTC
-require('./cron_jobs/dashboardCacheCron'); //cron job for pre-warming dashboard SQL cache daily at 5 AM UTC
-require('./cron_jobs/dailyFuelSyncCron') // cron job for updating fuel related data daily morning at 5 am EST
-require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report emailed to mario every Tuesday 9 AM PT
-// require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
-require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item backup data from SQL
-require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
-// require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
-const { initWeeklyInstanceCron } = require('./cron_jobs/cycleCountWeeklyInstanceCron'); // Import initializer - cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
-require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
-require('./cron_jobs/syncDailyStgLiveFuelCron'); //cron job for syncing staging to live fuel price tables daily at 5 AM EST in SSMS
-require('./cron_jobs/fetchBullochShiftsCron'); //cron job for fetching bulloch shift reports every 3 hours form the server
-require('./cron_jobs/autoSumitCashSummaryReportCron'); //cron job for auto submitting completed shifts to the accounting every morning 6.30 am EST
-require('./cron_jobs/postgresParquetExportCron.js'); //cron job for exporting postgres data to azure in parquet format
-require('./cron_jobs/arCustomerSyncCron'); //cron job for syncing AR customers from CStoreOffice daily at 2 AM ET
 
 // Route imports
 const authRoutes = require("./routes/auth");
@@ -99,9 +70,6 @@ const { initializePermissionMap } = require("./utils/permissionStore");
 const { runTimezoneHealthCheck } = require("./services/timezoneHealthCheck");
 const setupSocket = require("./socket");
 
-dotenv.config();
-connectDB();
-connectPG();
 
 if ((process.env.RUN_PG_MIGRATIONS || "false").toLowerCase() === "true") {
   migratePG()
@@ -130,7 +98,10 @@ app.use(actionAccessLogger());
 
 
 // Health check
-app.get('/api/health', (req, res) => res.send('OK'));
+app.get('/api/health', (req, res) => {
+  const ready = !stopping && (!socketSubscription || socketSubscription.isReady());
+  res.set('X-Hub-Role', getRole()).status(ready ? 200 : 503).send(ready ? 'OK' : 'Not ready');
+});
 // app.get('/api/health', (req, res) => {
 //   res.status(500).send('FORCED_FAILURE_FOR_TESTING');
 // });
@@ -204,10 +175,7 @@ app.use('/api', emailRoutes);
 const io = setupSocket(server);
 app.set("io", io);
 
-initPriceScheduleWorker(io);
-initCsoInvoiceWorker(io);
-initWriteOffAutomationWorker(io);
-initWeeklyInstanceCron(io); 
+
 
 const PORT = process.env.PORT || 5000;
 
@@ -235,8 +203,38 @@ const seedNotificationTemplates = async () => {
 };
 
 // Create an async start function
+let socketSubscription;
+let stopping = false;
+async function shutdown(code = 0) {
+  if (stopping) return;
+  stopping = true;
+  const httpClosed = new Promise(resolve => server.close(resolve));
+  try {
+    await Promise.all([require('./runtime/workers').closeWorkers(), require('./runtime/scheduler').closeScheduler()]);
+    await new Promise(resolve => io.close(resolve));
+    await httpClosed;
+    await require('./runtime/socketBridge').flush();
+    if (socketSubscription) await socketSubscription.close();
+    await require('mongoose').disconnect();
+    await require('./config/pg').getPg().destroy();
+    await require('./utils/redisClient').quit();
+    process.exit(code);
+  } catch (error) { console.error('[api] Shutdown failed', error.code || error.name); process.exit(1); }
+}
+process.once('SIGTERM', () => shutdown());
+process.once('SIGINT', () => shutdown());
 const startServer = async () => {
   try {
+    await connectDB();
+    await connectPG();
+    if (getRole() === 'api') {
+      socketSubscription = await require('./runtime/socketBridge').subscribe(io, require('./utils/redisClient'));
+    } else {
+      await require('./runtime/background').startBackground(io, error => {
+        console.error('[api] Legacy background failure', error.code || error.name);
+        void shutdown(1);
+      });
+    }
     // 1. Initialize the Permission Map first
     // This ensures your auth middleware has the data it needs immediately
     await initializePermissionMap();

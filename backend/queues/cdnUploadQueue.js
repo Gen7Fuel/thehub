@@ -1,5 +1,6 @@
+const { createWorker } = require('../runtime/workers');
 const { cdnServiceUrl } = require('../utils/cdnService');
-const { Queue, Worker } = require('bullmq')
+const { Queue } = require('bullmq')
 const connection = require('../utils/redisClient')
 
 const cdnUploadQueue = new Queue('cdnUploadQueue', {
@@ -48,7 +49,7 @@ async function uploadToCdn(fileBuffer, originalName, mimeType = 'image/jpeg') {
   return data.filename || data.fileName
 }
 
-const cdnUploadWorker = new Worker(
+const cdnUploadWorker = createWorker(
   'cdnUploadQueue',
   async (job) => {
     const { recordId, originalName, buffer, mimeType } = job.data
@@ -87,7 +88,7 @@ const cdnUploadWorker = new Worker(
   }
 )
 
-cdnUploadWorker.on('failed', (job, err) => {
+cdnUploadWorker?.on('failed', (job, err) => {
   console.error(`❌ [CDN Worker] Job ${job?.id} failed for Record ID ${job?.data?.recordId}:`, err)
 })
 
