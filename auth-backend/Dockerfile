@@ -5,8 +5,8 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline
+    npm ci --omit=dev --prefer-offline
 
 COPY . .
 
-CMD ["npm", "start"]
+CMD ["node", "app.js"]

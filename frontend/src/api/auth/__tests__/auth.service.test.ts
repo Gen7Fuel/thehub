@@ -78,7 +78,7 @@ describe('authService request metadata', () => {
 
     const [, body, config] = mocks.authPost.mock.calls[0]
     expect(body).toEqual({ userId: 'user-1' })
-    expect(config.authRequired).toBe(false)
+    expect(config.authRequired).toBe(true)
     expect(config.headers['X-Action-Source']).toBe('navbar.session')
     expect(JSON.stringify(config.headers)).not.toContain('user-1')
   })

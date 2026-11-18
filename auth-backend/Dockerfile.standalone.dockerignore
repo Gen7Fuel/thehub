@@ -1,0 +1,12 @@
+**
+!auth-backend/
+!auth-backend/**
+!backend/
+!backend/models/
+!backend/models/*.js
+!backend/utils/
+!backend/utils/attachSiteAlias.js
+auth-backend/node_modules
+auth-backend/.env
+auth-backend/.env.*
+auth-backend/*.log
