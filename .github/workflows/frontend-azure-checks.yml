@@ -1,0 +1,27 @@
+name: Azure frontend checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'infra/azure/frontend/**'
+      - '.github/workflows/frontend-azure-checks.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Azure frontend image
+        run: docker build -f frontend/Dockerfile.azure --build-arg RELEASE_COMMIT=${{ github.sha }} -t hub-frontend-azure:local frontend
+      - name: Exercise SPA, proxies, uploads, ranges and WebSockets
+        run: python infra/azure/frontend/rehearse.py
