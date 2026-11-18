@@ -1,0 +1,45 @@
+name: Azure frontend checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'infra/azure/frontend/**'
+      - 'infra/azure/web-hosting/**'
+      - '.github/workflows/frontend-azure-checks.yml'
+      - '.github/workflows/frontend-azure-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.14.0'
+      - name: Validate the separate hosting and app roots
+        run: |
+          terraform fmt -check infra/azure/web-hosting infra/azure/frontend
+          terraform -chdir=infra/azure/web-hosting init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/azure/web-hosting validate
+          terraform -chdir=infra/azure/frontend init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=infra/azure/frontend validate
+          terraform -chdir=infra/azure/frontend test
+  container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build Azure frontend image
+        run: docker build -f frontend/Dockerfile.azure --build-arg RELEASE_COMMIT=${{ github.sha }} -t hub-frontend-azure:local frontend
+      - name: Exercise SPA, proxies, uploads, ranges and WebSockets
+        run: python infra/azure/frontend/rehearse.py

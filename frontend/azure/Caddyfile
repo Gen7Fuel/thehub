@@ -1,0 +1,76 @@
+{
+    admin off
+    auto_https off
+    servers {
+        trusted_proxies static private_ranges
+        trusted_proxies_strict
+        client_ip_headers X-Forwarded-For
+    }
+}
+
+:8080 {
+    root * /srv
+
+    # Do not compress binary CDN responses: video seeking needs byte ranges.
+    encode {
+        zstd
+        gzip
+        match {
+            header Content-Type text/*
+            header Content-Type application/json*
+            header Content-Type application/javascript*
+            header Content-Type application/manifest+json*
+            header Content-Type image/svg+xml*
+        }
+    }
+
+    @updates path / /index.html /version.json /sw.js /workbox-*.js /manifest.json /manifest.webmanifest
+    header @updates Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+
+    handle /frontend-health {
+        respond "ok" 200
+    }
+    @api path /api /api/*
+    handle @api {
+        reverse_proxy {$HUB_API_UPSTREAM} {
+            header_up Host {upstream_hostport}
+        }
+    }
+    @auth path /login-auth /login-auth/*
+    handle @auth {
+        reverse_proxy {$HUB_AUTH_UPSTREAM} {
+            header_up Host {upstream_hostport}
+        }
+    }
+    @cdn path /cdn /cdn/*
+    handle @cdn {
+        reverse_proxy {$HUB_CDN_UPSTREAM} {
+            header_up Host {upstream_hostport}
+        }
+    }
+    @socket path /socket.io /socket.io/*
+    handle @socket {
+        reverse_proxy {$HUB_API_UPSTREAM} {
+            header_up Host {upstream_hostport}
+        }
+    }
+    @signaling path /signaling /signaling/*
+    handle @signaling {
+        reverse_proxy {$HUB_SIGNALING_UPSTREAM} {
+            header_up Host {upstream_hostport}
+        }
+    }
+    handle /assets/* {
+        # A missing code chunk must return 404, not the SPA document.
+        file_server
+    }
+    handle {
+        route {
+            try_files {path} /index.html
+            # This also covers deep links rewritten to the app shell.
+            @shell path /index.html
+            header @shell Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+            file_server
+        }
+    }
+}
