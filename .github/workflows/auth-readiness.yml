@@ -1,0 +1,36 @@
+name: Check standalone auth readiness
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'auth-backend/**'
+      - 'frontend/src/api/auth/**'
+      - 'backend/models/**'
+      - 'backend/utils/attachSiteAlias.js'
+      - 'infra/azure/auth/**'
+      - '.github/workflows/auth-readiness.yml'
+permissions:
+  contents: read
+jobs:
+  auth-readiness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Test readiness and packaging
+        working-directory: auth-backend
+        run: |
+          npm ci
+          npm audit --omit=dev
+          npm test
+      - name: Build standalone auth runtime
+        run: docker build -f auth-backend/Dockerfile.standalone -t hub-auth-rehearsal:local .
+      - name: Rehearse auth against isolated MongoDB
+        run: python3 infra/azure/auth/rehearse.py
+      - name: Build existing VPS auth layout
+        run: docker build -t hub-auth-vps-rehearsal:local auth-backend
+      - name: Rehearse VPS compatibility
+        run: python3 infra/azure/auth/rehearse.py --vps

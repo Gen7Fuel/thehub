@@ -432,9 +432,22 @@ function getInitials(firstName, lastName) {
 
 router.post("/refresh-token", async (req, res) => {
   try {
+    const authorization = req.get('Authorization');
+    if (!authorization?.startsWith('Bearer ')) {
+      return res.status(401).json({ message: 'A valid session is required' });
+    }
+    let session;
+    try {
+      session = jwt.verify(authorization.slice(7).trim(), process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    } catch {
+      return res.status(401).json({ message: 'A valid session is required' });
+    }
     const { userId } = req.body;
     if (!userId) {
       return res.status(400).json({ message: "Missing userId in request body" });
+    }
+    if (!session.id || String(session.id) !== String(userId)) {
+      return res.status(403).json({ message: 'Session does not match the requested user' });
     }
 
     // Fetch the user from DB
@@ -445,10 +458,16 @@ router.post("/refresh-token", async (req, res) => {
       username: user.email,
       locationName: user.stationName,
     };
+    if (!user.is_active) return res.status(403).json({ message: 'Access Denied. Contact Admin.' });
 
     // Rebuild permissions / timezone / access if needed
     // const mergedPermissions = await getMergedPermissions(user);
     const mergedPermissions = await getMergedPermissionsTreeArray(user);
+    const ongoing = await Maintenance.findOne({ status: 'ongoing' });
+    if (ongoing && !checkPermissionByPath(mergedPermissions, ['settings', 'maintenance'])) {
+      return res.status(503).json({ message: 'The system is currently undergoing maintenance.',
+        endTime: ongoing.scheduleClose, maintenanceActive: true });
+    }
     let timezone = null;
     if (user.stationName) {
       const location = await Location.findOne({ stationName: user.stationName });

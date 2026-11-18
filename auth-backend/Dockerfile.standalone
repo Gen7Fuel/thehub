@@ -1,0 +1,14 @@
+FROM node:24-alpine AS package
+WORKDIR /build
+COPY auth-backend ./auth-backend
+COPY backend/models ./backend/models
+COPY backend/utils/attachSiteAlias.js ./backend/utils/attachSiteAlias.js
+RUN node auth-backend/scripts/package-runtime.cjs /runtime
+WORKDIR /runtime
+RUN npm ci --omit=dev
+
+FROM node:24-alpine
+RUN apk add --no-cache curl
+WORKDIR /app
+COPY --from=package /runtime ./
+CMD ["node", "app.js"]
