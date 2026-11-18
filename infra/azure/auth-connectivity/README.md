@@ -1,4 +1,14 @@
-# Auth database connectivity: reviewed preparation
+# Retired auth Relay proposal
+
+**2026-11-18: superseded by the [direct Azure database plan](../../../docs/migration/azure-databases.md).**
+The user chose to avoid Relay entirely. No Relay resource, listener, SAS key,
+or VPS agent was created. Do not register Microsoft.Relay or run the activation
+steps below. Terraform now rejects plans by default with an explicit retirement
+precondition. `enable_legacy_relay=true` exists only for the historical mocked
+security rehearsal; it is not production activation approval. Resource addresses
+and destruction protection are preserved rather than risking an unexpected
+destructive plan against a nonempty state. The rest of this document records
+the superseded proposal.
 
 This root prepares an outbound Azure Relay connection from a future Azure auth
 app to the existing VPS MongoDB. Nothing here changes production login routing,

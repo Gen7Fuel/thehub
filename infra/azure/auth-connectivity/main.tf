@@ -15,6 +15,12 @@ provider "azapi" {
   disable_default_output     = true
 }
 
+variable "enable_legacy_relay" {
+  description = "Historical rehearsal only. Production design uses direct Azure databases; leave false."
+  type        = bool
+  default     = false
+}
+
 locals {
   group_id       = "/subscriptions/29b24248-1990-4592-b25d-e6ee8e9db784/resourceGroups/Gen7ERP"
   namespace_name = "gen7erp-auth-relay-29b24248"
@@ -37,7 +43,13 @@ resource "azapi_resource" "relay" {
     properties = { publicNetworkAccess = "Enabled" }
   }
   response_export_values = []
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+    precondition {
+      condition     = var.enable_legacy_relay
+      error_message = "Relay activation is retired. Use docs/migration/azure-databases.md; do not apply this historical module."
+    }
+  }
 }
 
 resource "azapi_resource" "mongo" {
