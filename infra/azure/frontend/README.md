@@ -1,8 +1,9 @@
 # Azure frontend migration preparation
 
-Status: **runtime prepared; not deployed to Azure**. Production frontend, DNS,
-VPS Compose, Caddy and deployment workflow are unchanged. This preparation does
-not create billable resources or enable an automatic deployment target.
+Status: **Azure preview provisioned on 18 November 2026**. The shared web plan
+and frontend resources described below now exist. Production frontend DNS,
+VPS Compose, Caddy and deployment selection are unchanged. The preview still
+proxies API/auth to the VPS; this is not the public traffic cutover.
 
 The frontend can migrate separately from auth. The Azure frontend must serve
 both the static SPA and its existing same-origin service paths; changing only
@@ -103,14 +104,14 @@ Terraform ignores only the deployed image name thereafter, preserving digest
 deployments while continuing to own upstream/security settings.
 
 The shared plan plus Basic ACR public retail baseline is about CA$25.58/month
-before egress/storage/tax and the auth session's separate Relay costs; see the
-hosting review for measurements, price date and quota limits. No resources have
-been applied and no GitHub deployment environment/identity settings created.
+before egress/storage/tax and future database costs; see the hosting review for
+measurements, price date and quota limits. Both roots were applied after user
+approval. Relay was not provisioned and is no longer planned.
 
-After reviewed provisioning, configure GitHub environment `frontend-production`
-with a main-only branch policy, `AZURE_FRONTEND_CLIENT_ID` from Terraform output,
-and leave repository variable `FRONTEND_AZURE_PREVIEW_ENABLED` unset/false until
-the host, identity roles and upstreams have been reviewed. The
+GitHub environment `frontend-production` now has a main-only branch policy and
+`AZURE_FRONTEND_CLIENT_ID` from Terraform output. Repository variable
+`FRONTEND_AZURE_PREVIEW_ENABLED` is normally false; enable it only for a reviewed
+manual deployment after confirming the host, identity roles and upstreams. The
 `frontend-azure-preview.yml` workflow runs only by manual dispatch on main with
 that variable true. It also requires the live app's routing mode to be preview,
 builds and rehearses one image, pushes it using OIDC, resolves its registry
@@ -119,6 +120,17 @@ headers, proxied health routes and unauthenticated API rejection. It never
 changes DNS, auth routing, Terraform, or the VPS deployment selection.
 It cannot be used for production mode; automated production deployment and
 rollback selection must be reviewed with the shared VPS workflow at cutover.
+
+### Managed identity helper startup
+
+The first live deployment exposed an App Service classic-container behavior:
+the platform probes its own `msiProxy` helper using the app's warmup path.
+With `WEBSITE_WARMUP_STATUSES=200`, that helper timed out on port 8081 and Azure
+stopped the whole site, even though the frontend container itself was ready.
+Use `200,404` to accept the helper's missing application-specific endpoint.
+The actual app health check remains `/frontend-health`, and release verification
+still requires HTTP 200 and the exact source commit. No auth/TLS setting changes.
+See [Azure's warmup response rules](https://learn.microsoft.com/en-us/azure/app-service/reference-app-settings).
 
 ```sh
 terraform -chdir=infra/azure/frontend init -input=false
@@ -135,8 +147,8 @@ terraform -chdir=infra/azure/frontend plan -input=false -var-file=preview.tfvars
    from `app.gen7fuel.com`. Using the public app domain as an upstream after
    moving its DNS to Azure creates a routing loop. Verify API, auth and
    WebSocket paths against this origin before a public switch.
-2. **Review/apply the hosting proposal.** Review the new shared plan and
-   frontend resource plans/cost before provisioning. Existing CDN capacity is
+2. **Maintain the provisioned hosting.** The reviewed plan and frontend
+   resources are provisioned. Existing CDN capacity is
    not reused. No quota request is included. The proposed ACR and runtime
    managed identity avoid registry passwords, and the workflow uses immutable
    image digests. Verify actual role propagation/pulls during preview.

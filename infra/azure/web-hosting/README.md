@@ -1,6 +1,6 @@
 # Shared frontend/auth hosting proposal
 
-Not applied. This root exclusively owns one proposed Linux B1 App Service plan,
+Provisioned on 18 November 2026 after user approval. This root exclusively owns one Linux B1 App Service plan,
 `gen7erp-web-prod`, Canada East, one instance. Frontend consumes its ID from
 `infra/azure/frontend`; auth will consume the same ID in a separate state.
 The CDN plan `gen7erp-cdn-prod` is outside this root and is unchanged.
@@ -17,20 +17,18 @@ guarantee for the proposed plan. Monitor both new apps together during preview.
   **CA$0.0253/hour**, or **CA$18.47 at 730 hours** for the shared plan.
 - The frontend proposal separately adds Basic ACR at **CA$0.2339/day**, about
   **CA$7.11 for 730 hours**. Combined baseline: approximately **CA$25.58/month**.
-- Auth Relay connectivity, excess registry storage, state storage, network
-  egress, tax and other usage are additional. Relay is owned by the auth session.
-  These are public retail estimates, not the subscription's negotiated bill.
-  With auth's separately proposed Relay baseline (about CA$13.72/month), the
-  combined new hosting/registry/connectivity subtotal is about CA$39.30/month,
-  before usage and tax and excluding the existing CDN.
+- Database hosting, excess registry storage, state storage, network egress,
+  tax and other usage are additional. Relay was not provisioned and is no
+  longer planned. These are public retail estimates, not the subscription's
+  negotiated bill. Existing CDN costs are excluded.
 - Read-only regional quota API returned Total Regional VMs 0/31. It did not
-  return a B1-specific allocation. This does **not** guarantee B1 placement;
-  provisioning can still fail on SKU capacity or subscription restrictions.
+  return a B1-specific allocation. This does **not** guarantee future B1 placement.
+  The one reviewed plan was subsequently provisioned successfully.
 - Microsoft.Web and Microsoft.ContainerRegistry were already Registered.
   Provider registration is disabled in both proposed Terraform roots. Neither
   root requests quota increases or modifies provider registration.
 - Applying this root starts compute charges even before either app is ready.
-  No plan or other Azure resources have been created by this preparation.
+  The one reviewed plan and separate frontend root are now provisioned.
 
 ## State and sequence
 
