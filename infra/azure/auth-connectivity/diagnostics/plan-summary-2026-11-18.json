@@ -1,0 +1,42 @@
+{
+  "resourceChanges": [
+    {
+      "address": "azapi_resource.endpoint_policy[\"auth-app-send\"]",
+      "actions": [
+        "create"
+      ],
+      "type": "azapi_resource",
+      "name": "auth-app-send"
+    },
+    {
+      "address": "azapi_resource.endpoint_policy[\"vps-agent-listen\"]",
+      "actions": [
+        "create"
+      ],
+      "type": "azapi_resource",
+      "name": "vps-agent-listen"
+    },
+    {
+      "address": "azapi_resource.mongo",
+      "actions": [
+        "create"
+      ],
+      "type": "azapi_resource",
+      "name": "hub-mongodb"
+    },
+    {
+      "address": "azapi_resource.relay",
+      "actions": [
+        "create"
+      ],
+      "type": "azapi_resource",
+      "name": "gen7erp-auth-relay-29b24248"
+    }
+  ],
+  "create": 4,
+  "update": 0,
+  "destroy": 0,
+  "providerAutoRegistration": false,
+  "applied": false,
+  "secretValuesRequested": false
+}

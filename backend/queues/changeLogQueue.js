@@ -1,4 +1,5 @@
-const { Queue, Worker } = require('bullmq');
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require('bullmq');
 const connection = require('../utils/redisClient');
 const ChangeLog = require('../models/ChangeLog');
 
@@ -12,7 +13,7 @@ const changeLogQueue = new Queue('changeLogQueue', {
   },
 });
 
-const changeLogWorker = new Worker(
+const changeLogWorker = createWorker(
   'changeLogQueue',
   async (job) => ChangeLog.findOneAndUpdate(
     { eventId: job.data.eventId },
@@ -22,7 +23,7 @@ const changeLogWorker = new Worker(
   { connection, concurrency: 5 },
 );
 
-changeLogWorker.on('failed', (job, error) => {
+changeLogWorker?.on('failed', (job, error) => {
   console.error(`Change log job ${job?.id || 'unknown'} failed:`, error.message);
 });
 

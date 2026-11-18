@@ -1,0 +1,17 @@
+FROM node:24-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+COPY . .
+RUN npm run build
+ARG RELEASE_COMMIT=local
+RUN node --input-type=module -e 'import fs from "node:fs"; const builtAt = new Date().toISOString(); fs.writeFileSync("dist/version.json", JSON.stringify({version: builtAt, commit: process.env.RELEASE_COMMIT, builtAt}));'
+
+# Azure terminates public TLS; Caddy serves the SPA and proxies its existing
+# same-origin service paths. The existing VPS Dockerfile is unchanged.
+FROM caddy:2-alpine AS runtime
+COPY --from=build /app/dist /srv
+COPY azure/Caddyfile /etc/caddy/Caddyfile
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD wget -q -O /dev/null http://127.0.0.1:8080/frontend-health || exit 1
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

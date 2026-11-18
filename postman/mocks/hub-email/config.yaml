@@ -1,0 +1,10 @@
+version: 1
+name: hub-email
+slug: hub-email
+protocol: http
+description: Local email handoff fixture; never delivers mail
+interceptRequests: true
+scenarios:
+  - name: default
+    default: true
+    path: ./default.js

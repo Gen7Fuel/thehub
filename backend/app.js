@@ -1,5 +1,7 @@
+require('dotenv').config();
+const { getRole } = require('./runtime/role');
+if (!['api', 'all'].includes(getRole())) throw new Error('app.js requires API or legacy all role');
 const express = require("express");
-const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const { connectPG, migratePG } = require("./config/pg");
@@ -101,9 +103,6 @@ const { initializePermissionMap } = require("./utils/permissionStore");
 const { runTimezoneHealthCheck } = require("./services/timezoneHealthCheck");
 const setupSocket = require("./socket");
 
-dotenv.config();
-connectDB();
-connectPG();
 
 if ((process.env.RUN_PG_MIGRATIONS || "false").toLowerCase() === "true") {
   migratePG()
@@ -132,7 +131,10 @@ app.use(actionAccessLogger());
 
 
 // Health check
-app.get('/api/health', (req, res) => res.send('OK'));
+app.get('/api/health', (req, res) => {
+  const ready = !stopping && (!socketSubscription || socketSubscription.isReady());
+  res.set('X-Hub-Role', getRole()).status(ready ? 200 : 503).send(ready ? 'OK' : 'Not ready');
+});
 // app.get('/api/health', (req, res) => {
 //   res.status(500).send('FORCED_FAILURE_FOR_TESTING');
 // });
@@ -213,6 +215,7 @@ initWriteOffAutomationWorker(io);
 initStationAuditOrderWorker(io);
 initWeeklyInstanceCron(io); 
 
+
 const PORT = process.env.PORT || 5000;
 
 const seedNotificationTemplates = async () => {
@@ -239,8 +242,38 @@ const seedNotificationTemplates = async () => {
 };
 
 // Create an async start function
+let socketSubscription;
+let stopping = false;
+async function shutdown(code = 0) {
+  if (stopping) return;
+  stopping = true;
+  const httpClosed = new Promise(resolve => server.close(resolve));
+  try {
+    await Promise.all([require('./runtime/workers').closeWorkers(), require('./runtime/scheduler').closeScheduler()]);
+    await new Promise(resolve => io.close(resolve));
+    await httpClosed;
+    await require('./runtime/socketBridge').flush();
+    if (socketSubscription) await socketSubscription.close();
+    await require('mongoose').disconnect();
+    await require('./config/pg').getPg().destroy();
+    await require('./utils/redisClient').quit();
+    process.exit(code);
+  } catch (error) { console.error('[api] Shutdown failed', error.code || error.name); process.exit(1); }
+}
+process.once('SIGTERM', () => shutdown());
+process.once('SIGINT', () => shutdown());
 const startServer = async () => {
   try {
+    await connectDB();
+    await connectPG();
+    if (getRole() === 'api') {
+      socketSubscription = await require('./runtime/socketBridge').subscribe(io, require('./utils/redisClient'));
+    } else {
+      await require('./runtime/background').startBackground(io, error => {
+        console.error('[api] Legacy background failure', error.code || error.name);
+        void shutdown(1);
+      });
+    }
     // 1. Initialize the Permission Map first
     // This ensures your auth middleware has the data it needs immediately
     await initializePermissionMap();

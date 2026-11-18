@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('arCustomerSyncCron');
 const { getArCustomersFromSQL } = require("../services/sqlService");
 const { syncArCustomers } = require("../utils/arCustomerSync");
 // Scraper retained for fallback reference; SQL Server is now the source of truth.

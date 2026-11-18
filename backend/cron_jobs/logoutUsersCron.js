@@ -1,5 +1,5 @@
 const User = require("../models/User");
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('logoutUsersCron');
 
 /**
  * Resets the is_loggedIn flag for all users.

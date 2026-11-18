@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { getPg } = require("../config/pg");
 const {
@@ -25,7 +26,7 @@ const priceScheduleQueue = new Queue("priceScheduleQueue", {
  * @param {Object} io - The live initialized Socket.IO server engine instance
  */
 function initPriceScheduleWorker(io) {
-  const priceScheduleWorker = new Worker(
+  const priceScheduleWorker = createWorker(
     "priceScheduleQueue",
     async (job) => {
       const {
@@ -108,7 +109,7 @@ function initPriceScheduleWorker(io) {
     { connection },
   );
 
-  priceScheduleWorker.on("failed", (job, err) => {
+  priceScheduleWorker?.on("failed", (job, err) => {
     console.error(`❌ Scheduled queue job execution exception tracking:`, err);
   });
 

@@ -25,7 +25,9 @@ services:
       - postgres_data:/var/lib/postgresql/data
     restart: always
 
-  backend:
+  backend: &backend-runtime
+    command: ["npx", "nodemon", "-L", "--ignore", "sessions/*", "api.js"]
+    stop_grace_period: 10m
     container_name: backend
     build:
       context: ./backend
@@ -49,6 +51,18 @@ services:
       - redis
       - postgres
     restart: always
+
+  worker:
+    <<: *backend-runtime
+    container_name: backend-worker
+    command: ["node", "worker.js"]
+    ports: []
+
+  scheduler:
+    <<: *backend-runtime
+    container_name: backend-scheduler
+    command: ["node", "scheduler.js"]
+    ports: []
 
   auth-backend:
     container_name: auth-backend

@@ -18,6 +18,7 @@
 !f1-east-probe/backend.tf
 !media-copy/backend.tf
 !rollback-vps/backend.tf
+!auth-connectivity/backend.tf
 # These read-only API reports contain real media identifiers; retain privately.
 **/diagnostics/copied-api-*.json
 !**/.terraform.lock.hcl

@@ -1,4 +1,4 @@
-const cron = require('node-cron');
+const cron = require('../runtime/scheduler').forModule('logArchiveCron');
 const { runLogArchive } = require('./logArchiveService');
 
 // Runs every day at 08:00 UTC. The archive service calculates all retention

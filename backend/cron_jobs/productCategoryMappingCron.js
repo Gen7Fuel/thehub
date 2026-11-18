@@ -1,4 +1,4 @@
-const cron = require("node-cron");
+const cron = require('../runtime/scheduler').forModule('productCategoryMappingCron');
 const { emailQueue } = require("../queues/emailQueue");
 const ProductCategory = require('../models/ProductCategory');
 const CycleCount = require('../models/CycleCount');

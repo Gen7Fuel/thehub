@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const { ConfidentialClientApplication } = require("@azure/msal-node");
 const { Client } = require("@microsoft/microsoft-graph-client");
 const connection = require("../utils/redisClient");
@@ -52,7 +53,7 @@ async function pushFuelOrderDraft({ draftPayload, targetMailbox }) {
     .post(draftPayload);
 }
 
-const fuelOrderDraftWorker = new Worker(
+const fuelOrderDraftWorker = createWorker(
   "fuelOrderDraftQueue",
   async (job) => {
     const { targetMailbox, summary } = job.data;
@@ -68,14 +69,14 @@ const fuelOrderDraftWorker = new Worker(
   },
 );
 
-fuelOrderDraftWorker.on("failed", (job, err) => {
+fuelOrderDraftWorker?.on("failed", (job, err) => {
   console.error(
     `❌ [Fuel Draft Worker] Job ${job?.id || "unknown"} failed:`,
     err,
   );
 });
 
-fuelOrderDraftWorker.on("completed", (job) => {
+fuelOrderDraftWorker?.on("completed", (job) => {
   console.log(`🎉 [Fuel Draft Worker] Job ${job.id} completed successfully`);
 });
 

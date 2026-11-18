@@ -1,5 +1,6 @@
+const { createWorker } = require('../runtime/workers');
 // queues/gvmQueue.js
-const { Queue, Worker } = require("bullmq");
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { postPricesToGvm } = require("../utils/gvmScrapper");
 
@@ -17,7 +18,7 @@ const gvmQueue = new Queue("gvmQueue", {
   },
 });
 
-const gvmWorker = new Worker(
+const gvmWorker = createWorker(
   "gvmQueue",
   async (job) => {
     const { gvmLocationName, prices, timezone } = job.data;
@@ -40,7 +41,7 @@ const gvmWorker = new Worker(
   }
 );
 
-gvmWorker.on("failed", (job, err) => {
+gvmWorker?.on("failed", (job, err) => {
   console.error(`❌ [GVM Worker] Synchronization Job ${job?.id} failed with exception:`, err);
 });
 

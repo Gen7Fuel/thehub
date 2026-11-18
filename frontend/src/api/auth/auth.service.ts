@@ -54,7 +54,6 @@ export const authService = {
   refreshToken<T = { token: string }>(userId: string) {
     return authApi.refreshToken<T>(userId, {
       ...context('navbar.session', 'read', 'user-session', 'Authenticated session token refresh requested'),
-      auth: false,
     })
   },
 

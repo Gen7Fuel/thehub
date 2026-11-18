@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { createWorker } = require('../runtime/workers');
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { syncWriteOffToCStore } = require("../utils/cStoreWriteOffAutomation");
 
@@ -16,7 +17,7 @@ let writeOffAutomationWorker = null;
 const initWriteOffAutomationWorker = (io) => {
   if (writeOffAutomationWorker) return writeOffAutomationWorker;
 
-  writeOffAutomationWorker = new Worker(
+  writeOffAutomationWorker = createWorker(
     "writeOffAutomationQueue",
     async (job) => {
       console.log(
@@ -32,11 +33,11 @@ const initWriteOffAutomationWorker = (io) => {
     },
   );
 
-  writeOffAutomationWorker.on("completed", (job) => {
+  writeOffAutomationWorker?.on("completed", (job) => {
     console.log(`✅ [Write-Off Worker] Completed job ${job.id} for ${job.data.listNumber}`);
   });
 
-  writeOffAutomationWorker.on("failed", (job, error) => {
+  writeOffAutomationWorker?.on("failed", (job, error) => {
     console.error(
       `❌ [Write-Off Worker] Failed job ${job?.id} for ${job?.data?.listNumber}:`,
       error,

@@ -11,11 +11,11 @@ const connectDB = async () => {
     // Connect to MongoDB with recommended options
     // await mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
     await mongoose.connect(process.env.MONGO_URI);
-    console.log(`Connected to ${process.env.MONGO_URI}`);
+    console.log('[auth] MongoDB connected');
   } catch (error) {
     // Log error and exit process if connection fails
-    console.error(error.message);
-    process.exit(1);
+    // Startup reports only the error type/code, never credentials or the URI.
+    throw error;
   }
 };
 

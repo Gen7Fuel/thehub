@@ -1,5 +1,6 @@
+const { createWorker } = require('../runtime/workers');
 // queues/gasBuddyQueue.js
-const { Queue, Worker } = require("bullmq");
+const { Queue } = require("bullmq");
 const connection = require("../utils/redisClient");
 const { postPricesToGasBuddy } = require("../utils/gasBuddyScrapper");
 
@@ -17,7 +18,7 @@ const gasBuddyQueue = new Queue("gasBuddyQueue", {
   },
 });
 
-const gasBuddyWorker = new Worker(
+const gasBuddyWorker = createWorker(
   "gasBuddyQueue",
   async (job) => {
     const { gasBuddyStationId, stationName, prices } = job.data;
@@ -39,7 +40,7 @@ const gasBuddyWorker = new Worker(
   }
 );
 
-gasBuddyWorker.on("failed", (job, err) => {
+gasBuddyWorker?.on("failed", (job, err) => {
   console.error(`❌ [GasBuddy Worker] Synchronization Job ${job?.id} failed with exception:`, err);
 });
 
