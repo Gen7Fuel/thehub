@@ -1,0 +1,9 @@
+# For an Azure preview only. Never move app.gen7fuel.com DNS with these API,
+# auth and signaling origins: replace them with a fixed HTTPS VPS origin first.
+routing_mode = "preview"
+upstreams = {
+  api       = "https://app.gen7fuel.com"
+  auth      = "https://app.gen7fuel.com"
+  cdn       = "https://gen7erp-cdn-prod-29b24248.azurewebsites.net"
+  signaling = "https://app.gen7fuel.com"
+}

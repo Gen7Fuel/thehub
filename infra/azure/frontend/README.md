@@ -51,7 +51,7 @@ JWT format remain the contract. Do not switch frontend and auth traffic in one
 unverified step. Agree on upstream settings before either production cutover.
 
 Frontend changes here are additive: the Azure Dockerfile, its own Caddyfile,
-isolated rehearsal, and a checks-only GitHub workflow. There is no overlap with
+isolated rehearsal, infrastructure proposal and gated preview workflow. There is no overlap with
 the existing root Caddyfile, Compose, `main.yml`, or auth service source.
 
 ## Local verification
@@ -73,8 +73,57 @@ Azure TLS/IAM, load balancing, real CDN uploads, or production data.
 It creates uniquely named local containers/network, publishes only to loopback,
 and removes its own containers/network on exit. It makes no production calls.
 
-`.github/workflows/frontend-azure-checks.yml` repeats the build and rehearsal
-on relevant PRs and manual runs. It has read-only permissions and cannot deploy.
+`.github/workflows/frontend-azure-checks.yml` repeats the build, rehearsal and
+mocked-provider Terraform routing tests on relevant PRs and manual runs. It has
+read-only permissions and cannot deploy.
+
+## Concrete hosting/preview proposal
+
+The separate [web-hosting root](../web-hosting/README.md) owns a proposed NEW
+Canada East Linux B1 plan shared with auth. This frontend root owns eight
+resources: Basic ACR (admin login disabled), a runtime identity and AcrPull
+assignment, the frontend app, and a GitHub OIDC identity/federation with AcrPush
+on this registry and Website Contributor on this app. No resource group-wide
+deployment grant, JWT/DB secret or registry password is required. Existing
+CDN/storage/network/auth resources are outside both roots.
+
+Fresh Azure-backed review plans on 18 November show **1 hosting resource and
+8 frontend resources to add, zero changes and zero destroys**. Both remote
+backends initialized successfully. Terraform validation and all six mocked
+routing tests pass. These plans establish intended changes, not actual SKU
+placement, registry identity propagation, or a working Azure deployment.
+
+`preview.tfvars.example` uses the existing public VPS app as a temporary
+HTTPS origin, plus the actual Azure CDN origin. This is usable for preview
+without changing DNS. Terraform rejects plaintext origins, Azure self-proxy
+and production-mode upstreams pointing back to `app.gen7fuel.com`.
+The initial app image `hub-frontend:bootstrap` is deliberately absent: applying
+infrastructure creates an unready empty host until the first image deployment.
+Terraform ignores only the deployed image name thereafter, preserving digest
+deployments while continuing to own upstream/security settings.
+
+The shared plan plus Basic ACR public retail baseline is about CA$25.58/month
+before egress/storage/tax and the auth session's separate Relay costs; see the
+hosting review for measurements, price date and quota limits. No resources have
+been applied and no GitHub deployment environment/identity settings created.
+
+After reviewed provisioning, configure GitHub environment `frontend-production`
+with a main-only branch policy, `AZURE_FRONTEND_CLIENT_ID` from Terraform output,
+and leave repository variable `FRONTEND_AZURE_PREVIEW_ENABLED` unset/false until
+the host, identity roles and upstreams have been reviewed. The
+`frontend-azure-preview.yml` workflow runs only by manual dispatch on main with
+that variable true. It also requires the live app's routing mode to be preview,
+builds and rehearses one image, pushes it using OIDC, resolves its registry
+digest, and deploys that digest. It verifies the expected release, SPA/cache
+headers, proxied health routes and unauthenticated API rejection. It never
+changes DNS, auth routing, Terraform, or the VPS deployment selection.
+It cannot be used for production mode; automated production deployment and
+rollback selection must be reviewed with the shared VPS workflow at cutover.
+
+```sh
+terraform -chdir=infra/azure/frontend init -input=false
+terraform -chdir=infra/azure/frontend plan -input=false -var-file=preview.tfvars.example -out=review.tfplan
+```
 
 ## Remaining migration work
 
@@ -86,14 +135,11 @@ on relevant PRs and manual runs. It has read-only permissions and cannot deploy.
    from `app.gen7fuel.com`. Using the public app domain as an upstream after
    moving its DNS to Azure creates a routing loop. Verify API, auth and
    WebSocket paths against this origin before a public switch.
-2. **Choose/size the Azure host and registry.** The existing CDN B1 plan is in
-   Canada East. A second app can share that plan's compute, but frontend proxy
-   bandwidth and concurrent video/uploads then compete with CDN work. Inspect
-   measured CPU/memory first; agree with the auth session before sharing it.
-   Alternatively review a separate plan's current cost/quota. No quota request
-   or new plan is included here. Use an immutable image digest and authenticated
-   registry pulls (prefer managed identity with ACR); do not place registry
-   passwords in Git or Terraform state.
+2. **Review/apply the hosting proposal.** Review the new shared plan and
+   frontend resource plans/cost before provisioning. Existing CDN capacity is
+   not reused. No quota request is included. The proposed ACR and runtime
+   managed identity avoid registry passwords, and the workflow uses immutable
+   image digests. Verify actual role propagation/pulls during preview.
 3. **Preview without public DNS changes.** Provision the reviewed host and
    deploy an image built from the merged main commit. Configure the four
    upstreams, port/health/TLS and registry identity. Use a frontend-specific
