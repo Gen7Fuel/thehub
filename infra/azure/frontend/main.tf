@@ -114,12 +114,14 @@ resource "azurerm_linux_web_app" "frontend" {
     WEBSITES_PORT                       = "8080"
     WEBSITES_ENABLE_APP_SERVICE_STORAGE = "false"
     WEBSITE_WARMUP_PATH                 = "/frontend-health"
-    WEBSITE_WARMUP_STATUSES             = "200"
-    HUB_API_UPSTREAM                    = var.upstreams.api
-    HUB_AUTH_UPSTREAM                   = var.upstreams.auth
-    HUB_CDN_UPSTREAM                    = var.upstreams.cdn
-    HUB_SIGNALING_UPSTREAM              = var.upstreams.signaling
-    HUB_FRONTEND_ROUTING_MODE           = var.routing_mode
+    # Classic App Service also probes its managed-identity helper, which
+    # returns 404 for this application-specific path. Keep app health at 200.
+    WEBSITE_WARMUP_STATUSES   = "200,404"
+    HUB_API_UPSTREAM          = var.upstreams.api
+    HUB_AUTH_UPSTREAM         = var.upstreams.auth
+    HUB_CDN_UPSTREAM          = var.upstreams.cdn
+    HUB_SIGNALING_UPSTREAM    = var.upstreams.signaling
+    HUB_FRONTEND_ROUTING_MODE = var.routing_mode
   }
   logs {
     application_logs { file_system_level = "Information" }
