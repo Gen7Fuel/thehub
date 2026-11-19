@@ -2,7 +2,9 @@
  * Migrates legacy Station Audit configuration into the v2 collections.
  *
  * This script intentionally does not migrate AuditInstance or AuditItem data.
- * It is safe to rerun: every write is keyed by a legacy source identifier.
+ * It is safe to rerun against the migration baseline: every write is keyed by
+ * a legacy source identifier. Checklists already evolved beyond revision v1.0
+ * are skipped so a rerun cannot overwrite their live metadata or history.
  *
  * Run inside the backend container:
  *   node manual/migrate-station-audit-configuration.js
@@ -317,6 +319,7 @@ function buildMigrationDocuments(source) {
 
 async function upsertDocuments(documents) {
   const statusIds = new Map();
+  let skippedEvolvedChecklists = 0;
   for (const document of documents.statusSets) {
     const saved = await StationAuditStatusOptionSet.findOneAndUpdate(
       { legacySelectTemplateId: document.legacySelectTemplateId },
@@ -362,11 +365,30 @@ async function upsertDocuments(documents) {
       ...document
     } = sourceChecklist;
 
+    const checklistIdentity = {
+      legacyTemplateId: document.legacyTemplateId,
+      legacyItemId: document.legacyItemId,
+    };
+    const existingChecklist = await StationAuditChecklist.findOne(checklistIdentity)
+      .select("_id")
+      .lean();
+    if (existingChecklist) {
+      const existingCurrent = await StationAuditChecklistRevision.findOne({
+        checklist: existingChecklist._id,
+        current: true,
+      }).select("version").lean();
+      if (existingCurrent && existingCurrent.version !== "v1.0") {
+        skippedEvolvedChecklists += 1;
+        console.warn(
+          `  - Skipped checklist ${existingChecklist._id}: current revision ${existingCurrent.version} `
+          + "is newer than migration baseline v1.0"
+        );
+        continue;
+      }
+    }
+
     const saved = await StationAuditChecklist.findOneAndUpdate(
-      {
-        legacyTemplateId: document.legacyTemplateId,
-        legacyItemId: document.legacyItemId,
-      },
+      checklistIdentity,
       {
         $set: {
           ...document,
@@ -379,16 +401,6 @@ async function upsertDocuments(documents) {
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );
 
-    const existingCurrent = await StationAuditChecklistRevision.findOne({
-      checklist: saved._id,
-      current: true,
-    }).select("_id version").lean();
-    if (existingCurrent && existingCurrent.version !== "v1.0") {
-      throw new Error(
-        `Checklist ${saved._id} already has current revision ${existingCurrent.version}; `
-        + "the initial configuration migration will not overwrite revision history"
-      );
-    }
     await StationAuditChecklistRevision.findOneAndUpdate(
       { checklist: saved._id, version: "v1.0" },
       {
@@ -406,6 +418,8 @@ async function upsertDocuments(documents) {
       { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true }
     );
   }
+
+  console.log(`  Evolved checklists skipped:      ${skippedEvolvedChecklists}`);
 }
 
 async function removeObsoleteChecklistIndexes() {

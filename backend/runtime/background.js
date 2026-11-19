@@ -9,6 +9,7 @@ const CRON_MODULES = [
   'weeklyArReportCron', 'itemBkSanitizationCron', 'cycleCountReportCron',
   'syncStgLiveFuelPriceCron', 'syncDailyStgLiveFuelCron', 'fetchBullochShiftsCron',
   'autoSumitCashSummaryReportCron', 'postgresParquetExportCron', 'arCustomerSyncCron',
+  'stationAuditVisitorReportCron',
 ];
 async function startBackground(io, onFailure) {
   const { runsWorkers, runsSchedules } = require('./role');
@@ -17,6 +18,7 @@ async function startBackground(io, onFailure) {
     require('../queues/csoInvoiceQueue').initCsoInvoiceWorker(io);
     require('../queues/priceScheduleQueue').initPriceScheduleWorker(io);
     require('../queues/writeOffAutomationQueue').initWriteOffAutomationWorker(io);
+    require('../queues/stationAuditOrderQueue').initStationAuditOrderWorker(io);
     await require('./workers').startWorkers(onFailure);
   }
   if (runsSchedules()) {

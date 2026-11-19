@@ -5,6 +5,7 @@ const {
   FREQUENCIES,
   resolveStoreReportAvailability,
   resolveStoreReportOverview,
+  resolveVisitorSelection,
   resolveReportSection,
   resolveVisitorComparison,
 } = require("../../../services/stationAuditReportResolver");
@@ -67,6 +68,7 @@ router.get("/overview", async (req, res) => {
       type,
       frequency,
       date,
+      visitorIndex: req.query.visitorIndex,
     });
     return res.json({
       type,
@@ -132,12 +134,28 @@ router.get("/visitor-comparison/:sectionId", async (req, res) => {
     if (!date) return res.status(400).json({ error: "Report date is required" });
     const { location } = await requestedLocation(req);
     if (!location) return res.status(403).json({ error: "You do not have access to the requested site" });
+    const visitorSelection = await resolveVisitorSelection({
+      site: location._id,
+      timezone: location.timezone,
+      frequency,
+      date,
+      visitorIndex: req.query.visitorIndex,
+    });
+    if (!visitorSelection.selected) {
+      return res.status(400).json({
+        error: visitorSelection.options.length
+          ? "Select a valid Visitor audit"
+          : "No Visitor audit exists for this period",
+        code: "VISITOR_SELECTION_REQUIRED",
+      });
+    }
     const report = await resolveVisitorComparison({
       sectionId,
       site: location._id,
       timezone: location.timezone,
       frequency,
       date,
+      visitorStartedBy: visitorSelection.selected.user._id,
     });
     return res.json({
       location: { _id: location._id, name: location.site || location.stationName, timezone: location.timezone },

@@ -6,13 +6,13 @@ export const auditTrackerService = {
   reportAvailability(query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; anchor: string }) {
     return auditTrackerApi.reportAvailability(query, actionOptions('auditTracker.report', 'audit-tracker.report.availability', 'read', 'station-audit-run', 'Station Audit report availability viewed'))
   },
-  reportOverview(query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; date: string }) {
+  reportOverview(query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; date: string; visitorIndex?: number }) {
     return auditTrackerApi.reportOverview(query, actionOptions('auditTracker.report', 'audit-tracker.report.overview', 'read', 'station-audit-run', 'Station Audit report overview viewed'))
   },
   reportSection(sectionId: string, query: { site: string; type: 'store' | 'visitor'; frequency: AuditReportFrequency; date: string }) {
     return auditTrackerApi.reportSection(sectionId, query, actionOptions('auditTracker.report', 'audit-tracker.report.section', 'read', 'station-audit-response', 'Station Audit report section viewed'))
   },
-  visitorComparison(sectionId: string, query: { site: string; frequency: AuditReportFrequency; date: string }) {
+  visitorComparison(sectionId: string, query: { site: string; frequency: AuditReportFrequency; date: string; visitorIndex: number }) {
     return auditTrackerApi.visitorComparison(sectionId, query, actionOptions('auditTracker.report', 'audit-tracker.report.visitor-comparison', 'read', 'station-audit-response', 'Visitor and store audit comparison viewed'))
   },
   issuesBoard(query: { search?: string; site?: string; department?: string; priority?: string }) {

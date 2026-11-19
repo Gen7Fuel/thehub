@@ -8,4 +8,5 @@ module.exports = {
   StationAuditResponse: require("./stationAuditResponse"),
   StationAuditIssue: require("./stationAuditIssue"),
   StationAuditIssueActivity: require("./stationAuditIssueActivity"),
+  StationAuditVisitorReportDispatch: require("./stationAuditVisitorReportDispatch"),
 };

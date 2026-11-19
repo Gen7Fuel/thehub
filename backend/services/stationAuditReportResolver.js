@@ -56,7 +56,60 @@ function latestRevisionAt(revisions, cutoff) {
   return latest;
 }
 
-async function resolveStoreReportOverview({ site, timezone, type = "store", frequency, date }) {
+function visitorOptionsFromRuns(runs) {
+  const grouped = new Map();
+  for (const run of runs) {
+    const user = run.startedBy;
+    const userId = String(user?._id || user || "");
+    if (!userId) continue;
+    const existing = grouped.get(userId);
+    if (!existing) {
+      grouped.set(userId, {
+        userId,
+        user: user?._id ? user : { _id: user },
+        firstStartedAt: run.startedAt,
+        runCount: 1,
+      });
+    } else {
+      existing.runCount += 1;
+      if (new Date(run.startedAt) < new Date(existing.firstStartedAt)) existing.firstStartedAt = run.startedAt;
+    }
+  }
+  return [...grouped.values()]
+    .sort((left, right) => new Date(left.firstStartedAt) - new Date(right.firstStartedAt)
+      || left.userId.localeCompare(right.userId))
+    .map((entry, index) => ({
+      index,
+      user: entry.user,
+      runCount: entry.runCount,
+      firstStartedAt: entry.firstStartedAt,
+    }));
+}
+
+async function resolveVisitorSelection({ site, timezone, frequency, date, visitorIndex }) {
+  const period = reportPeriod(frequency, date, timezone);
+  if (!period) throw new Error("INVALID_REPORT_PERIOD");
+  const runs = await StationAuditRun.find({
+    site,
+    type: "visitor",
+    frequency,
+    periodKey: period.periodKey,
+  })
+    .select("startedBy startedAt")
+    .populate("startedBy", "firstName lastName email")
+    .lean();
+  const options = visitorOptionsFromRuns(runs);
+  const parsedIndex = visitorIndex === undefined || visitorIndex === null || visitorIndex === ""
+    ? null
+    : Number(visitorIndex);
+  const selectedIndex = parsedIndex === null && options.length === 1 ? 0 : parsedIndex;
+  const selected = Number.isInteger(selectedIndex) && selectedIndex >= 0
+    ? options[selectedIndex] || null
+    : null;
+  return { period, options, selectedIndex: selected ? selected.index : null, selected };
+}
+
+async function resolveStoreReportOverview({ site, timezone, type = "store", frequency, date, visitorIndex }) {
   const period = reportPeriod(frequency, date, timezone);
   if (!period) throw new Error("INVALID_REPORT_PERIOD");
   const now = new Date();
@@ -69,7 +122,7 @@ async function resolveStoreReportOverview({ site, timezone, type = "store", freq
     "snapshot.frequency": frequency,
     effectiveFrom: { $lte: defaultCutoff },
   });
-  const [runs, revisions] = await Promise.all([
+  const [allRuns, revisions] = await Promise.all([
     StationAuditRun.find({ site, type, frequency, periodKey: period.periodKey })
       .populate("startedBy", "firstName lastName email")
       .populate("completedBy", "firstName lastName email")
@@ -79,6 +132,22 @@ async function resolveStoreReportOverview({ site, timezone, type = "store", freq
       effectiveFrom: { $lte: defaultCutoff },
     }).sort({ checklist: 1, effectiveFrom: 1 }).lean(),
   ]);
+
+  const visitorOptions = type === "visitor" ? visitorOptionsFromRuns(allRuns) : [];
+  const parsedVisitorIndex = visitorIndex === undefined || visitorIndex === null || visitorIndex === ""
+    ? null
+    : Number(visitorIndex);
+  const selectedVisitorIndex = type === "visitor"
+    ? (parsedVisitorIndex === null && visitorOptions.length === 1 ? 0 : parsedVisitorIndex)
+    : null;
+  const selectedVisitor = Number.isInteger(selectedVisitorIndex) && selectedVisitorIndex >= 0
+    ? visitorOptions[selectedVisitorIndex] || null
+    : null;
+  const runs = type === "visitor"
+    ? (selectedVisitor
+      ? allRuns.filter((run) => String(run.startedBy?._id || run.startedBy) === String(selectedVisitor.user?._id || selectedVisitor.user))
+      : [])
+    : allRuns;
 
   const runBySection = new Map(runs.map((run) => [String(run.section), run]));
   const runIds = runs.map((run) => run._id);
@@ -101,14 +170,17 @@ async function resolveStoreReportOverview({ site, timezone, type = "store", freq
     return map;
   }, new Map());
 
-  const sectionIds = new Set([
-    ...runs.map((run) => String(run.section)),
-    ...revisions.map((revision) => String(revision.section)),
-  ]);
+  const sectionIds = new Set(type === "visitor"
+    ? runs.map((run) => String(run.section))
+    : [
+      ...runs.map((run) => String(run.section)),
+      ...revisions.map((revision) => String(revision.section)),
+    ]);
   const expectedBySection = new Map([...sectionIds].map((sectionId) => [sectionId, new Map()]));
 
   for (const checklistRevisions of revisionsByChecklist.values()) {
     const sectionId = String(checklistRevisions[0].section);
+    if (!expectedBySection.has(sectionId)) continue;
     const run = runBySection.get(sectionId);
     const cutoff = run?.state === "completed" && run.completedAt
       ? new Date(run.completedAt)
@@ -174,6 +246,9 @@ async function resolveStoreReportOverview({ site, timezone, type = "store", freq
   const completed = output.reduce((sum, section) => sum + section.summary.completed, 0);
   return {
     period: { ...period, start: period.start.toISOString(), end: period.end.toISOString() },
+    visitorOptions,
+    selectedVisitorIndex: selectedVisitor?.index ?? null,
+    visitorSelectionRequired: type === "visitor" && visitorOptions.length > 1 && !selectedVisitor,
     summary: { total, completed, pending: total - completed },
     sections: output,
   };
@@ -234,7 +309,7 @@ async function resolveStoreReportAvailability({ site, timezone, type = "store", 
   }));
 }
 
-async function resolveReportSection({ sectionId, site, timezone, type, frequency, date }) {
+async function resolveReportSection({ sectionId, site, timezone, type, frequency, date, startedBy }) {
   const period = reportPeriod(frequency, date, timezone);
   if (!period) throw new Error("INVALID_REPORT_PERIOD");
   const now = new Date();
@@ -246,6 +321,7 @@ async function resolveReportSection({ sectionId, site, timezone, type, frequency
     type,
     frequency,
     periodKey: period.periodKey,
+    ...(type === "visitor" && startedBy ? { startedBy } : {}),
   })
     .populate("startedBy", "firstName lastName email")
     .populate("completedBy", "firstName lastName email")
@@ -341,7 +417,7 @@ async function resolveReportSection({ sectionId, site, timezone, type, frequency
 async function resolveVisitorComparison(args) {
   const [store, visitor] = await Promise.all([
     resolveReportSection({ ...args, type: "store" }),
-    resolveReportSection({ ...args, type: "visitor" }),
+    resolveReportSection({ ...args, type: "visitor", startedBy: args.visitorStartedBy }),
   ]);
   const merged = new Map();
   for (const item of store.checklists) merged.set(String(item.checklist), { checklist: item.checklist, snapshot: item.snapshot, store: item, visitor: null });
@@ -386,8 +462,10 @@ module.exports = {
   availabilityPeriods,
   periodKeyFor,
   reportPeriod,
+  visitorOptionsFromRuns,
   resolveStoreReportAvailability,
   resolveStoreReportOverview,
+  resolveVisitorSelection,
   resolveReportSection,
   resolveVisitorComparison,
 };

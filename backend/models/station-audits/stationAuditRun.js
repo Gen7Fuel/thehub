@@ -26,8 +26,21 @@ const StationAuditRunSchema = new mongoose.Schema(
 
 StationAuditRunSchema.index(
   { section: 1, site: 1, frequency: 1, periodKey: 1, type: 1 },
-  { unique: true }
+  {
+    unique: true,
+    name: "station_audit_store_run_unique",
+    partialFilterExpression: { type: "store" },
+  }
+);
+StationAuditRunSchema.index(
+  { section: 1, site: 1, frequency: 1, periodKey: 1, type: 1, startedBy: 1 },
+  {
+    unique: true,
+    name: "station_audit_visitor_run_unique",
+    partialFilterExpression: { type: "visitor" },
+  }
 );
 StationAuditRunSchema.index({ site: 1, periodKey: 1, state: 1 });
+StationAuditRunSchema.index({ type: 1, site: 1, startedAt: -1 });
 
 module.exports = mongoose.model("StationAuditRun", StationAuditRunSchema);

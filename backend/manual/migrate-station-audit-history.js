@@ -322,7 +322,9 @@ function buildPlan(legacy, config, occurrences) {
       .map(({ item }) => item.checkedAt && new Date(item.checkedAt))
       .filter(Boolean)
       .sort((left, right) => left - right)[0];
-    const runKey = `${id(section)}:${id(location)}:${instance.frequency}:${instance.periodKey}:${instance.type}`;
+    const runType = instance.type || "store";
+    const runOwnerKey = runType === "visitor" ? `:${id(instance.completedBy)}` : "";
+    const runKey = `${id(section)}:${id(location)}:${instance.frequency}:${instance.periodKey}:${runType}${runOwnerKey}`;
     const run = {
       source: instance,
       naturalKey: runKey,
@@ -332,7 +334,7 @@ function buildPlan(legacy, config, occurrences) {
         site: location._id,
         frequency: instance.frequency,
         periodKey: instance.periodKey,
-        type: instance.type || "store",
+        type: runType,
         state: "completed",
         startedBy: instance.completedBy,
         startedAt: earliestCheckedAt || instance.completedAt,
@@ -419,6 +421,7 @@ async function applyPlan(plan) {
       frequency: run.document.frequency,
       periodKey: run.document.periodKey,
       type: run.document.type,
+      ...(run.document.type === "visitor" ? { startedBy: run.document.startedBy } : {}),
     };
     const saved = await StationAuditRun.findOneAndUpdate(
       filter,
@@ -571,6 +574,9 @@ async function run() {
     return;
   }
 
+  // Make the fresh-production migration self-contained. Store runs retain one
+  // shared period run, while Visitor runs are unique per startedBy user.
+  await StationAuditRun.createIndexes();
   await applyPlan(plan);
   console.log("\nHistorical migration complete. Legacy collections were not modified.");
 }

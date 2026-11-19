@@ -16,6 +16,7 @@ export const Route = createFileRoute('/_navbarLayout/audit-tracker/report/visito
     site: typeof search.site === 'string' ? search.site : '',
     frequency: ['daily', 'weekly', 'monthly'].includes(String(search.frequency)) ? search.frequency as AuditReportFrequency : 'daily' as AuditReportFrequency,
     date: typeof search.date === 'string' ? search.date : '',
+    visitor: Number.isInteger(Number(search.visitor)) && Number(search.visitor) >= 0 ? Number(search.visitor) : undefined,
   }),
   component: VisitorAuditComparisonPage,
 })
@@ -50,14 +51,14 @@ function VisitorAuditComparisonPage() {
   const [textDialog, setTextDialog] = useState<{ title: string; value: string } | null>(null)
   const [images, setImages] = useState<{ photos: string[]; index: number } | null>(null)
   const query = useQuery({
-    queryKey: ['audit-tracker', 'report', 'visitor-comparison', sectionId, search.site, search.frequency, search.date],
-    queryFn: () => auditTrackerService.visitorComparison(sectionId, search),
-    enabled: Boolean(sectionId && search.site && search.date),
+    queryKey: ['audit-tracker', 'report', 'visitor-comparison', sectionId, search.site, search.frequency, search.date, search.visitor],
+    queryFn: () => auditTrackerService.visitorComparison(sectionId, { site: search.site, frequency: search.frequency, date: search.date, visitorIndex: search.visitor! }),
+    enabled: Boolean(sectionId && search.site && search.date && search.visitor !== undefined),
   })
 
   if (!user) return null
   if (!hasAuditTrackerAccess(user.access) || !hasAuditTrackerPermission(user.access, 'report')) return <Navigate to="/no-access" replace />
-  if (!search.site || !search.date) return <Navigate to="/audit-tracker/report" search={{ type: 'visitor', frequency: search.frequency }} replace />
+  if (!search.site || !search.date || search.visitor === undefined) return <Navigate to="/audit-tracker/report" search={{ site: search.site || undefined, type: 'visitor', frequency: search.frequency, date: search.date || undefined }} replace />
   const data = query.data
   const storeAuditor = data?.storeRun?.completedBy || data?.storeRun?.startedBy
   const visitorAuditor = data?.visitorRun?.completedBy || data?.visitorRun?.startedBy
@@ -65,7 +66,7 @@ function VisitorAuditComparisonPage() {
   return (
     <div className="mx-auto w-full max-w-[1700px] px-3 pb-10 sm:px-5">
       <section className="mb-5 rounded-2xl border border-violet-100 bg-gradient-to-br from-violet-50 via-white to-slate-50 p-4 shadow-sm sm:p-5">
-        <Button type="button" variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => navigate({ to: '/audit-tracker/report', search: { site: search.site, type: 'visitor', frequency: search.frequency, date: search.date } })}><ArrowLeft className="mr-1.5 h-4 w-4" />Back to sections</Button>
+        <Button type="button" variant="ghost" size="sm" className="mb-2 -ml-2" onClick={() => navigate({ to: '/audit-tracker/report', search: { site: search.site, type: 'visitor', frequency: search.frequency, date: search.date, visitor: search.visitor } })}><ArrowLeft className="mr-1.5 h-4 w-4" />Back to sections</Button>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div><h1 className="text-xl font-bold text-slate-900 sm:text-2xl">{data?.section.name || 'Visitor comparison'}</h1><p className="mt-1 text-sm text-slate-600">{data ? `${data.location.name} · ${data.period.label}` : 'Loading comparison…'}</p></div>
           {data && <div className="grid gap-2 sm:grid-cols-2">

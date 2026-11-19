@@ -67,6 +67,7 @@ router.get("/", async (req, res) => {
         section: { $in: sectionIds },
         site: location._id,
         type,
+        ...(type === "visitor" ? { startedBy: req.user._id } : {}),
         $or: FREQUENCIES.map((frequency) => ({ frequency, periodKey: periodKeys[frequency] })),
       })
         .select("section frequency")

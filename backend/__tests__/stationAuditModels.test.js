@@ -13,6 +13,7 @@ const {
   StationAuditResponse,
   StationAuditIssue,
   StationAuditIssueActivity,
+  StationAuditVisitorReportDispatch,
 } = stationAuditModels;
 
 const id = () => new mongoose.Types.ObjectId();
@@ -200,6 +201,29 @@ describe("station audit models", () => {
 
     issue.priority = "urgent";
     expect(issue.validateSync()?.errors.priority).toBeDefined();
+  });
+
+  it("validates the per-site Visitor report dispatch ledger", () => {
+    const dispatch = new StationAuditVisitorReportDispatch({
+      site: id(),
+      reportDate: "2026-11-18",
+      visitorRuns: [id(), id()],
+    });
+
+    expect(dispatch.validateSync()).toBeUndefined();
+    expect(dispatch.status).toBe("generating");
+    expect(dispatch.attempts).toBe(1);
+  });
+
+  it("keeps Store runs shared while scoping Visitor runs by startedBy", () => {
+    const indexes = StationAuditRun.schema.indexes();
+    const store = indexes.find(([, options]) => options.name === "station_audit_store_run_unique");
+    const visitor = indexes.find(([, options]) => options.name === "station_audit_visitor_run_unique");
+
+    expect(store?.[0]).not.toHaveProperty("startedBy");
+    expect(store?.[1].partialFilterExpression).toEqual({ type: "store" });
+    expect(visitor?.[0]).toHaveProperty("startedBy", 1);
+    expect(visitor?.[1].partialFilterExpression).toEqual({ type: "visitor" });
   });
 
   it("validates checklist revision versions and snapshots", () => {

@@ -195,6 +195,14 @@ export interface AuditReportOverview {
   location: { _id: string; name: string; timezone: string }
   sites: Array<{ _id: string; name: string }>
   period: { periodKey: string; start: string; end: string; label: string }
+  visitorOptions: Array<{
+    index: number
+    user: AuditTrackerPerson
+    runCount: number
+    firstStartedAt: string
+  }>
+  selectedVisitorIndex: number | null
+  visitorSelectionRequired: boolean
   summary: { total: number; completed: number; pending: number }
   sections: Array<{
     _id: string

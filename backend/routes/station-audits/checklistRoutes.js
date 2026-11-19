@@ -480,6 +480,7 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
       frequency: checklist.frequency,
       periodKey: periodKeys[checklist.frequency],
       type,
+      ...(type === "visitor" ? { startedBy: req.user._id } : {}),
     };
     const userId = req.user._id;
     if (!input.checked) {
@@ -804,6 +805,7 @@ router.get("/:sectionId", async (req, res) => {
         site: location._id,
         frequency: { $in: frequencies },
         type,
+        ...(type === "visitor" ? { startedBy: req.user._id } : {}),
         $or: frequencies.map((entry) => ({
           frequency: entry,
           periodKey: periodKeys[entry],

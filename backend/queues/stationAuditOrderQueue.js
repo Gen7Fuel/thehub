@@ -1,4 +1,5 @@
-const { Queue, Worker } = require("bullmq");
+const { Queue } = require("bullmq");
+const { createWorker } = require("../runtime/workers");
 const connection = require("../utils/redisClient");
 const OrderRec = require("../models/OrderRec");
 const Vendor = require("../models/Vendor");
@@ -124,12 +125,12 @@ let stationAuditOrderWorker = null;
 
 function initStationAuditOrderWorker(io) {
   if (stationAuditOrderWorker) return stationAuditOrderWorker;
-  stationAuditOrderWorker = new Worker(
+  stationAuditOrderWorker = createWorker(
     QUEUE_NAME,
     (job) => createOrderForResponse(job.data, io),
     { connection, concurrency: 3 }
   );
-  stationAuditOrderWorker.on("failed", (job, error) => {
+  stationAuditOrderWorker?.on("failed", (job, error) => {
     console.error(`Station Audit order job ${job?.id || "unknown"} failed:`, error.message);
   });
   return stationAuditOrderWorker;

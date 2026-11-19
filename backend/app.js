@@ -12,38 +12,6 @@ const actionAccessLogger = require("./middleware/actionAccessLogger");
 
 // throw new Error("ROLLBACK_TEST_CRASH");
 
-//BullMQ for background email processing running
-require("./queues/emailQueue"); // Just runs the worker
-require("./queues/priceTimeoutQueue"); // Just runs the worker
-require("./queues/gasBuddyQueue"); // Just runs the worker
-require("./queues/gvmQueue"); // Just runs the worker
-require("./queues/fuelOrderDraftQueue"); // Just runs the worker
-const { initWriteOffAutomationWorker } = require("./queues/writeOffAutomationQueue");
-const { initPriceScheduleWorker } = require("./queues/priceScheduleQueue");
-const { initCsoInvoiceWorker } = require("./queues/csoInvoiceQueue"); // 1. Import worker initializer
-const { initStationAuditOrderWorker } = require("./queues/stationAuditOrderQueue");
-require('./cron_jobs/cycleCountCron'); //cron job for getting cso on hands for cyclecount
-// require('./cron_jobs/fuelInventoryReportCron'); //cron job for getting fuel inventory report and email to kellie
-require('./cron_jobs/auditIssueReportCron'); //cron job for getting previous months audit issue report and email to Ana
-require('./cron_jobs/mongoCsvExportCron'); //cron job for exporting mongo data to azure in csv
-require('./cron_jobs/logArchiveCron'); // archives old access/change logs to Azure at 8 AM UTC
-require('./cron_jobs/archiveOldNotification'); //cron job for archiving/removing old notifications
-require('./cron_jobs/logoutUsersCron'); //cron job for logging out users daily at 9 AM UTC
-require('./cron_jobs/dashboardCacheCron'); //cron job for pre-warming dashboard SQL cache daily at 5 AM UTC
-require('./cron_jobs/dailyFuelSyncCron') // cron job for updating fuel related data daily morning at 5 am EST
-require('./cron_jobs/weeklyArReportCron') // cron job for weekly AR report emailed to mario every Tuesday 9 AM PT
-// require('./cron_jobs/productCategoryMappingCron'); //cron job for normalising the product categories
-require('./cron_jobs/itemBkSanitizationCron'); //cron job for sanitizing item backup data from SQL
-require('./cron_jobs/cycleCountReportCron'); //cron job for updating onHandCSO and unit prices for cycle count report, runs every morning at 3 AM
-// require('./cron_jobs/cycleCountWeeklyInstanceCron'); //cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
-const { initWeeklyInstanceCron } = require('./cron_jobs/cycleCountWeeklyInstanceCron'); // Import initializer - cron job for generating weekly cycle count instances, runs every Sunday at 3 AM
-require('./cron_jobs/syncStgLiveFuelPriceCron'); //cron job for syncing staging to live fuel price tables on the 1st of every month at 12 AM EST in SSMS
-require('./cron_jobs/syncDailyStgLiveFuelCron'); //cron job for syncing staging to live fuel price tables daily at 5 AM EST in SSMS
-require('./cron_jobs/fetchBullochShiftsCron'); //cron job for fetching bulloch shift reports every 3 hours form the server
-require('./cron_jobs/autoSumitCashSummaryReportCron'); //cron job for auto submitting completed shifts to the accounting every morning 6.30 am EST
-require('./cron_jobs/postgresParquetExportCron.js'); //cron job for exporting postgres data to azure in parquet format
-require('./cron_jobs/arCustomerSyncCron'); //cron job for syncing AR customers from CStoreOffice daily at 2 AM ET
-
 // Route imports
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/userRoutes");
@@ -208,13 +176,6 @@ app.use('/api', emailRoutes);
 
 const io = setupSocket(server);
 app.set("io", io);
-
-initPriceScheduleWorker(io);
-initCsoInvoiceWorker(io);
-initWriteOffAutomationWorker(io);
-initStationAuditOrderWorker(io);
-initWeeklyInstanceCron(io); 
-
 
 const PORT = process.env.PORT || 5000;
 

@@ -65,8 +65,8 @@ class RolloutTests(unittest.TestCase):
                     raise RuntimeError('Injected startup failure')
             elif args[:2] == ['docker', 'exec']:
                 role = 'worker' if args[2] == 'backend-worker' else 'scheduler'
-                return json.dumps({'role': role, 'ready': True, 'workers': ['queue'] * 15 if role == 'worker' else [],
-                                   'schedules': ['cron'] * 18 if role == 'scheduler' else [], 'leader': role == 'scheduler'})
+                return json.dumps({'role': role, 'ready': True, 'workers': ['queue'] * 16 if role == 'worker' else [],
+                                   'schedules': ['cron'] * 19 if role == 'scheduler' else [], 'leader': role == 'scheduler'})
             return ''
 
         with tempfile.TemporaryDirectory() as temp, patch.object(Path, 'home', return_value=Path(temp)), \
