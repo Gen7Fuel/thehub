@@ -529,6 +529,7 @@ router.post('/', async (req, res) => {
       <div style="font-family: Arial, sans-serif; line-height: 1.5;">
         <p>Hello Team,</p>
         <p>Here is our load for ${combinedCustomerNames} ${formattedDate}</p>
+        ${isSplit === true ? '<p><b>For any load delivered to multiple stations, please issue a separate bill of lading (BOL) for the portion delivered to each station.</b></p>' : ''}
         ${emailStationSections}
         <p style="margin-top: 20px;">Let me know if you have any questions.</p>
       </div>
