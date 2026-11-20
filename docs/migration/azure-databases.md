@@ -146,10 +146,11 @@ connections. Never disable certificate verification to get a connection working.
    against Azure targets while production side effects remain fenced. Do not
    dual-write or resume VPS consumers against a different authoritative copy.
 7. Activate through the [single coordinated cutover gate](azure-platform-migration.md#single-production-cutover-gate),
-   including routing, deployment workflows and background ownership. Old VPS
-   ingress remains in maintenance during DNS propagation; it must not accept
-   writes to stale databases. Retain sources and artifacts for agreed recovery
-   retention. No Relay, temporary origin or promise of zero downtime is involved.
+   including routing, deployment workflows and background ownership. Keep the
+   current VPS Caddy as the public HTTPS edge during acceptance and switch its
+   upstreams from maintenance to Azure after validation. Keep old data writers
+   fenced and retain sources and artifacts for recovery. Plan DNS and HTTPS edge
+   handover after acceptance.
 
 The source is currently standalone MongoDB: do not use `mongodump --oplog` as if
 it were a replica set. A consistent final copy requires writer quiescence or a
