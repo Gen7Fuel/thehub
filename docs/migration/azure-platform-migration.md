@@ -150,6 +150,30 @@ restore the original VPS path consistently. After Azure accepts writes, do not
 re-enable stale VPS databases: fence writers and use forward repair or rehearsed
 reverse transfer/reconciliation. DNS rollback alone is not data rollback.
 
+## Fast rollback requirement
+
+Keep known-good VPS images, configuration, certificates and a tested routing
+switch warm during the recovery window. A sub-minute routing objective needs
+a stable edge with a tested upstream switch; DNS alone cannot provide that
+guarantee. Edge placement remains to be selected: an explicitly retained VPS
+edge temporarily, or an independent proxy. Neither choice requires a temporary
+VPS-origin hostname. Do not claim full VPS independence while it is the edge.
+
+| Failure point | Recovery path | Required evidence |
+| --- | --- | --- |
+| Before Azure accepts production writes | Restore original VPS routing and original data consumers under the write fence | Timed end-to-end drill, including original queue/lease state |
+| Azure app/runtime fails after writes begin, Azure data remains healthy | Route to warm VPS app runtimes using the same authoritative Azure Mongo/PostgreSQL/Redis; leave stale VPS databases fenced | TLS/network/credentials and known-good image compatibility tested in advance; drain/fence old active workers and hand over one scheduler |
+| Azure data service is unavailable or data is corrupt after new writes | Supported replication/promotion or measured reverse transfer/restore/reconciliation | Explicit recovery-time and data-loss objectives from tests; consistent recovery across databases, queues and files |
+
+The runtime-failback path needs a preconfigured, narrowly allowlisted VPS-to-Azure
+data connection used only for recovery; it is not a production database staging
+window or Relay bridge. If that connection is unavailable or untested, this tier
+is not ready. A full database outage cannot be solved by flipping app routes.
+Dump/restore alone does not support a promise of instant zero-loss failback.
+Target selection must account for replication/export/restore capabilities and
+costs before paid provisioning. Verify in-flight HTTP/WebSocket handling and
+side-effect retry/idempotency for email, accounting and queue jobs in timed drills.
+
 ## What "finished" means
 
 Hub, Desk and Fleet traffic and background work use Azure runtimes and data
