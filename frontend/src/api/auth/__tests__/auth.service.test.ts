@@ -71,6 +71,13 @@ describe('authService request metadata', () => {
     expect(body).toEqual({ email: 'user@example.com', password: 'secret-password' })
     expect(JSON.stringify(config.headers)).not.toContain('secret-password')
     expect(config.headers['X-Action-Type']).toBe('login')
+    expect(config.params).toEqual({ tokenFormat: 'compact' })
+  })
+
+  it('loads the current session with bearer authentication', async () => {
+    await authService.getSession()
+
+    expect(mocks.authGet).toHaveBeenCalledWith('/session', expect.objectContaining({ authRequired: true }))
   })
 
   it('refreshes the auth-backend token without putting the user id in action metadata', async () => {
