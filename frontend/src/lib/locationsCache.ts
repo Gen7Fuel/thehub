@@ -9,20 +9,58 @@ import { locationsService } from '@/api/locations/locations.service'
 const CACHE_KEY = 'cachedLocations'
 let locationPrefetchInFlight: Promise<unknown> | null = null
 
-export function saveCachedLocations(locations: unknown[]): void {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function projectCachedLocations(locations: unknown[]) {
+  return locations.flatMap((location) => {
+    if (!isRecord(location)) return []
+    const { _id, stationName, csoCode, timezone, registers } = location
+    if (typeof _id !== 'string' || typeof stationName !== 'string') return []
+
+    return [{
+      _id,
+      stationName,
+      csoCode: typeof csoCode === 'string' ? csoCode : undefined,
+      timezone: typeof timezone === 'string' ? timezone : undefined,
+      registers: Array.isArray(registers)
+        ? registers.flatMap((register) => {
+            if (!isRecord(register) || typeof register.number !== 'string') return []
+            return [{
+              _id: typeof register._id === 'string' ? register._id : undefined,
+              number: register.number,
+            }]
+          })
+        : undefined,
+    }]
+  })
+}
+
+function writeCache(serialized: string): void {
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify(locations))
+    localStorage.setItem(CACHE_KEY, serialized)
   } catch {
     // localStorage full/unavailable — non-fatal, just skip caching
   }
 }
 
+export function saveCachedLocations(locations: unknown[]): void {
+  writeCache(JSON.stringify(projectCachedLocations(locations)))
+}
+
 export function getCachedLocations<T = any>(): T[] {
   try {
     const raw = localStorage.getItem(CACHE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
+    if (raw === null) return []
+
+    const parsed = JSON.parse(raw)
+    const locations = Array.isArray(parsed) ? projectCachedLocations(parsed) : []
+    const serialized = JSON.stringify(locations)
+    if (serialized !== raw) writeCache(serialized)
+    return locations as T[]
   } catch {
+    writeCache('[]')
     return []
   }
 }
@@ -60,6 +98,8 @@ export function loadLocations<T = unknown>(auth = true): Promise<T[]> {
 export function prefetchLocations(): void {
   if (locationPrefetchInFlight) return
 
+  // Scrub previously persisted documents even if the new fetch stalls or fails.
+  getCachedLocations()
   locationPrefetchInFlight = loadLocations(false)
     .catch(() => {})
     .finally(() => {
