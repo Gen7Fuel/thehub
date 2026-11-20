@@ -2,10 +2,13 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; // Recommended for fetching
 import { buildFuelOrderAccessGroupId, fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelGradeOptionsQuery, type FuelGradeOption } from '@/api/fuel-management/fuel-grades.service'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { fuelSalesService } from '@/api/fuel-management/fuel-sales.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
+import { FuelGradeLabel } from '@/components/custom/FuelGradeLabel'
+import { sortByFuelGrade } from '@/lib/fuelGradeDisplay'
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -59,7 +62,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 // import { Label } from "@/components/ui/label";
-import { getGradeTheme } from "./manage/locations/$id";
 import {
   POPreviewDocument,
   formatPDFDate,
@@ -107,6 +109,7 @@ export const getStatusColor = (status: string) => {
 
 function WorkspaceComponent() {
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const { data: grades = [] } = useQuery(fuelGradeOptionsQuery);
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   // 1. Fetch Real Locations from your Backend
@@ -479,6 +482,7 @@ function WorkspaceComponent() {
               key={locData._id}
               location={locData}
               date={selectedDate}
+              grades={grades}
               racks={racks}
               locations={locations}
               orderAccessContext={orderAccessContext}
@@ -494,6 +498,7 @@ function WorkspaceComponent() {
 function StationStrip({
   location,
   date,
+  grades,
   racks,
   locations,
   orderAccessContext,
@@ -501,6 +506,7 @@ function StationStrip({
 }: {
   location: any;
   date: Date;
+  grades: readonly FuelGradeOption[];
   racks: any[];
   locations: any[];
   orderAccessContext: { message: string; groupId: string };
@@ -617,16 +623,8 @@ function StationStrip({
       summary[gradeKey].totalCapacity += tank.tankCapacity || 0;
     });
 
-    return Object.values(summary).sort((a: any, b: any) => {
-      const priority: Record<string, number> = {
-        Regular: 1,
-        Premium: 2,
-        Diesel: 3,
-        "Dyed Diesel": 4,
-      };
-      return (priority[a.grade] || 99) - (priority[b.grade] || 99);
-    });
-  }, [tanks]);
+    return sortByFuelGrade(Object.values(summary), grades);
+  }, [tanks, grades]);
 
   // Fetch Orders (Your existing logic)
   const {
@@ -677,13 +675,6 @@ function StationStrip({
       // toast.success("Sales Synced");
     },
   });
-
-  const gradeMap: Record<string, string> = {
-    Regular: "REG",
-    Premium: "PUL",
-    Diesel: "ULSD",
-    "Dyed Diesel": "DYED",
-  };
 
   useEffect(() => {
     const tz = location?.timezone || "America/Toronto";
@@ -838,7 +829,6 @@ function StationStrip({
                       </tr>
                     ) : (
                       gradeInventory.map((item: any) => {
-                        const theme = getGradeTheme(item.grade);
                         const rowColorClass = getRowStatusColor(item);
 
                         // Status Flags
@@ -856,17 +846,7 @@ function StationStrip({
                             className={`${rowColorClass} transition-colors`}
                           >
                             <td className="py-1.5 px-3 flex items-center gap-2">
-                              <span
-                                className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${theme.label}`}
-                                style={{
-                                  backgroundColor: `${theme.raw}15`,
-                                  borderColor: `${theme.raw}30`,
-                                }}
-                              >
-                                {item.grade === "Regular"
-                                  ? "REG | E15"
-                                  : gradeMap[item.grade] || item.grade}
-                              </span>
+                              <FuelGradeLabel grade={item.grade} grades={grades} tank />
 
                               {/* Added Min Limit in brackets */}
                               {item.minLimit !== undefined && (
@@ -1190,47 +1170,17 @@ function StationStrip({
                         {/* RIGHT: Fuel Qtys */}
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[500px]">
-                            {order.items
-                              ?.slice()
-                              .sort((a: any, b: any) => {
-                                const priority: Record<string, number> = {
-                                  Regular: 1,
-                                  E15: 2,
-                                  Premium: 3,
-                                  Diesel: 4,
-                                  "Dyed Diesel": 5,
-                                };
-                                return (
-                                  (priority[a.grade] || 99) -
-                                  (priority[b.grade] || 99)
-                                );
-                              })
-                              .map((item: any) => {
-                                const theme = getGradeTheme(item.grade);
-                                return (
-                                  <div
-                                    key={item.grade}
-                                    className="flex items-center gap-2 px-2 py-1 rounded-lg border"
-                                    style={{
-                                      backgroundColor: `${theme.raw}10`,
-                                      borderColor: `${theme.raw}25`,
-                                    }}
-                                  >
-                                    <span
-                                      className={`text-[12px] font-black uppercase tracking-tight ${theme.label}`}
-                                    >
-                                      {item.grade
-                                        .replace("Dyed Diesel", "DYED")
-                                        .replace("Regular", "REG")
-                                        .replace("Premium", "PUL")
-                                        .replace("Diesel", "ULSD")}
-                                    </span>
-                                    <span className="font-mono font-black text-slate-900 text-[12px]">
-                                      {(item.ltrs || 0).toLocaleString()}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                            {sortByFuelGrade(order.items || [], grades).map((item: any) => (
+                              <div
+                                key={item.grade}
+                                className="flex items-center gap-2 px-2 py-1 rounded-lg border border-slate-200"
+                              >
+                                <FuelGradeLabel grade={item.grade} grades={grades} className="text-[12px] tracking-tight" />
+                                <span className="font-mono font-black text-slate-900 text-[12px]">
+                                  {(item.ltrs || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                           {canEditOrderQty && (
                             <Button
@@ -1301,6 +1251,7 @@ function StationStrip({
           onEditSchedule={openRescheduleFromStatus}
           onEditQty={openEditQtyFromStatus}
           locations={locations}
+          grades={grades}
         />
       )}
 
@@ -1322,6 +1273,7 @@ function StationStrip({
       {editQtyOrder && (
         <EditQtyDialog
           order={editQtyOrder}
+          grades={grades}
           open={!!editQtyOrder}
           // onOpenChange={(open: any) => !open && setEditQtyOrder(null)}
           onOpenChange={(open: any) => {
@@ -1438,6 +1390,7 @@ function StationStrip({
               );
 
               const commonProps = {
+                grades,
                 data: {
                   deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
                   poNumber: viewingPO.poNumber,
@@ -1666,6 +1619,7 @@ export function UpdateStatusDialog({
   onEditSchedule,
   onEditQty,
   locations = [],
+  grades,
 }: any) {
   const [pendingStatus, setPendingStatus] = useState<string | null>(
     initialStep ? "Delivered" : null,
@@ -1889,16 +1843,8 @@ export function UpdateStatusDialog({
     },
   });
 
-  const sortOrderItems = (items: any[] = []) =>
-    [...items].sort((a, b) => {
-      return (
-        (gradeConfig[a.grade]?.priority || 99) -
-        (gradeConfig[b.grade]?.priority || 99)
-      );
-    });
-
   const openRetainDialog = () => {
-    const sortedItems = sortOrderItems(order.items || []).map((item) => ({
+    const sortedItems = sortByFuelGrade(order.items || [], grades).map((item: any) => ({
       grade: item.grade,
       ltrs: Number(item.ltrs || 0),
     }));
@@ -2052,7 +1998,7 @@ export function UpdateStatusDialog({
                     key={item.grade}
                     className="flex justify-between font-mono text-sm font-black"
                   >
-                    <span className="text-slate-500">{item.grade}</span>
+                    <FuelGradeLabel grade={item.grade} grades={grades} />
                     <span className="text-slate-900">
                       {item.ltrs.toLocaleString()} L
                     </span>
@@ -2219,7 +2165,9 @@ export function UpdateStatusDialog({
                       onChange={(e) => updateRetainActualQty(item.grade, e.target.value)}
                       className="h-9 w-full rounded-md border px-2 text-sm font-mono"
                     />
-                    <div className="text-center text-sm font-semibold text-slate-700">{item.grade}</div>
+                    <div className="text-center">
+                      <FuelGradeLabel grade={item.grade} grades={grades} />
+                    </div>
                     <Input
                       type="number"
                       min={0}
@@ -2372,7 +2320,7 @@ export function UpdateStatusDialog({
                 <div className="divide-y">
                   {retainedPositiveItems.map((item) => (
                     <div key={item.grade} className="flex justify-between p-2 text-sm">
-                      <span className="font-semibold text-slate-600">{item.grade}</span>
+                      <FuelGradeLabel grade={item.grade} grades={grades} />
                       <span className="font-mono font-black">{Number(item.ltrs).toLocaleString()} L</span>
                     </div>
                   ))}
@@ -2389,6 +2337,7 @@ export function UpdateStatusDialog({
                   style={{ border: "none" }}
                 >
                   <POPreviewDocument
+                    grades={grades}
                     data={{
                       deliveryDate: retainDeliveryDate,
                       poNumber: retainPoNumber,
@@ -2437,6 +2386,7 @@ export function UpdateStatusDialog({
               <PDFDownloadLink
                 document={
                   <POPreviewDocument
+                    grades={grades}
                     data={{
                       deliveryDate: retainDeliveryDate,
                       poNumber: retainPoNumber,
@@ -2807,28 +2757,18 @@ export function EditMetaDialog({
   );
 }
 
-// 1. Defined Sort Order & Abbreviations
-export const gradeConfig: Record<string, { priority: number; short: string }> =
-  {
-    Regular: { priority: 1, short: "REG" },
-    Premium: { priority: 2, short: "PUL" },
-    Diesel: { priority: 3, short: "ULSD" },
-    "Dyed Diesel": { priority: 4, short: "DYED" },
-  };
-
-export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
+export function EditQtyDialog({ order, open, onOpenChange, locationId, grades }: {
+  order: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  locationId: string;
+  grades: readonly FuelGradeOption[];
+}) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<any[]>([]);
   useEffect(() => {
     if (order?.items) {
-      // 2. Sort items based on the defined priority before setting state
-      const sortedItems = [...order.items].sort((a, b) => {
-        return (
-          (gradeConfig[a.grade]?.priority || 99) -
-          (gradeConfig[b.grade]?.priority || 99)
-        );
-      });
-      setItems(sortedItems);
+      setItems([...order.items]);
     }
   }, [order]);
 
@@ -2873,30 +2813,16 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
         </DialogHeader>
 
         <div className="grid gap-5 py-6">
-          {items.map((item) => {
-            const theme = getGradeTheme(item.grade);
-            const shortName = gradeConfig[item.grade]?.short || item.grade;
+          {sortByFuelGrade(items, grades).map((item) => {
+            const gradeColor = grades.find(grade => grade.key === item.grade)?.color ?? '#475569';
 
             return (
               <div
                 key={item.grade}
                 className="grid grid-cols-4 items-center gap-4"
               >
-                {/* 3. Styled Label using your existing Theme */}
                 <div className="text-right">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "uppercase text-[10px] font-black px-2 py-1 shadow-none",
-                      theme.label,
-                    )}
-                    style={{
-                      backgroundColor: `${theme.raw}10`,
-                      borderColor: `${theme.raw}40`,
-                    }}
-                  >
-                    {shortName}
-                  </Badge>
+                  <FuelGradeLabel grade={item.grade} grades={grades} />
                 </div>
 
                 <div className="col-span-3 relative group">
@@ -2907,9 +2833,8 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
                       "focus-visible:ring-0 focus-visible:ring-offset-0",
                     )}
                     style={{
-                      borderColor: `${theme.raw}20`,
-                      // When user focuses, highlight with the grade color
-                      borderLeft: `6px solid ${theme.raw}`,
+                      borderColor: `${gradeColor}20`,
+                      borderLeft: `6px solid ${gradeColor}`,
                     }}
                     value={item.ltrs}
                     onChange={(e) =>

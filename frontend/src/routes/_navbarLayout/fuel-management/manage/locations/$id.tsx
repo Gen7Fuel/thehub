@@ -2,13 +2,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 // Added CheckCircle2 import
 import { Save, Loader2, Plus, Trash2, MapPin, Hash, Car, Truck, Zap, BookText } from 'lucide-react'
 import { fuelCarriersService } from '@/api/fuel-management/fuel-carriers.service'
+import { fuelGradeOptionsQuery, type FuelGradeOption } from '@/api/fuel-management/fuel-grades.service'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
+import { getGradeLabelColor } from '@/lib/fuelGradeDisplay'
 import { useQuery } from '@tanstack/react-query'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { toast } from "sonner"
@@ -38,7 +40,13 @@ function LocationFuelComponent() {
   const [tanks, setTanks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [newTankOpen, setNewTankOpen] = useState(false)
+  const [newTankGrade, setNewTankGrade] = useState('')
+  const [addingTank, setAddingTank] = useState(false)
   const queryClient = useQueryClient()
+  const gradeQuery = useQuery(fuelGradeOptionsQuery)
+  const catalog = gradeQuery.data ?? []
+  const tankGrades = catalog.filter(grade => grade.active && grade.key !== 'E15')
 
   const { data: racks = [] } = useQuery({ 
     queryKey: ['fuel-racks'], 
@@ -98,19 +106,23 @@ function LocationFuelComponent() {
   }
 
   const addTank = async () => {
+    if (!tankGrades.some(grade => grade.key === newTankGrade)) return
+
     // Find the highest current tank number, default to 0 if no tanks exist
     const maxTankNo = tanks.length > 0 ? Math.max(...tanks.map(t => t.tankNo || 0)) : 0;
+    setAddingTank(true)
     try {
       await fuelStationTanksService.createTank({
         stationId: id,
         tankNo: maxTankNo + 1, // Always one higher than the current max
-        grade: 'Regular',
+        grade: newTankGrade,
         tankCapacity: 25000,
         maxVolumeCapacity: 23750, // 95% default
         minVolumeCapacity: 5000
       }, locationData?.stationName)
-      fetchData()
-    } catch (err) { alert("Error adding tank") }
+      setNewTankOpen(false)
+      await fetchData()
+    } catch (err) { alert("Error adding tank") } finally { setAddingTank(false) }
   }
 
   const sortedTanks = useMemo(() => {
@@ -220,12 +232,42 @@ function LocationFuelComponent() {
       <div className="space-y-6">
         <div className="flex items-center justify-between border-b pb-4">
           <h3 className="text-sm font-black uppercase text-slate-400 tracking-tighter">Underground Storage Tanks (UST)</h3>
-          <Button variant="outline" size="sm" onClick={addTank} className="border-blue-200 text-blue-600 hover:bg-blue-50 font-bold"><Plus className="h-4 w-4 mr-1" /> New Tank</Button>
+          <Dialog open={newTankOpen} onOpenChange={(open) => {
+            if (open) setNewTankGrade('')
+            setNewTankOpen(open)
+          }}>
+            <DialogTrigger disabled={!tankGrades.length || addingTank} className={buttonVariants({
+              variant: 'outline', size: 'sm', className: 'border-blue-200 text-blue-600 hover:bg-blue-50 font-bold',
+            })}>
+              <Plus className="h-4 w-4 mr-1" /> New Tank
+            </DialogTrigger>
+            <DialogContent aria-describedby={undefined}>
+              <DialogHeader><DialogTitle>New Tank</DialogTitle></DialogHeader>
+              <label htmlFor="new-tank-grade" className="text-sm font-medium">Fuel grade</label>
+              <Select value={newTankGrade} onValueChange={setNewTankGrade} disabled={addingTank}>
+                <SelectTrigger id="new-tank-grade"><SelectValue placeholder="Select a fuel grade" /></SelectTrigger>
+                <TankGradeOptions grades={tankGrades} />
+              </Select>
+              <Button onClick={addTank} disabled={addingTank || !tankGrades.some(grade => grade.key === newTankGrade)}>
+                {addingTank ? 'Adding…' : 'Add Tank'}
+              </Button>
+            </DialogContent>
+          </Dialog>
         </div>
+
+        {gradeQuery.isPending && <p role="status" className="text-sm text-muted-foreground">Loading tank grades…</p>}
+        {gradeQuery.isError && (
+          <div className="flex items-center gap-2">
+            <p role="alert" className="text-sm text-destructive">Could not load tank grades.</p>
+            <Button size="sm" variant="outline" onClick={() => void gradeQuery.refetch()}>Retry</Button>
+          </div>
+        )}
+        {gradeQuery.isSuccess && !tankGrades.length && <p className="text-sm text-muted-foreground">No active tank grades available.</p>}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {sortedTanks.map((tank: any) => (
-            <TankCard key={tank._id} tank={tank} allTanks={tanks} onUpdate={fetchData} />
+            <TankCard key={tank._id} tank={tank} allTanks={tanks} onUpdate={fetchData}
+              gradeOptions={tankGrades} savedGrade={catalog.find(grade => grade.key === tank.grade)} />
           ))}
         </div>
       </div>
@@ -233,12 +275,38 @@ function LocationFuelComponent() {
   )
 }
 
-function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], onUpdate: () => void }) {
+function TankGradeOptions({ grades }: { grades: FuelGradeOption[] }) {
+  return (
+    <SelectContent className="p-1.5 rounded-xl">
+      {grades.map(grade => (
+        <SelectItem key={grade.key} value={grade.key} className="rounded-lg p-3 my-0.5">
+          <span className="flex items-center gap-2">
+            <span aria-hidden="true" className="size-2.5 rounded-full" style={{ backgroundColor: grade.color }} />
+            {grade.name}
+          </span>
+        </SelectItem>
+      ))}
+    </SelectContent>
+  )
+}
+
+function TankCard({ tank, allTanks, onUpdate, gradeOptions, savedGrade }: {
+  tank: any
+  allTanks: any[]
+  onUpdate: () => void
+  gradeOptions: FuelGradeOption[]
+  savedGrade?: FuelGradeOption
+}) {
   const [editData, setEditData] = useState(tank)
   const [tempTankNo, setTempTankNo] = useState(tank.tankNo)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const selectedGrade = gradeOptions.find(grade => grade.key === editData.grade)
+  const displayedGrade = selectedGrade ?? (editData.grade === tank.grade ? savedGrade : undefined)
+  const gradeName = displayedGrade?.name ?? editData.grade
+  const canSaveGrade = editData.grade === tank.grade || !!selectedGrade
 
   const handleUpdateId = async () => {
+    if (!canSaveGrade) return
     const newId = Number(tempTankNo);
     const currentId = Number(tank.tankNo);
 
@@ -274,6 +342,7 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
 
   const theme = getGradeTheme(editData.grade)
   const GradeIcon = theme.icon
+  const gradeColor = displayedGrade?.color ?? theme.raw
 
   // 2. Volume-based line positioning logic
   // Max/Min are now pure percentage of total capacity
@@ -286,6 +355,7 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
   const [isSaving, setIsSaving] = useState(false)
 
   const saveTank = async () => {
+    if (!canSaveGrade) return
     setIsSaving(true)
     try {
       await fuelStationTanksService.updateTank(tank._id, editData, `Tank #${tank.tankNo}`)
@@ -315,13 +385,6 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
     } catch (err) { alert("Failed to delete tank.") }
   }
 
-  const gradeOptions = [
-    { grade: "Regular", theme: getGradeTheme("Regular") },
-    { grade: "Premium", theme: getGradeTheme("Premium") },
-    { grade: "Diesel", theme: getGradeTheme("Diesel") },
-    { grade: "Dyed Diesel", theme: getGradeTheme("Dyed Diesel") },
-  ]
-
   return (
     <div className="bg-white border border-slate-100 rounded-3xl p-6 transition-all hover:border-blue-200 hover:shadow-xl relative overflow-hidden group">
 
@@ -335,31 +398,18 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
             <Trash2 className="h-4 w-4" />
           </button>
 
-          <Select value={editData.grade} onValueChange={(val) => setEditData({ ...editData, grade: val })}>
-            <SelectTrigger className={`border-none ${theme.color} h-9 rounded-xl font-bold ${theme.label} px-3 text-xs w-[180px] focus:ring-0 uppercase tracking-tight`}>
+          <Select value={editData.grade} onValueChange={(val) => setEditData({ ...editData, grade: val })} disabled={!gradeOptions.length}>
+            <SelectTrigger
+              aria-label={`Tank #${tank.tankNo} fuel grade`}
+              className="border-none h-9 rounded-xl font-bold px-3 text-xs w-[180px] focus:ring-0 uppercase tracking-tight [&_svg:not([class*='text-'])]:text-current"
+              style={{ backgroundColor: gradeColor, color: getGradeLabelColor(gradeColor) }}
+            >
               <div className="flex items-center gap-2">
                 <GradeIcon className="h-3.5 w-3.5 opacity-80" />
-                <SelectValue />
+                <SelectValue>{gradeName}</SelectValue>
               </div>
             </SelectTrigger>
-            <SelectContent className="p-1.5 rounded-xl">
-              {gradeOptions.map(opt => {
-                const OptIcon = opt.theme.icon
-                return (
-                  <SelectItem
-                    key={opt.grade}
-                    value={opt.grade}
-                    className={`rounded-lg p-3 my-0.5 relative transition-all`}
-                    style={{ background: `linear-gradient(90deg, #fff 10%, ${opt.theme.raw}20 100%)` }}
-                  >
-                    <div className={`flex items-center gap-3 font-bold text-xs uppercase ${opt.theme.label}`}>
-                      <OptIcon className="h-4 w-4 shrink-0" />
-                      <span>{opt.grade}</span>
-                    </div>
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
+            <TankGradeOptions grades={gradeOptions} />
           </Select>
         </div>
         {/* <span className="h-10 w-10 shrink-0 rounded-2xl bg-slate-900 text-white flex items-center justify-center font-black text-xl italic tracking-tighter shadow-lg shadow-slate-200">#{tank.tankNo}</span> */}
@@ -390,6 +440,7 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
               </div>
               <Button
                 onClick={handleUpdateId}
+                disabled={isSaving || !canSaveGrade}
                 className="w-full h-12 bg-slate-900 hover:bg-blue-600 text-white font-bold rounded-2xl transition-all"
               >
                 Confirm Re-index
@@ -405,8 +456,9 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
 
           {/* The Fuel: Height is reactive to Max 95% Volume */}
           <div
+            data-slot="tank-liquid"
             className={`absolute bottom-0 w-full transition-all duration-700 ease-out`}
-            style={{ height: `${visualFluidHeight}%`, background: `linear-gradient(180deg, ${theme.raw} 0%, ${theme.raw}cc 100%)` }}
+            style={{ height: `${visualFluidHeight}%`, background: `linear-gradient(180deg, ${gradeColor} 0%, ${gradeColor}cc 100%)` }}
           >
             {/* 5. Realistic Texture: Gloss/Reflection Overlay */}
             <div className="absolute inset-0 bg-white opacity-20 filter blur-[2px] rounded-[50px] scale-x-90 translate-y-2" />
@@ -450,11 +502,12 @@ function TankCard({ tank, allTanks, onUpdate }: { tank: any, allTanks: any[], on
         </div>
       </div>
 
+      {!canSaveGrade && <p role="alert" className="mt-4 text-xs text-destructive">Select an active tank grade before saving.</p>}
       <Button
         variant="ghost"
         className="w-full mt-6 h-10 text-xs font-black uppercase tracking-widest text-slate-600 bg-slate-100 hover:bg-slate-900 hover:text-white rounded-xl transition-all"
         onClick={saveTank}
-        disabled={isSaving}
+        disabled={isSaving || !canSaveGrade}
       >
         {isSaving ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />

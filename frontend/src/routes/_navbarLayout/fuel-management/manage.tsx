@@ -1,12 +1,14 @@
 import { createFileRoute, Link, Outlet } from '@tanstack/react-router'
-import { Warehouse, Truck, UserCheck, MapPin, Send } from 'lucide-react'
+import { Warehouse, Truck, UserCheck, MapPin, Send, Tags } from 'lucide-react'
 import { fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { useAuth } from '@/context/AuthContext'
 
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage')({
   component: ManageLayout,
 })
 
 function ManageLayout() {
+  const { user } = useAuth()
 
   const handleNotify = async () => {
     try {
@@ -26,6 +28,9 @@ function ManageLayout() {
     { to: '/fuel-management/manage/racks', label: 'Fuel Racks', icon: Warehouse },
     { to: '/fuel-management/manage/carriers', label: 'Carriers', icon: Truck },
     { to: '/fuel-management/manage/suppliers', label: 'Suppliers', icon: UserCheck },
+    ...(user?.access?.fuelManagement?.manage?.grades === true
+      ? [{ to: '/fuel-management/manage/grades', label: 'Fuel Grades', icon: Tags }]
+      : []),
   ]
 
   return (

@@ -192,11 +192,11 @@ router.post("/inventory-coverage", async (req, res) => {
       new Map(normalizedPairs.map((pair) => [`${pair.stationId}:${pair.grade}`, pair])).values(),
     );
     const safeHorizonDays = Math.min(Math.max(Number(horizonDays) || 14, 1), 30);
-    const byGrade = {};
+    const byGrade = Object.create(null);
     const forecastDays = [];
 
     for (let offset = 1; offset <= safeHorizonDays; offset += 1) {
-      const dayTotals = {};
+      const dayTotals = Object.create(null);
 
       await Promise.all(
         uniquePairs.map(async ({ stationId, grade }) => {

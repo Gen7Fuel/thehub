@@ -1,4 +1,5 @@
 import { supabase } from '../utils/supabase/server.js';
+import fuelGradePosMapping from './fuelGradePosMapping.js';
 
 /**
  * Fetches the ranked fuel inventory from the Supabase RPC function.
@@ -84,34 +85,39 @@ export const getProcessedFuelSales = async (csoCode, dateStr) => {
 
   if (error) throw new Error(`Supabase RPC Error: ${error.message}`);
 
-  let processed = { 'Regular': 0, 'Premium': 0, 'Diesel': 0, 'Dyed Diesel': 0 };
+  const gradeByCode = await fuelGradePosMapping.getCstoreGradeMap();
+  const processed = new Map();
+  const unmappedCodes = new Set();
+  const addVolume = (grade, volume) => processed.set(grade, (processed.get(grade) ?? 0) + volume);
   let midVolume = 0;
   let latestTs = null;
 
-  if (rawData && rawData.length > 0) {
-    rawData.forEach(item => {
-      const vol = Number(item.total_volume) || 0;
-      // Track the latest transaction across all fuel grades
-      if (item.last_transaction && (!latestTs || new Date(item.last_transaction) > new Date(latestTs))) {
-        latestTs = item.last_transaction;
-      }
+  for (const item of rawData ?? []) {
+    const vol = Number(item.total_volume) || 0;
+    // Track the latest transaction across all fuel grades
+    if (item.last_transaction && (!latestTs || new Date(item.last_transaction) > new Date(latestTs))) {
+      latestTs = item.last_transaction;
+    }
 
-      switch (item.raw_grade) {
-        case 'REG': processed['Regular'] += vol; break;
-        case 'PNL': processed['Premium'] += vol; break;
-        case 'DSL': processed['Diesel'] += vol; break;
-        case 'DYED': processed['Dyed Diesel'] += vol; break;
-        case 'MID': midVolume = vol; break;
-      }
-    });
+    const code = typeof item.raw_grade === 'string' ? item.raw_grade.trim().toUpperCase() : '';
+    if (code === 'MID') {
+      midVolume += vol;
+    } else if (gradeByCode.has(code)) {
+      addVolume(gradeByCode.get(code), vol);
+    } else if (code) {
+      unmappedCodes.add(code);
+    }
   }
 
   if (midVolume > 0) {
-    processed['Regular'] += (midVolume / 2);
-    processed['Premium'] += (midVolume / 2);
+    addVolume('Regular', midVolume / 2);
+    addVolume('Premium', midVolume / 2);
+  }
+  if (unmappedCodes.size) {
+    console.warn('Unmapped CStore fuel types', { csoCode, date: dateStr, codes: [...unmappedCodes] });
   }
 
-  const salesData = Object.entries(processed)
+  const salesData = [...processed]
     .filter(([_, vol]) => vol > 0)
     .map(([grade, volume]) => ({ grade, volume: parseFloat(volume.toFixed(2)) }));
 

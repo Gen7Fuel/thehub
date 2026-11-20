@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/core/clients', () => ({ apiClient: mocks }))
 
 import { fuelCarriersService } from '../fuel-carriers.service'
+import { fuelGradeOptionsQuery, fuelGradesService } from '../fuel-grades.service'
 import { buildFuelOrderAccessGroupId, fuelOrdersService } from '../fuel-orders.service'
 import { fuelRacksService } from '../fuel-racks.service'
 import { fuelSalesService } from '../fuel-sales.service'
@@ -53,6 +54,30 @@ describe('Fuel Management API contracts', () => {
     expect(mocks.delete).toHaveBeenCalledWith('/fuel-suppliers/supplier-1', expect.objectContaining({
       headers: expect.objectContaining({ 'X-Action-Type': 'delete', 'X-Action-Message': 'Fuel supplier deletion requested for Imperial' }),
     }))
+  })
+
+  it('sends fuel grade audit metadata and leaves permission enforcement to the server', async () => {
+    await fuelGradesService.list()
+    await fuelGradesService.update('grade-1', { active: false })
+
+    expect(mocks.get).toHaveBeenCalledWith('/fuel-grades', expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Action-Source': 'fuel-management.manage.grades' }),
+    }))
+    expect(mocks.patch).toHaveBeenCalledWith('/fuel-grades/grade-1', { active: false }, expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Action-Type': 'update' }),
+    }))
+    expect(mocks.get.mock.calls[0][1].headers).not.toHaveProperty('X-Required-Permission')
+    expect(mocks.patch.mock.calls[0][2].headers).not.toHaveProperty('X-Required-Permission')
+    expect(mocks.delete).not.toHaveBeenCalled()
+  })
+
+  it('loads configuration grade choices from the separate read-only endpoint', async () => {
+    await fuelGradeOptionsQuery.queryFn()
+
+    expect(mocks.get).toHaveBeenCalledWith('/fuel-grades/options', expect.objectContaining({
+      headers: expect.objectContaining({ 'X-Action-Type': 'read' }),
+    }))
+    expect(mocks.get.mock.calls[0][1].headers).not.toHaveProperty('X-Required-Permission')
   })
 
   it('distinguishes workspace, pipeline, create-order, and volume requests', async () => {

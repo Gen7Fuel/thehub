@@ -11,6 +11,7 @@ describe('Fuel Management change logging contract', () => {
     ['fuelCarrierRoutes.js', 'fuel-carrier'],
     ['fuelRackRoutes.js', 'fuel-rack'],
     ['fuelSupplierRoutes.js', 'fuel-supplier'],
+    ['fuelGradeRoutes.js', 'fuel-grade'],
     ['fuelStationTankRoutes.js', 'fuel-station-tank'],
     ['fuelOrderRoutes.js', 'fuel-order'],
     ['fuelSaleRoutes.js', 'fuel-sales'],
@@ -22,7 +23,7 @@ describe('Fuel Management change logging contract', () => {
   });
 
   it('records before and after state for editable fuel resources', () => {
-    for (const file of ['fuelCarrierRoutes.js', 'fuelRackRoutes.js', 'fuelSupplierRoutes.js', 'fuelStationTankRoutes.js', 'fuelOrderRoutes.js']) {
+    for (const file of ['fuelCarrierRoutes.js', 'fuelRackRoutes.js', 'fuelSupplierRoutes.js', 'fuelGradeRoutes.js', 'fuelStationTankRoutes.js', 'fuelOrderRoutes.js']) {
       const source = read(file);
       expect(source).toMatch(/before[,:]/);
       expect(source).toMatch(/after:/);

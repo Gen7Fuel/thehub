@@ -98,7 +98,7 @@ function RouteComponent() {
               {...(!isVolumeActive && ({ variant: "outline" } as object))}
               // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
               className={
-                access?.fuelManagement?.manage
+                access?.fuelManagement?.manage?.value
                   ? "rounded-none"
                   : "rounded-l-none"
               }
@@ -108,7 +108,7 @@ function RouteComponent() {
           </Link>
         )}
 
-        {access?.fuelManagement?.manage && (
+        {access?.fuelManagement?.manage?.value && (
           <Link to="/fuel-management/manage" activeOptions={{ exact: true }}>
             <Button
               {...(!isManageActive && ({ variant: "outline" } as object))}

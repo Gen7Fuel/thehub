@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Location = require('../../models/Location');
 const FuelStationTank = require('../../models/fuel/FuelStationTank');
@@ -6,6 +7,7 @@ const FuelOrder = require('../../models/fuel/FuelOrder');
 const FuelCarrier = require('../../models/fuel/FuelCarrier');
 const FuelSupplier = require('../../models/fuel/FuelSupplier');
 const FuelRack = require('../../models/fuel/FuelRack');
+const FuelGrade = require('../../models/fuel/FuelGrade');
 const { emailQueue } = require('../../queues/emailQueue');
 const { fuelOrderDraftQueue } = require('../../queues/fuelOrderDraftQueue');
 const moment = require('moment-timezone');
@@ -28,6 +30,8 @@ function buildRetainComment(retainItems) {
 }
 
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const escapeGradeLabel = (label) => label.replace(/[&<>]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character]);
 
 const formatPODatePart = (dateStr) => {
   const date = new Date(`${dateStr}T00:00:00`);
@@ -212,6 +216,11 @@ async function processUpcomingOrderNotifications() {
     return targetDates.includes(localDate);
   });
 
+  const grades = orders.length
+    ? await FuelGrade.find({}, 'key name').sort({ sortOrder: 1, key: 1 }).lean()
+    : [];
+  const gradeByKey = new Map(grades.map(({ key, name }, index) => [key, { name, index }]));
+
   /**
    * ------------------------------------------------------------
    * 4. GROUP BY DATE -> STATION
@@ -261,7 +270,6 @@ async function processUpcomingOrderNotifications() {
     `;
 
     const sortedDates = Object.keys(dataGroup).sort();
-    const gradeOrder = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
 
     for (const date of sortedDates) {
       innerHtml += `<div style="background-color: #f8fafc; padding: 8px 12px; border-radius: 6px; margin-top: 25px;">
@@ -275,13 +283,15 @@ async function processUpcomingOrderNotifications() {
                       </div>`;
 
         for (const order of stations[stationName]) {
-          const sortedItems = gradeOrder
-            .map(g => order.items.find(i => i.grade === g))
-            .filter(i => i && i.ltrs > 0);
+          const sortedItems = (order.items || [])
+            .filter(item => item?.grade && Number.isFinite(item.ltrs) && item.ltrs > 0)
+            .sort((a, b) =>
+              (gradeByKey.get(a.grade)?.index ?? grades.length) -
+              (gradeByKey.get(b.grade)?.index ?? grades.length));
 
           const qtyPills = sortedItems.map(i => `
             <div style="display: inline-block; background: #edf2f7; padding: 4px 8px; border-radius: 4px; margin: 2px 4px 2px 0; font-size: 12px;">
-              <b style="color: #4a5568;">${i.grade}:</b> ${i.ltrs.toLocaleString()}L
+              <b style="color: #4a5568;">${escapeGradeLabel(gradeByKey.get(i.grade)?.name ?? i.grade)}:</b> ${i.ltrs.toLocaleString()}L
             </div>
           `).join('');
 
@@ -437,18 +447,70 @@ router.post('/', async (req, res) => {
       isSplit, orders // Each order now contains its own badgeNo
     } = req.body;
 
-    const GRADE_ORDER = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
+    if (![rackId, supplierId, carrierId].every(id => mongoose.isObjectIdOrHexString(id))) {
+      return res.status(400).json({ message: 'Select a valid rack, supplier, and carrier.' });
+    }
+    if (!Array.isArray(orders) || orders.length === 0 || orders.some(order =>
+      !mongoose.isObjectIdOrHexString(order?.stationId) || !Array.isArray(order?.items))) {
+      return res.status(400).json({ message: 'Provide orders with a destination station and grade items.' });
+    }
 
     // 1. Duplicate & Logistics Check
     const poNumbers = orders.map(o => o.poNumber);
     const existing = await FuelOrder.findOne({ poNumber: { $in: poNumbers } });
     if (existing) return res.status(400).json({ message: `Duplicate PO: ${existing.poNumber}` });
 
-    const [rack, supplier, carrier] = await Promise.all([
+    const stationIds = [...new Set(orders.map(order => String(order.stationId).toLowerCase()))];
+    const [rack, supplier, carrier, grades, stations, tanks] = await Promise.all([
       FuelRack.findById(rackId).lean(),
       FuelSupplier.findById(supplierId).lean(),
-      FuelCarrier.findById(carrierId).lean()
+      FuelCarrier.findById(carrierId).lean(),
+      FuelGrade.find({ active: true }, 'key name sortOrder').sort({ sortOrder: 1, key: 1 }).lean(),
+      Location.find({ _id: { $in: stationIds } }, '_id timezone stationName fuelCustomerName').lean(),
+      FuelStationTank.find({ stationId: { $in: stationIds } }, 'stationId grade').lean(),
     ]);
+    if (!rack || !supplier || !carrier || String(supplier.associatedRack) !== String(rack._id)) {
+      return res.status(400).json({ message: 'Select a supplier for the chosen rack and a valid carrier.' });
+    }
+
+    const gradeByKey = new Map(grades.map((grade, index) => [grade.key, { name: grade.name, index }]));
+    const stationById = new Map(stations.map(station => [String(station._id), station]));
+    const gradesByStation = new Map();
+    for (const tank of tanks) {
+      const stationId = String(tank.stationId);
+      if (!gradesByStation.has(stationId)) gradesByStation.set(stationId, new Set());
+      gradesByStation.get(stationId).add(tank.grade);
+    }
+    const rackGrades = new Set(rack.availableGrades);
+
+    // Check every station and badge before saving any part of a split load.
+    for (const order of orders) {
+      const stationId = String(order.stationId).toLowerCase();
+      const badge = supplier.supplierBadges?.find(entry => entry.badgeNumber === order.badgeNo);
+      if (!stationById.has(stationId) || !badge) {
+        return res.status(400).json({ message: `Invalid station or supplier badge for PO ${order.poNumber}.` });
+      }
+      const badgeGrades = new Set(badge.availableGrades);
+      const stationGrades = gradesByStation.get(stationId);
+      let hasVolume = false;
+      for (const item of order.items) {
+        const liters = Number(item?.ltrs);
+        if (!Number.isFinite(liters) || liters < 0) {
+          return res.status(400).json({ message: `Invalid fuel quantity for PO ${order.poNumber}.` });
+        }
+        if (liters === 0) continue;
+
+        const key = item.grade;
+        const tankGrade = key === 'E15' ? 'Regular' : key;
+        if (!gradeByKey.has(key) || !rackGrades.has(key) || !badgeGrades.has(key) || !stationGrades?.has(tankGrade)) {
+          return res.status(400).json({
+            message: `${key} is unavailable for ${stationById.get(stationId).stationName} and badge ${order.badgeNo} on PO ${order.poNumber}.`,
+          });
+        }
+        hasVolume = true;
+      }
+      if (!hasVolume) return res.status(400).json({ message: `PO ${order.poNumber} has no fuel volume.` });
+    }
 
     // 2. Process Orders & Group for Email
     let attachments = [];
@@ -458,7 +520,7 @@ router.post('/', async (req, res) => {
     const formattedDate = formatPDFDate(deliveryDate, false);
 
     for (const orderData of orders) {
-      const station = await Location.findById(orderData.stationId).lean();
+      const station = stationById.get(String(orderData.stationId).toLowerCase());
       const tz = station?.timezone || 'America/Toronto';
       const stationMidnight = moment.tz(deliveryDate, tz).startOf('day').toDate();
 
@@ -484,12 +546,8 @@ router.post('/', async (req, res) => {
       // Format Grades
       const gradeSummary = orderData.items
         .filter(i => (i.ltrs || 0) > 0)
-        .sort((a, b) => {
-          const indexA = GRADE_ORDER.indexOf(a.grade);
-          const indexB = GRADE_ORDER.indexOf(b.grade);
-          return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
-        })
-        .map(item => `${(item.ltrs / 1000).toFixed(0)}K ${item.grade}`)
+        .sort((a, b) => gradeByKey.get(a.grade).index - gradeByKey.get(b.grade).index)
+        .map(item => `${(item.ltrs / 1000).toFixed(0)}K ${escapeGradeLabel(gradeByKey.get(item.grade).name)}`)
         .join('<br>');
 
       // Build the HTML snippet for this specific station order
@@ -547,8 +605,8 @@ router.post('/', async (req, res) => {
       attachments: attachments
     };
 
-    const targetMailbox = "nsporders@nspetroleum.ca"; // Production
-    // const targetMailbox = "daksh@gen7fuel.com"; // testing
+    // const targetMailbox = "nsporders@nspetroleum.ca"; // Production
+    const targetMailbox = "daksh@gen7fuel.com"; // testing
     const draftJob = await fuelOrderDraftQueue.add(
       `fuel-order-draft-${Date.now()}`,
       {
