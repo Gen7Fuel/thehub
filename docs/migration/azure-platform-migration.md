@@ -30,7 +30,7 @@ pack additional workloads onto the shared B1 without capacity measurements.
 | Hub PostgreSQL | VPS `postgres`, `hub_sql` | PostgreSQL Flexible Server 16 | Schemas/data/constraints/sequences/roles/migration history validated |
 | Hub Redis | VPS `redis`, BullMQ plus caches | Evaluate Azure Managed Redis with a BullMQ-compatible configuration | TLS/auth, scripts/commands/key placement, no-eviction policy, persistence and queue migration proven |
 | Shared email | VPS local-only email-service image, Hub and Desk consumers | First package/publish reproducible image; evaluate internal Container App retaining current mail transport | Both apps send controlled test mail; retries preserved, no unintended test deliveries |
-| Public edge | Host Caddy and Hub/Desk Caddy containers | Azure app ingress/custom domains/certificates; evaluate shared gateway only if routing requires it | All public paths, headers, WebSocket upgrades and certificates validated; no VPS upstream |
+| Public edge | Host Caddy and Hub/Desk Caddy containers | Keep existing public VPS Caddy for Azure acceptance and fast failback, then move HTTPS ingress to Azure after acceptance | All public paths, headers, WebSocket upgrades and certificates validated, followed by a separate edge handover |
 | Fleet Portal | VPS `fleet-portal`, shared Hub Mongo | Include runtime packaging and Azure web hosting, not only Mongo URI change | Portal flows/auth work against Azure Mongo; no private Docker IP dependency |
 | Desk frontend | VPS `desk-caddy`, Caddy frontend image | Azure web hosting with Desk domain and SPA behavior | Hub-facing pages, authentication, downloads and deep links work |
 | Desk API | VPS `desk-api`, `node index.js` | Azure web runtime after DB/files/integration preparation | Desk flows, Hub external-token exchange and Sage integrations verified |
@@ -118,14 +118,16 @@ Callback completion markers do not establish all asynchronous cron work drained.
 Before scheduling the final window, every required Azure dependency must pass
 its isolated restore, restart and application checks, including SFTP/FTP/office
 paths, external SQL, mail, POS files, Redis and Desk backups. Frontend API/auth/
-Socket.IO upstreams must target Azure directly; the current preview's VPS proxy
-is temporary preview configuration, not the final production design. Validate
-signed-in browser flows and custom-domain/certificate readiness before routing.
+Socket.IO and any required signaling upstreams must target Azure directly.
+The current preview sends requests to `app.gen7fuel.com`. Pointing public Caddy
+at that preview configuration would send those requests back to Caddy and form
+a proxy loop. Validate direct upstreams, signed-in browser flows and certificate
+verification before switching traffic.
 
 1. Freeze deployments and coordinate user maintenance across Hub, Desk and Fleet.
    Fence old HTTP writers, queues/schedulers, ingestion, backup/export jobs and
    operator tools; drain in-flight work. Record pause/lease states and source
-   configuration privately. Set and verify an appropriate DNS TTL in advance.
+   configuration privately.
 2. Perform the rehearsed final database, Redis and owned file transfers from
    quiesced sources. Restore/validate all targets together. Keep Azure production
    side effects disabled until data and connections are verified.
@@ -133,16 +135,15 @@ signed-in browser flows and custom-domain/certificate readiness before routing.
    service and disable their VPS deployment paths. Preserve branch protections
    and scoped identities. Do not let a queued old workflow restart VPS writers;
    gate/fence old deployment credentials and service autostarts as appropriate.
-4. Switch public routing/DNS only after Azure ingress and direct upstreams are
-   ready. Maintain a common write fence during transition verification. Cached
-   DNS clients that still reach the VPS must receive maintenance or a separately
-   verified safe forwarding path to Azure, never writes to the old data copy.
-   No temporary VPS-origin hostname is part of the plan. DNS TTL is not proof
-   every client has refreshed; observe old ingress and keep its writers fenced.
+4. Keep public DNS and TLS termination on the existing VPS Caddy. Use the
+   rehearsed maintenance route and validated Azure upstream configuration to
+   switch traffic with a Caddy reload. Maintain the write fence through
+   transition verification. Use the existing public hostnames throughout
+   acceptance and prepare DNS changes only for the later edge handover.
 5. Enable the authoritative Azure path and resume producers, workers and a single
    scheduler owner in the rehearsed order. Verify signed-in Hub/Desk/Fleet flows,
    uploads, real-time events, queue delivery and integrations. Keep old VPS
-   writers disabled throughout propagation and recovery retention.
+   writers disabled throughout acceptance and recovery retention.
 
 The maintenance duration includes measured transfer/restore/validation time;
 zero downtime is not promised. Before Azure accepts new writes, rollback can
@@ -152,12 +153,18 @@ reverse transfer/reconciliation. DNS rollback alone is not data rollback.
 
 ## Fast rollback requirement
 
-Keep known-good VPS images, configuration, certificates and a tested routing
-switch warm during the recovery window. A sub-minute routing objective needs
-a stable edge with a tested upstream switch; DNS alone cannot provide that
-guarantee. Edge placement remains to be selected: an explicitly retained VPS
-edge temporarily, or an independent proxy. Neither choice requires a temporary
-VPS-origin hostname. Do not claim full VPS independence while it is the edge.
+Keep known-good VPS images, configuration and certificates warm during recovery.
+The user selected the existing public VPS Caddy as the HTTPS edge for acceptance
+and fast failback. Its tested reload path supports the proposed sub-minute
+objective for new requests. The isolated Caddy 2.11.9 drill took 4.512 seconds
+for maintenance and VPS reloads plus a verified HTTPS response against synthetic
+origins. Production recovery time still requires an integrated drill covering
+writer fencing, data checks and WebSocket reconnects.
+
+Retain healthy Azure background owners when only web routing fails. Transfer
+worker or scheduler ownership only when needed and after fencing the old owner.
+Avoid automatic replay of requests that can create duplicate writes. The VPS
+remains an ingress dependency until the later HTTPS/DNS handover is complete.
 
 | Failure point | Recovery path | Required evidence |
 | --- | --- | --- |
