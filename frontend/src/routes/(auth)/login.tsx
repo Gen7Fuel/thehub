@@ -33,7 +33,7 @@ function RouteComponent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
-  const { refreshAuth } = useAuth();
+  const { refreshAuth, clearSession } = useAuth();
   const [maintInfo, setMaintInfo] = useState<{ active: boolean; endTime: string } | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   // const testEmails = ['daksh@gen7fuel.com', 'demo@demo.com'];
@@ -103,7 +103,14 @@ function RouteComponent() {
 
     try {
       const response = await authService.login(email.trim().toLowerCase(), passToSubmit)
+      clearSession()
       localStorage.setItem('token', response.token)
+      try {
+        await refreshAuth()
+      } catch (error) {
+        clearSession()
+        throw error
+      }
 
       // Initialize showFuelTicker to 'false' by default
       const existingFuelTickerState = localStorage.getItem('showFuelTicker');
@@ -114,8 +121,6 @@ function RouteComponent() {
 
       clearLocalDB();
       clearDashboardDB();
-      refreshAuth()
-
       const socket = getSocket();
       socket.auth = { token: response.token }; // Update the token manually
       socket.disconnect().connect();               // Force a fresh handshake with the new token

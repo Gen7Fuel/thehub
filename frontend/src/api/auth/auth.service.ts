@@ -57,6 +57,10 @@ export const authService = {
     })
   },
 
+  getSession<T>() {
+    return authApi.getSession<T>({})
+  },
+
   getMaintenanceStatus<T = unknown>() {
     return authApi.getMaintenanceStatus<T>({ auth: false })
   },

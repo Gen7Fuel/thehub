@@ -30,6 +30,8 @@ export default function Navbar() {
   const [mobileMenuState, setMobileMenuState] = useState<MobileMenuState>('closed')
   // Inside your Navbar Component
   const [unreadCount, setUnreadCount] = useState(0);
+  const { user, refreshAuth, clearSession } = useAuth();
+  const userId = user?.id;
 
   const [showFuelTicker, setShowFuelTicker] = useState<boolean>(() => {
     const savedState = localStorage.getItem('showFuelTicker');
@@ -68,7 +70,7 @@ export default function Navbar() {
       }
 
       // Clear token locally
-      localStorage.removeItem('token');
+      clearSession();
 
 
       // Clear IndexedDB
@@ -78,7 +80,7 @@ export default function Navbar() {
       // Redirect
       navigate({ to: '/login' });
     }
-  }, [navigate]);
+  }, [clearSession, navigate]);
 
 
 
@@ -158,7 +160,7 @@ export default function Navbar() {
     }
 
     // Same as before
-    localStorage.removeItem('token');
+    clearSession();
     clearLocalDB();
     navigate({ to: '/login' });
   }
@@ -174,16 +176,9 @@ export default function Navbar() {
 
   // Get access permissions from localStorage
 
-  const { user, refreshTokenFromBackend } = useAuth();
   // Retrieve access permissions from auth provider
   // const access = user?.access || '{}' //markpoint
   const access = user?.access || {}
-  const handlePermissionsUpdated = async () => {
-    // console.log("Permissions update received via socket");
-    // console.log("Before update:",localStorage.getItem('token'));
-    await refreshTokenFromBackend();
-    // console.log("After update:",localStorage.getItem('token'));
-  };
 
   // Mobile-only menu contents (below md). Deliberately declared separately
   // from the desktop button row below rather than sharing one config array:
@@ -326,10 +321,25 @@ export default function Navbar() {
     const socket = getSocket();
 
     const joinRoom = () => {
-      if (user?.id) {
-        console.log("📤 Emitting join-room for:", user.id);
-        socket.emit("join-room", user.id);
+      if (userId) {
+        socket.emit("join-room", userId);
       }
+    };
+
+    const handlePermissionsUpdated = () => {
+      void refreshAuth().catch((error) => {
+        if (!localStorage.getItem("token")) {
+          clearLocalDB();
+          void navigate({ to: "/login" });
+          return;
+        }
+        console.warn("Could not reload session permissions:", error);
+      });
+    };
+
+    const handleConnect = () => {
+      joinRoom();
+      handlePermissionsUpdated();
     };
 
     // 1. If already connected, join immediately
@@ -338,7 +348,7 @@ export default function Navbar() {
     }
 
     // 2. Also listen for the connect event (for refreshes/reconnects)
-    socket.on("connect", joinRoom);
+    socket.on("connect", handleConnect);
 
     const handleNewNotification = () => {
       refreshUnreadCount();
@@ -351,25 +361,25 @@ export default function Navbar() {
     });
 
     return () => {
-      socket.off("connect", joinRoom);
+      socket.off("connect", handleConnect);
       socket.off("permissions-updated", handlePermissionsUpdated);
       socket.off("force-logout");
       socket.off("new-notification", handleNewNotification);
     };
-  }, [user]); // Re-run when user changes
+  }, [userId, refreshAuth, navigate]);
 
   useEffect(() => {
     if (forceLogoutMessage) {
       const timer = setTimeout(() => {
         // Perform logout actions
-        localStorage.removeItem("token");
+        clearSession();
         clearLocalDB();
         navigate({ to: "/login" });
       }, 3000); // 3 seconds delay
 
       return () => clearTimeout(timer);
     }
-  }, [forceLogoutMessage]);
+  }, [forceLogoutMessage, clearSession, navigate]);
 
   // 1. Define base URL
   const DOCS_BASE_URL = "https://docs.gen7fuel.com/share";
