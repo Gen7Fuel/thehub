@@ -1,0 +1,129 @@
+x-cdn-origin: &cdn-origin ${HUB_CDN_UPSTREAM:-https://gen7erp-cdn-prod-29b24248.azurewebsites.net}
+
+services:
+  mongo:
+    extends:
+      file: compose.yaml
+      service: mongo
+    container_name: !reset null
+    networks: !reset null
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.runCommand({ping: 1}).ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 4s
+      retries: 15
+    volumes:
+      - type: bind
+        source: ${GEN7_DATA_ROOT:?set GEN7_DATA_ROOT}/hub/mongo
+        target: /data/db
+        bind:
+          create_host_path: false
+
+  redis:
+    extends:
+      file: compose.yaml
+      service: redis
+    container_name: !reset null
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - type: bind
+        source: ${GEN7_DATA_ROOT:?set GEN7_DATA_ROOT}/hub/redis
+        target: /data
+        bind:
+          create_host_path: false
+
+  postgres:
+    extends:
+      file: compose.yaml
+      service: postgres
+    container_name: !reset null
+    ports: !reset []
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ${GEN7_DATA_ROOT:?set GEN7_DATA_ROOT}/hub/postgres
+        target: /var/lib/postgresql/data
+        bind:
+          create_host_path: false
+
+  backend:
+    extends:
+      file: compose.yaml
+      service: backend
+    container_name: !reset null
+    restart: unless-stopped
+    environment: &cdn-upstream
+      CDN_SERVICE_URL: *cdn-origin
+      UPLOAD_SERVICE_URL: *cdn-origin
+    depends_on: &data-ready
+      mongo:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    extends:
+      file: compose.yaml
+      service: worker
+    container_name: !reset null
+    restart: unless-stopped
+    environment: *cdn-upstream
+    depends_on: *data-ready
+
+  scheduler:
+    extends:
+      file: compose.yaml
+      service: scheduler
+    container_name: !reset null
+    restart: unless-stopped
+    environment: *cdn-upstream
+    depends_on: *data-ready
+
+  auth-backend:
+    extends:
+      file: compose.yaml
+      service: auth-backend
+    container_name: !reset null
+    ports: !reset []
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./backend/models
+        target: /app/models
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./backend/utils/attachSiteAlias.js
+        target: /app/utils/attachSiteAlias.js
+        read_only: true
+        bind:
+          create_host_path: false
+
+  frontend:
+    image: ${HUB_FRONTEND_IMAGE:?set HUB_FRONTEND_IMAGE}
+    restart: unless-stopped
+    environment:
+      HUB_API_UPSTREAM: backend:5000
+      HUB_AUTH_UPSTREAM: auth-backend:5005
+      HUB_CDN_UPSTREAM: *cdn-origin
+    ports:
+      - "127.0.0.1:${HUB_VM_HTTP_PORT:-3000}:8080"
+    volumes:
+      - type: bind
+        source: ./infra/vm/Caddyfile
+        target: /etc/caddy/Caddyfile
+        read_only: true
+        bind:
+          create_host_path: false
