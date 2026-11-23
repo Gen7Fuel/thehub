@@ -1,0 +1,89 @@
+name: Publish Hub frontend VM image
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: Full SHA of an earlier commit on main (leave blank for the current main commit)
+        type: string
+        required: false
+
+permissions: {}
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Select the frontend source
+        id: source
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          commit="${REQUESTED_COMMIT:-$GITHUB_SHA}"
+          if [[ ! "$commit" =~ ^[a-f0-9]{40}$ ]] ||
+             [[ $(git cat-file -t "$commit" 2>/dev/null) != commit ]] ||
+             ! git merge-base --is-ancestor "$commit" "$GITHUB_SHA"; then
+            echo 'Use the full SHA of a commit reachable from the selected main revision.' >&2
+            exit 1
+          fi
+
+          source_dir=$(mktemp -d "$RUNNER_TEMP/hub-vm-source.XXXXXX")
+          git archive "$commit" frontend | tar -xf - -C "$source_dir"
+          printf 'commit=%s\ncontext=%s/frontend\n' "$commit" "$source_dir" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the Hub frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ steps.source.outputs.context }}
+          file: ${{ steps.source.outputs.context }}/Dockerfile.azure
+          platforms: linux/amd64
+          load: true
+          tags: hub-frontend-azure:local
+          build-args: RELEASE_COMMIT=${{ steps.source.outputs.commit }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.commit }}
+      - name: Check the image and VM Caddy configuration
+        run: |
+          python infra/azure/frontend/rehearse.py
+          docker run --rm --network none \
+            --mount "type=bind,source=$PWD/infra/vm/Caddyfile,target=/etc/caddy/Caddyfile,readonly" \
+            -e HUB_API_UPSTREAM=http://backend:5000 \
+            -e HUB_AUTH_UPSTREAM=http://auth-backend:5005 \
+            -e HUB_CDN_UPSTREAM=http://cdn-fixture:5001 \
+            hub-frontend-azure:local caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the tested image and record its digest
+        id: publish
+        shell: bash
+        env:
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/thehub-frontend-vm"
+          tag="$SOURCE_COMMIT-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker tag hub-frontend-azure:local "$image:$tag"
+          docker push "$image:$tag"
+          digest=$(docker buildx imagetools inspect "$image:$tag" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          printf 'image=%s@%s\n' "$image" "$digest" >> "$GITHUB_OUTPUT"
+          printf 'Use this image for `HUB_FRONTEND_IMAGE`:\n\n`%s@%s`\n' "$image" "$digest" >> "$GITHUB_STEP_SUMMARY"

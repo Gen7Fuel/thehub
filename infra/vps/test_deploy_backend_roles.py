@@ -16,18 +16,24 @@ spec.loader.exec_module(rollout)
 
 
 class RolloutTests(unittest.TestCase):
-    def exercise(self, failure=None):
+    def exercise(self, failure=None, *, sage_secret='fixture-$previous', allow_rotation=False,
+                 environment_overrides=None, reject_environment=False):
         self.events = []
         self.rollbacks = 0
+        self.rollback_environment = None
         self.stop_calls = 0
         self.paused = False
         image = 'ghcr.io/gen7fuel/thehub-backend:'
-        original = {'Config': {'Image': image + 'a' * 40, 'Env': ['REDIS_URL=redis://fixture', 'CDN_SERVICE_URL=https://fixture.invalid'],
+        original = {'Config': {'Image': image + 'a' * 40, 'Env': ['REDIS_URL=redis://fixture', 'CDN_SERVICE_URL=https://fixture.invalid',
+                                                               'SAGE_CLIENT_SECRET=fixture-$previous', 'SAGE_CLIENT_ID=fixture-client'],
                                'Labels': {'com.docker.compose.project': 'thehub', 'com.docker.compose.service': 'backend'}},
                     'NetworkSettings': {'Networks': {'thehub_default': {}}}, 'State': {'Running': True}}
         rendered = {service: {'image': image + 'b' * 40, 'command': ['node', entry],
-                             'environment': {'REDIS_URL': 'redis://fixture', 'CDN_SERVICE_URL': 'https://fixture.invalid'}}
+                             'environment': {'REDIS_URL': 'redis://fixture', 'CDN_SERVICE_URL': 'https://fixture.invalid',
+                                             'SAGE_CLIENT_SECRET': sage_secret, 'SAGE_CLIENT_ID': 'fixture-client'}}
                     for service, entry in [('backend', 'api.js'), ('worker', 'worker.js'), ('scheduler', 'scheduler.js')]}
+        for service, overrides in (environment_overrides or {}).items():
+            rendered[service]['environment'].update(overrides)
 
         def inspect(name, optional=False):
             if name.startswith('hub-runtime-cutover-'):
@@ -57,6 +63,7 @@ class RolloutTests(unittest.TestCase):
             elif 'up' in args:
                 if payload:
                     self.rollbacks += 1
+                    self.rollback_environment = json.loads(payload)['services']['backend']['environment']
                     assert not original['State']['Running'], 'Rollback overlapped existing runtime'
                     self.events.append('rollback')
                 else:
@@ -69,20 +76,55 @@ class RolloutTests(unittest.TestCase):
                                    'schedules': ['cron'] * 19 if role == 'scheduler' else [], 'leader': role == 'scheduler'})
             return ''
 
+        args = ['rollout', '--execute']
+        if allow_rotation:
+            args.append('--allow-sage-client-secret-rotation')
         with tempfile.TemporaryDirectory() as temp, patch.object(Path, 'home', return_value=Path(temp)), \
                 patch.object(rollout, 'runtime_user', return_value='1000:1000'), \
                 patch.object(rollout, 'inspect', side_effect=inspect), patch.object(rollout, 'command', side_effect=command), \
                 patch.dict(os.environ, {'BACKEND_IMAGE': image + 'b' * 40, 'HUB_RUNTIME_DEPLOYMENT_ID': '123'}), \
-                patch.object(sys, 'argv', ['rollout', '--execute']), contextlib.redirect_stdout(io.StringIO()):
-            if failure:
+                patch.object(sys, 'argv', args), contextlib.redirect_stdout(io.StringIO()):
+            if failure or reject_environment:
                 with self.assertRaises(RuntimeError):
                     rollout.main()
             else:
                 rollout.main()
+            if reject_environment:
+                self.assertFalse(rollout.checkpoint_directory('123').exists())
+                self.assertEqual(self.events, [])
 
     def test_success_resumes_only_after_all_roles_are_healthy(self):
         self.exercise()
         self.assertEqual(self.events, ['prepare', 'stop', 'up-backend', 'up-worker', 'up-scheduler', 'resume'])
+
+    def test_sage_rotation_is_rejected_without_explicit_opt_in(self):
+        self.exercise(sage_secret='fixture-next', reject_environment=True)
+
+    def test_compose_escaped_sage_secret_does_not_count_as_drift(self):
+        with patch.dict(os.environ, {'SAGE_CLIENT_SECRET': 'fixture-$previous'}):
+            self.exercise(sage_secret='fixture-$$previous')
+        self.assertEqual(self.events[-1], 'resume')
+
+    def test_sage_rotation_can_replace_the_single_secret_with_opt_in(self):
+        self.exercise(sage_secret='fixture-next', allow_rotation=True)
+        self.assertEqual(self.events, ['prepare', 'stop', 'up-backend', 'up-worker', 'up-scheduler', 'resume'])
+
+    def test_sage_rotation_rejects_blank_secret_and_mismatched_roles(self):
+        for value in ['', '  ', None]:
+            with self.subTest(value=value):
+                self.exercise(sage_secret=value, allow_rotation=True, reject_environment=True)
+        self.exercise(sage_secret='fixture-next', allow_rotation=True, reject_environment=True,
+                      environment_overrides={'worker': {'SAGE_CLIENT_SECRET': 'different-fixture'}})
+
+    def test_sage_rotation_rejects_additional_changes(self):
+        self.exercise(sage_secret='fixture-next', allow_rotation=True, reject_environment=True,
+                      environment_overrides={'scheduler': {'SAGE_CLIENT_ID': 'different-fixture'}})
+
+    def test_sage_rotation_rollback_restores_previous_secret(self):
+        self.exercise('worker', sage_secret='fixture-next', allow_rotation=True)
+        self.assertEqual(self.events[-3:], ['stop', 'rollback', 'resume'])
+        self.assertEqual(self.rollback_environment['SAGE_CLIENT_SECRET'], 'fixture-$$previous')
+        self.assertEqual(self.rollback_environment['SAGE_CLIENT_ID'], 'fixture-client')
 
     def test_worker_start_failure_rolls_back_before_resuming(self):
         self.exercise('worker')

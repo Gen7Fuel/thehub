@@ -32,6 +32,15 @@ def environment(item):
     return dict(value.split('=', 1) for value in item['Config']['Env'] if '=' in value)
 
 
+def rendered_environment(service):
+    values = service['environment']
+    configured = os.environ.get('SAGE_CLIENT_SECRET')
+    # Compose may escape dollars when serializing its rendered model to JSON.
+    if configured is not None and values.get('SAGE_CLIENT_SECRET') == configured.replace('$', '$$'):
+        return {**values, 'SAGE_CLIENT_SECRET': configured}
+    return values
+
+
 def runtime_user():
     # Bind-mounted checkpoint files must stay readable by the VPS operator.
     return str(os.getuid()) + ':' + str(os.getgid())
@@ -100,12 +109,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--recover', metavar='RUN_ID', help='Restore previous combined backend and original queue pause states')
+    parser.add_argument('--allow-sage-client-secret-rotation', action='store_true',
+                        help='Allow a nonempty SAGE_CLIENT_SECRET change while preserving all other runtime settings')
     args = parser.parse_args()
     root = Path.cwd()
     assert (root / 'compose.yaml').is_file()
     assert not Path('/home/gen7fuel/.hub-cdn-deploy-freeze').exists()
     assert not (args.execute and args.recover), 'Choose execute or recovery'
     if args.recover:
+        if args.allow_sage_client_secret_rotation:
+            parser.error('Sage client secret rotation cannot be combined with recovery')
         recover(args.recover)
         return
     original = inspect('backend')
@@ -118,14 +131,27 @@ def main():
         if current:
             assert current['Config']['Labels']['com.docker.compose.project'] == project
             assert current['Config']['Labels']['com.docker.compose.service'] == service
+    sage_secret_rotated = False
+    if args.allow_sage_client_secret_rotation:
+        sage_secret = rendered_environment(rendered['backend']).get('SAGE_CLIENT_SECRET')
+        if not isinstance(sage_secret, str) or not sage_secret.strip():
+            raise RuntimeError('SAGE_CLIENT_SECRET must be nonempty for a rotation')
+        sage_secret_rotated = sage_secret != old_env.get('SAGE_CLIENT_SECRET', '')
     for service, entry in [('backend', 'api.js'), ('worker', 'worker.js'), ('scheduler', 'scheduler.js')]:
         value = rendered[service]
+        settings = rendered_environment(value)
         assert value['image'] == os.environ['BACKEND_IMAGE']
         assert value['command'] == ['node', entry]
-        for key, value in value['environment'].items():
-            assert old_env.get(key, '') == str(value or ''), 'Existing runtime settings changed unexpectedly'
+        if args.allow_sage_client_secret_rotation and settings.get('SAGE_CLIENT_SECRET') != sage_secret:
+            raise RuntimeError('SAGE_CLIENT_SECRET must match across backend roles')
+        for key, value in settings.items():
+            if key == 'SAGE_CLIENT_SECRET' and sage_secret_rotated:
+                continue
+            if old_env.get(key, '') != str(value or ''):
+                raise RuntimeError('Existing runtime settings changed unexpectedly')
     if not args.execute:
-        print(json.dumps({'rehearsal': True, 'roles': ['api', 'worker', 'scheduler'], 'existingSettingsPreserved': True}))
+        print(json.dumps({'rehearsal': True, 'roles': ['api', 'worker', 'scheduler'],
+                          'existingSettingsPreserved': not sage_secret_rotated}))
         return
     run_id = os.environ.get('HUB_RUNTIME_DEPLOYMENT_ID', '')
     directory = checkpoint_directory(run_id)
@@ -199,6 +225,10 @@ def main():
             stop()
             command(['docker', 'compose', 'rm', '-f', 'worker', 'scheduler'])
             rollback_env = {**old_env, 'HUB_PROCESS_ROLE': 'all'}
+            if sage_secret_rotated:
+                # Prevent Compose from falling back to the candidate value and
+                # keep literal dollar characters in the previous secret.
+                rollback_env['SAGE_CLIENT_SECRET'] = old_env.get('SAGE_CLIENT_SECRET', '').replace('$', '$$')
             up(['backend'], {'services': {'backend': {'image': original['Config']['Image'],
                'command': ['node', 'app.js'], 'environment': rollback_env}}})
             safe_to_resume = True
