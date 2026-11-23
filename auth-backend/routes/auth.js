@@ -315,15 +315,15 @@ router.post("/login", async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
+    let mergedPermissions;
     // --- MAINTENANCE CHECK ---
     const ongoing = await Maintenance.findOne({ status: "ongoing" });
 
     if (ongoing) {
-      // Generate the merged tree using your existing utility
-      const mergedTree = await getMergedPermissionsTreeArray(user);
+      mergedPermissions = await getMergedPermissionsTreeArray(user);
 
       // Check the path: Module "settings" -> Permission "maintenance"
-      const canBypass = checkPermissionByPath(mergedTree, ["settings", "maintenance"]);
+      const canBypass = checkPermissionByPath(mergedPermissions, ["settings", "maintenance"]);
 
       if (!canBypass) {
         return res.status(503).json({
@@ -366,36 +366,7 @@ router.post("/login", async (req, res) => {
       changeSummary: { added: 0, removed: 0, replaced: 2, total: 2 },
     });
 
-    // Get merged permissions (role + custom)
-    // const mergedPermissions = await getMergedPermissions(user);
-    const mergedPermissions = await getMergedPermissionsTreeArray(user);
-
-    // Fetch location & timezone
-    let timezone = null;
-    if (user.stationName) {
-      const location = await Location.findOne({ stationName: user.stationName });
-      timezone = location?.timezone || null;
-    }
-
-    // Create JWT payload
-    const payload = {
-      id: user._id,
-      email: user.email,
-      location: user.stationName,
-      isSupport: user.isSupport,
-      name: `${user.firstName} ${user.lastName}`,
-      initials: getInitials(user.firstName, user.lastName),
-      permissions: mergedPermissions,
-      site_access: user.site_access,
-      timezone,
-    };
-
-    // Sign JWT
-    const expiresInSeconds = getSecondsUntilNext9AMUTC();
-
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: expiresInSeconds });
-
-    // Send response
+    const token = await issueToken(user, req.query.tokenFormat, mergedPermissions);
     res.json({ token });
   } catch (err) {
     console.error("Login error:", err);
@@ -430,18 +401,70 @@ function getInitials(firstName, lastName) {
   return firstInitial + lastInitial;
 }
 
+async function buildSession(user, permissions) {
+  const [mergedPermissions, location] = await Promise.all([
+    permissions ?? getMergedPermissionsTreeArray(user),
+    user.stationName ? Location.findOne({ stationName: user.stationName }) : null,
+  ]);
+  return {
+    id: user._id,
+    email: user.email,
+    location: user.stationName,
+    isSupport: user.isSupport,
+    name: `${user.firstName} ${user.lastName}`,
+    initials: getInitials(user.firstName, user.lastName),
+    permissions: mergedPermissions,
+    site_access: user.site_access,
+    timezone: location?.timezone || null,
+  };
+}
+
+async function issueToken(user, tokenFormat, permissions, legacyClaims = {}) {
+  // Older clients can keep using claims from the token while they adopt /session.
+  const payload = tokenFormat === 'compact'
+    ? { id: user._id }
+    : { ...await buildSession(user, permissions), ...legacyClaims };
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: getSecondsUntilNext9AMUTC() });
+}
+
+function verifySession(req) {
+  const authorization = req.get('Authorization');
+  if (!authorization?.startsWith('Bearer ')) return null;
+
+  try {
+    const session = jwt.verify(authorization.slice(7).trim(), process.env.JWT_SECRET, { algorithms: ['HS256'] });
+    return typeof session.id === 'string' && /^[a-f0-9]{24}$/i.test(session.id) ? session : null;
+  } catch {
+    return null;
+  }
+}
+
+router.get('/session', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  const session = verifySession(req);
+  if (!session) return res.status(401).json({ message: 'A valid session is required' });
+
+  try {
+    const user = await User.findById(session.id).select('-password');
+    if (!user || !user.is_active) {
+      return res.status(403).json({ message: 'Access Denied. Contact Admin.' });
+    }
+    res.locals.authAuditActor = {
+      userId: user._id,
+      username: user.email,
+      locationName: user.stationName,
+    };
+    res.json(await buildSession(user));
+  } catch (err) {
+    console.error('Error loading session:', err);
+    res.status(500).json({ message: 'Failed to load session' });
+  }
+});
+
 router.post("/refresh-token", async (req, res) => {
   try {
-    const authorization = req.get('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-      return res.status(401).json({ message: 'A valid session is required' });
-    }
-    let session;
-    try {
-      session = jwt.verify(authorization.slice(7).trim(), process.env.JWT_SECRET, { algorithms: ['HS256'] });
-    } catch {
-      return res.status(401).json({ message: 'A valid session is required' });
-    }
+    const session = verifySession(req);
+    if (!session) return res.status(401).json({ message: 'A valid session is required' });
     const { userId } = req.body;
     if (!userId) {
       return res.status(400).json({ message: "Missing userId in request body" });
@@ -460,41 +483,14 @@ router.post("/refresh-token", async (req, res) => {
     };
     if (!user.is_active) return res.status(403).json({ message: 'Access Denied. Contact Admin.' });
 
-    // Rebuild permissions / timezone / access if needed
-    // const mergedPermissions = await getMergedPermissions(user);
-    const mergedPermissions = await getMergedPermissionsTreeArray(user);
     const ongoing = await Maintenance.findOne({ status: 'ongoing' });
+    const mergedPermissions = ongoing ? await getMergedPermissionsTreeArray(user) : undefined;
     if (ongoing && !checkPermissionByPath(mergedPermissions, ['settings', 'maintenance'])) {
       return res.status(503).json({ message: 'The system is currently undergoing maintenance.',
         endTime: ongoing.scheduleClose, maintenanceActive: true });
     }
-    let timezone = null;
-    if (user.stationName) {
-      const location = await Location.findOne({ stationName: user.stationName });
-      timezone = location?.timezone || null;
-    }
-
-    // Prepare new token payload
-    const payload = {
-      id: user._id,
-      email: user.email,
-      location: user.stationName,
-      isSupport: user.isSupport,
-      name: `${user.firstName} ${user.lastName}`,
-      initials: getInitials(user.firstName, user.lastName),
-      permissions: mergedPermissions,
-      site_access: user.site_access,
-      access: user.access,
-      timezone,
-    };
-
-    // Generate new token
-    const expiresInSeconds = getSecondsUntilNext9AMUTC();
-    const newToken = jwt.sign(payload, process.env.JWT_SECRET, {
-      expiresIn: expiresInSeconds,
-    });
-
-    res.json({ token: newToken });
+    const token = await issueToken(user, req.query.tokenFormat, mergedPermissions, { access: user.access });
+    res.json({ token });
   } catch (err) {
     console.error("Error refreshing token:", err);
     res.status(500).json({ message: "Failed to refresh token" });

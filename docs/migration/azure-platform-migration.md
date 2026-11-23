@@ -6,6 +6,11 @@ is Hub, Desk and Fleet operating without an application dependency on the VPS.
 No Azure Relay is used. This is a preparation plan, not an infrastructure apply
 or production cutover. No quota increases or direct pushes to main are allowed.
 
+Latest decision: prepare and rehearse incrementally, then perform **one coordinated
+production cutover**. Production stays on the VPS until every required target is
+ready. Do not introduce a temporary VPS origin hostname or stagger production
+database moves. This supersedes the earlier separate database-window proposal.
+
 ## Runtime and data map
 
 Targets below are proposed deployment boundaries; SKU, region availability,
@@ -25,11 +30,11 @@ pack additional workloads onto the shared B1 without capacity measurements.
 | Hub PostgreSQL | VPS `postgres`, `hub_sql` | PostgreSQL Flexible Server 16 | Schemas/data/constraints/sequences/roles/migration history validated |
 | Hub Redis | VPS `redis`, BullMQ plus caches | Evaluate Azure Managed Redis with a BullMQ-compatible configuration | TLS/auth, scripts/commands/key placement, no-eviction policy, persistence and queue migration proven |
 | Shared email | VPS local-only email-service image, Hub and Desk consumers | First package/publish reproducible image; evaluate internal Container App retaining current mail transport | Both apps send controlled test mail; retries preserved, no unintended test deliveries |
-| Public edge | Host Caddy and Hub/Desk Caddy containers | Azure app ingress/custom domains/certificates; evaluate shared gateway only if routing requires it | All public paths, headers, WebSocket upgrades and certificates validated; no VPS upstream |
+| Public edge | Host Caddy and Hub/Desk Caddy containers | Keep existing public VPS Caddy for Azure acceptance and fast failback, then move HTTPS ingress to Azure after acceptance | All public paths, headers, WebSocket upgrades and certificates validated, followed by a separate edge handover |
 | Fleet Portal | VPS `fleet-portal`, shared Hub Mongo | Include runtime packaging and Azure web hosting, not only Mongo URI change | Portal flows/auth work against Azure Mongo; no private Docker IP dependency |
 | Desk frontend | VPS `desk-caddy`, Caddy frontend image | Azure web hosting with Desk domain and SPA behavior | Hub-facing pages, authentication, downloads and deep links work |
 | Desk API | VPS `desk-api`, `node index.js` | Azure web runtime after DB/files/integration preparation | Desk flows, Hub external-token exchange and Sage integrations verified |
-| Desk Mongo | VPS `desk-db-1`, Mongo 8.0.15 `desk` | Separate database/access boundary on Azure-hosted MongoDB | Native restore and application-level checks independent of Hub cutover |
+| Desk Mongo | VPS `desk-db-1`, Mongo 8.0.15 `desk` | Separate database/access boundary on Azure-hosted MongoDB | Independent restore rehearsal, coordinated final activation with Hub |
 | Desk CDN backup | VPS `desk-cdn-backup`, `node apps/cdn/cdn.backup-worker.js` | Dedicated background runtime; initially preserve its scheduler and command | One scheduled owner, source new Azure media account, destination archives preserved |
 | Desk POS files | API mounts `/pos/data` and `/pos/archive` | Decide Azure Files mount versus Blob-adapted ingestion after file-operation audit | Inbound feed, parsing, archive moves and restart recovery tested |
 | SFTP/FTP and local tools | External store SFTP, office proxy, VPS FTP and host scripts | Inventory each endpoint; move owned server/receiver to appropriate Azure runtime/storage | Uploaders/allowlists/DNS/keys and downstream schedules work without VPS |
@@ -72,26 +77,26 @@ backup worker has no filesystem mount in the inspected runtime.
    to run in multiple replicas. Establish baseline availability/latency/resource
    usage. Produce per-service costs and capacity checks without quota requests.
 2. **Databases:** execute the [database preparation/rehearsal plan](azure-databases.md).
-   Migrate Hub PostgreSQL, shared Hub Mongo and Desk Mongo in separate rehearsed
-   windows. VPS clients initially use direct authenticated TLS with narrow egress
-   allowlists; no Relay. Keep database isolation and secret ownership explicit.
-3. **Web runtimes:** cut over Hub auth/API, Fleet and Desk web/API after their
+   Rehearse Hub PostgreSQL, shared Hub Mongo and Desk Mongo independently against
+   isolated Azure copies. Production remains on VPS databases until the single
+   final cutover. Keep database isolation and secret ownership explicit; no Relay.
+3. **Web runtimes:** prepare Hub auth/API, Fleet and Desk web/API after their
    Azure dependencies pass isolated tests. Coordinate Socket.IO scaling/session
    behavior and Desk-to-Hub external tokens. Verify frontend production routing;
    the current Azure frontend preview still proxies VPS API/auth paths.
-4. **Queues and background services:** choose a Redis migration method proven
+4. **Queues and background services:** rehearse a Redis migration method proven
    compatible with the selected target. Quiesce producers and drain/pause workers
    under recorded pause state, preserve queue/delay state, switch all Redis clients
    together, then hand over workers and scheduler. Keep leader lease and Pub/Sub
    delivery consistent; do not run old/new schedulers against independent Redis
    stores. Move Desk backup scheduling with one owner and verify its next run.
-5. **Mail, files and integrations:** move the email service, POS feed/storage,
+5. **Mail, files and integrations:** prepare the email service, POS feed/storage,
    owned FTP/SFTP receivers/proxies, native backup/export jobs and remaining host
    tools. Identify access to external MSSQL/Azure SQL, Sage, store SFTP and office
    network services; those systems can remain external, but their path cannot
    depend on this VPS. Validate any Puppeteer/browser automation, OS packages,
    writable temp paths and outbound-IP allowlists on the chosen Azure runtime.
-6. **Edge and operations:** finalize custom domains, TLS, path routing and DNS
+6. **Edge and operations:** prepare custom domains, TLS, path routing and DNS
    cutover/rollback; preserve required CORS/cookies/proxy trust/client IP handling.
    Verify secrets/managed identities, alerting, logs, health/readiness, restart
    behavior, least-privilege access and native restore procedures.
@@ -101,10 +106,80 @@ backup worker has no filesystem mount in the inspected runtime.
    disable only migrated services, retain protected recovery copies and remove
    obsolete deploy credentials. Do not delete the VPS as a shortcut.
 
-Waves can overlap in preparation, but dependency gates control activation. All
+These are preparation workstreams; steps describing handover execute together
+only under the single production gate below. Waves can overlap in preparation,
+but dependency gates control activation. All
 rehearsal apps must fence real mail, accounting writes, file ingestion, schedules
 and queue side effects. Preserve original queue pause states during handover.
 Callback completion markers do not establish all asynchronous cron work drained.
+
+## Single production cutover gate
+
+Before scheduling the final window, every required Azure dependency must pass
+its isolated restore, restart and application checks, including SFTP/FTP/office
+paths, external SQL, mail, POS files, Redis and Desk backups. Frontend API/auth/
+Socket.IO and any required signaling upstreams must target Azure directly.
+The current preview sends requests to `app.gen7fuel.com`. Pointing public Caddy
+at that preview configuration would send those requests back to Caddy and form
+a proxy loop. Validate direct upstreams, signed-in browser flows and certificate
+verification before switching traffic.
+
+1. Freeze deployments and coordinate user maintenance across Hub, Desk and Fleet.
+   Fence old HTTP writers, queues/schedulers, ingestion, backup/export jobs and
+   operator tools; drain in-flight work. Record pause/lease states and source
+   configuration privately.
+2. Perform the rehearsed final database, Redis and owned file transfers from
+   quiesced sources. Restore/validate all targets together. Keep Azure production
+   side effects disabled until data and connections are verified.
+3. Change normal merge-to-main deployment workflows to Azure for every migrated
+   service and disable their VPS deployment paths. Preserve branch protections
+   and scoped identities. Do not let a queued old workflow restart VPS writers;
+   gate/fence old deployment credentials and service autostarts as appropriate.
+4. Keep public DNS and TLS termination on the existing VPS Caddy. Use the
+   rehearsed maintenance route and validated Azure upstream configuration to
+   switch traffic with a Caddy reload. Maintain the write fence through
+   transition verification. Use the existing public hostnames throughout
+   acceptance and prepare DNS changes only for the later edge handover.
+5. Enable the authoritative Azure path and resume producers, workers and a single
+   scheduler owner in the rehearsed order. Verify signed-in Hub/Desk/Fleet flows,
+   uploads, real-time events, queue delivery and integrations. Keep old VPS
+   writers disabled throughout acceptance and recovery retention.
+
+The maintenance duration includes measured transfer/restore/validation time;
+zero downtime is not promised. Before Azure accepts new writes, rollback can
+restore the original VPS path consistently. After Azure accepts writes, do not
+re-enable stale VPS databases: fence writers and use forward repair or rehearsed
+reverse transfer/reconciliation. DNS rollback alone is not data rollback.
+
+## Fast rollback requirement
+
+Keep known-good VPS images, configuration and certificates warm during recovery.
+The user selected the existing public VPS Caddy as the HTTPS edge for acceptance
+and fast failback. Its tested reload path supports the proposed sub-minute
+objective for new requests. The isolated Caddy 2.11.9 drill took 4.512 seconds
+for maintenance and VPS reloads plus a verified HTTPS response against synthetic
+origins. Production recovery time still requires an integrated drill covering
+writer fencing, data checks and WebSocket reconnects.
+
+Retain healthy Azure background owners when only web routing fails. Transfer
+worker or scheduler ownership only when needed and after fencing the old owner.
+Avoid automatic replay of requests that can create duplicate writes. The VPS
+remains an ingress dependency until the later HTTPS/DNS handover is complete.
+
+| Failure point | Recovery path | Required evidence |
+| --- | --- | --- |
+| Before Azure accepts production writes | Restore original VPS routing and original data consumers under the write fence | Timed end-to-end drill, including original queue/lease state |
+| Azure app/runtime fails after writes begin, Azure data remains healthy | Route to warm VPS app runtimes using the same authoritative Azure Mongo/PostgreSQL/Redis; leave stale VPS databases fenced | TLS/network/credentials and known-good image compatibility tested in advance; drain/fence old active workers and hand over one scheduler |
+| Azure data service is unavailable or data is corrupt after new writes | Supported replication/promotion or measured reverse transfer/restore/reconciliation | Explicit recovery-time and data-loss objectives from tests; consistent recovery across databases, queues and files |
+
+The runtime-failback path needs a preconfigured, narrowly allowlisted VPS-to-Azure
+data connection used only for recovery; it is not a production database staging
+window or Relay bridge. If that connection is unavailable or untested, this tier
+is not ready. A full database outage cannot be solved by flipping app routes.
+Dump/restore alone does not support a promise of instant zero-loss failback.
+Target selection must account for replication/export/restore capabilities and
+costs before paid provisioning. Verify in-flight HTTP/WebSocket handling and
+side-effect retry/idempotency for email, accounting and queue jobs in timed drills.
 
 ## What "finished" means
 

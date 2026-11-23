@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 
-const { mockNavigate, mockState, mockAxiosGet, mockAxiosPost, mockSocket } = vi.hoisted(() => ({
+const { mockNavigate, mockState, mockAxiosGet, mockAxiosPost, mockSocket, mockRefreshAuth } = vi.hoisted(() => ({
   mockNavigate: vi.fn(),
   mockState: { access: {} as any, unreadCount: 0 },
   mockAxiosGet: vi.fn(),
   mockAxiosPost: vi.fn(),
   mockSocket: { on: vi.fn(), off: vi.fn(), emit: vi.fn(), connected: false },
+  mockRefreshAuth: vi.fn(async () => {}),
 }))
 
 vi.mock('@tanstack/react-router', () => ({
@@ -19,7 +20,8 @@ vi.mock('@tanstack/react-router', () => ({
 vi.mock('@/context/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'u1', access: mockState.access },
-    refreshTokenFromBackend: vi.fn(),
+    refreshAuth: mockRefreshAuth,
+    clearSession: vi.fn(),
   }),
 }))
 
@@ -71,6 +73,18 @@ beforeEach(() => {
     Promise.resolve({ data: url.includes('unread-count') ? { count: mockState.unreadCount } : [] })
   )
   mockAxiosPost.mockResolvedValue({})
+})
+
+it('reloads session access when the server reports a permission change', () => {
+  localStorage.setItem('token', 'session-token')
+  render(<Navbar />)
+  const listener = mockSocket.on.mock.calls.find(([event]) => event === 'permissions-updated')?.[1]
+  expect(listener).toBeTypeOf('function')
+
+  listener()
+
+  expect(mockRefreshAuth).toHaveBeenCalledOnce()
+  expect(localStorage.getItem('token')).toBe('session-token')
 })
 
 // Note on the environment: jsdom applies no CSS, so the `md:hidden` /

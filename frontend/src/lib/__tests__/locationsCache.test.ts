@@ -29,6 +29,22 @@ describe('saveCachedLocations / getCachedLocations', () => {
     expect(getCachedLocations()).toEqual(sampleLocations)
   })
 
+  it('persists only picker fields and the register fields needed offline', () => {
+    saveCachedLocations([{
+      ...sampleLocations[0],
+      pushOverUserKey: 'fake-key',
+      managerEmails: ['manager@example.test'],
+      managerCode: 1234,
+      devices: [{ deviceName: 'test-device' }],
+      registers: [{ _id: 'reg1', number: '01', extra: 'discard' }, { number: '02' }],
+    }])
+
+    expect(JSON.parse(localStorage.getItem('cachedLocations')!)).toEqual([{
+      ...sampleLocations[0],
+      registers: [{ _id: 'reg1', number: '01' }, { number: '02' }],
+    }])
+  })
+
   it('returns an empty array when nothing has ever been cached', () => {
     expect(getCachedLocations()).toEqual([])
   })
@@ -53,6 +69,24 @@ describe('saveCachedLocations / getCachedLocations', () => {
 // ─── prefetchLocations ─────────────────────────────────────────────────────────
 
 describe('prefetchLocations', () => {
+  it('scrubs an existing cache before the network request settles', async () => {
+    localStorage.setItem('cachedLocations', JSON.stringify([
+      { ...sampleLocations[0], pushOverUserKey: 'fake-key', managerCode: 1234 },
+      sampleLocations[1],
+    ]))
+    let rejectRequest!: (error: Error) => void
+    mockListLocations.mockReturnValue(new Promise((_, reject) => {
+      rejectRequest = reject
+    }))
+
+    prefetchLocations()
+
+    expect(JSON.parse(localStorage.getItem('cachedLocations')!)).toEqual(sampleLocations)
+    rejectRequest(new Error('Network Error'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(getCachedLocations()).toEqual(sampleLocations)
+  })
+
   it('caches the response body on a successful API request', async () => {
     mockListLocations.mockResolvedValue(sampleLocations)
 

@@ -6,13 +6,20 @@ export const authApi = {
     return (await authClient.post('/identify', { email }, requestConfig(options))).data
   },
   async login<T = { token: string }>(email: string, password: string, options: RequestOptions): Promise<T> {
-    return (await authClient.post('/login', { email, password }, requestConfig(options))).data
+    return (await authClient.post('/login', { email, password }, {
+      ...requestConfig(options), params: { tokenFormat: 'compact' },
+    })).data
   },
   async register<T = unknown>(input: { email: string; password: string; firstName: string; lastName: string; stationName: string }, options: RequestOptions): Promise<T> {
     return (await authClient.post('/register', input, requestConfig(options))).data
   },
   async refreshToken<T = { token: string }>(userId: string, options: RequestOptions): Promise<T> {
-    return (await authClient.post('/refresh-token', { userId }, requestConfig(options))).data
+    return (await authClient.post('/refresh-token', { userId }, {
+      ...requestConfig(options), params: { tokenFormat: 'compact' },
+    })).data
+  },
+  async getSession<T>(options: RequestOptions): Promise<T> {
+    return (await authClient.get('/session', requestConfig(options))).data
   },
   async getMaintenanceStatus<T = unknown>(options: RequestOptions): Promise<T> {
     return (await authClient.get('/maintenance-status', requestConfig(options))).data
