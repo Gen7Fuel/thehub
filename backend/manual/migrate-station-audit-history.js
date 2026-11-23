@@ -158,6 +158,15 @@ async function initialAssignees(department, location) {
   return fallbackAssignees(department);
 }
 
+async function historicalStatusActor(department) {
+  if (department.assignmentStrategy === "station_manager") {
+    const hoAdminHeads = await activeHoAdminHead();
+    return hoAdminHeads[0] || null;
+  }
+  const departmentHeads = await activeUsersByIds([department.departmentHead]);
+  return departmentHeads[0] || null;
+}
+
 async function loadConfiguration() {
   const [sections, checklists, revisions, optionSets, departments, locations] = await Promise.all([
     StationAuditSection.find({ legacyTemplateId: { $exists: true } }).lean(),
@@ -409,6 +418,16 @@ async function preflightAssignments(plan) {
         `Open issue item ${issue.source._id} ("${issue.source.item}"): no active default assignee, department head, station manager, or HO Admin head could be resolved`
       );
     }
+    if (issue.timeline.length > 1) {
+      issue.statusActor = await historicalStatusActor(issue.department);
+      if (!issue.statusActor) {
+        plan.errors.push(
+          issue.department.assignmentStrategy === "station_manager"
+            ? `Open issue item ${issue.source._id} ("${issue.source.item}"): no active HO Admin department head could be resolved for migrated status activity`
+            : `Open issue item ${issue.source._id} ("${issue.source.item}"): department "${issue.department.name}" has no active department head for migrated status activity`
+        );
+      }
+    }
   }
 }
 
@@ -501,7 +520,7 @@ async function applyPlan(plan) {
       const activityDocument = {
         issue: issue._id,
         eventType: index === 0 ? "issue_raised" : "status_changed",
-        actor: null,
+        actor: index === 0 ? run.completedBy : entry.statusActor._id,
         body: index === 0 ? response.comment : "Migrated from legacy audit issue history",
         photos: index === 0 ? response.photos : [],
         changes: [{

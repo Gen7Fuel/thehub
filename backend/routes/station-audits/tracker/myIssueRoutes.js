@@ -132,7 +132,28 @@ function peopleLabel(users = []) {
     .join(", ");
 }
 
-async function departmentAssignees(department) {
+async function stationManagerAssignees(location) {
+  const managerEmails = [...new Set((location?.managerEmails || [])
+    .map((email) => String(email || "").trim().toLowerCase())
+    .filter(Boolean))];
+  if (!managerEmails.length) return [];
+
+  const users = await mongoose.connection.collection("users")
+    .find({
+      email: { $in: managerEmails.map((email) => new RegExp(`^${escapeRegex(email)}$`, "i")) },
+      is_active: true,
+    })
+    .project({ _id: 1, email: 1, firstName: 1, lastName: 1 })
+    .toArray();
+  const byEmail = new Map(users.map((user) => [String(user.email || "").trim().toLowerCase(), user]));
+  return managerEmails.map((email) => byEmail.get(email)).filter(Boolean);
+}
+
+async function departmentAssignees(department, location = null) {
+  if (department.assignmentStrategy === "station_manager") {
+    const managers = await stationManagerAssignees(location);
+    if (managers.length) return managers;
+  }
   const defaults = await activeUsersByIds(department.defaultIssueAssignees || []);
   if (defaults.length) return defaults;
   return activeUsersByIds([department.departmentHead]);
@@ -685,13 +706,16 @@ router.get("/:issueId/department-options", async (req, res) => {
     if (!isDepartmentScope(req)) return res.status(404).json({ error: "Department transfer is only available from Department Issues" });
     const issue = await assignedAccessibleIssue(req, req.params.issueId);
     if (!issue) return res.status(404).json({ error: "Accessible department issue not found" });
-    const departments = await StationAuditDepartment.find({ active: true })
-      .select("name departmentHead defaultIssueAssignees isAdminDepartment")
-      .sort({ name: 1 })
-      .lean();
+    const [departments, location] = await Promise.all([
+      StationAuditDepartment.find({ active: true })
+        .select("name departmentHead defaultIssueAssignees assignmentStrategy isAdminDepartment")
+        .sort({ name: 1 })
+        .lean(),
+      Location.findById(issue.site).select("managerEmails").lean(),
+    ]);
     const options = [];
     for (const department of departments) {
-      const assignees = await departmentAssignees(department);
+      const assignees = await departmentAssignees(department, location);
       options.push({
         _id: department._id,
         name: department.name,
@@ -834,13 +858,14 @@ router.post("/:issueId/department", async (req, res) => {
     if (!comment) return res.status(400).json({ error: "A department change comment is required" });
     if (String(issue.currentDepartment) === departmentId) return res.status(409).json({ error: "This issue already belongs to that department" });
 
-    const [currentDepartment, destination] = await Promise.all([
+    const [currentDepartment, destination, location] = await Promise.all([
       StationAuditDepartment.findById(issue.currentDepartment).select("name departmentHead").lean(),
       StationAuditDepartment.findOne({ _id: departmentId, active: true })
-        .select("name departmentHead defaultIssueAssignees isAdminDepartment").lean(),
+        .select("name departmentHead defaultIssueAssignees assignmentStrategy isAdminDepartment").lean(),
+      Location.findById(issue.site).select("managerEmails").lean(),
     ]);
     if (!destination) return res.status(404).json({ error: "The selected department is not active or no longer exists" });
-    const nextAssignees = await departmentAssignees(destination);
+    const nextAssignees = await departmentAssignees(destination, location);
     if (!nextAssignees.length) return res.status(409).json({ error: "The selected department has no active default assignee or department head" });
 
     const previousUsers = await activeUsersByIds(issue.assignees || []);
@@ -992,9 +1017,10 @@ router.post("/:issueId/escalate", async (req, res) => {
 });
 
 // GET /api/station-audits/tracker/my-issues/:issueId
-// Opening the dedicated issue page records the assignee's first view exactly
-// once. Admin-only reads use their separate access logging and never reach
-// this assignee-scoped route unless the admin is also assigned.
+// GET /api/station-audits/tracker/department-issues/:issueId
+// Opening either dedicated issue page records an assignee's first view exactly
+// once. Department/admin viewers who are not assigned remain covered only by
+// access logging because recordFirstAssigneeView is assignment-scoped.
 router.get("/:issueId", async (req, res) => {
   try {
     const userId = req.user?._id;
@@ -1002,7 +1028,7 @@ router.get("/:issueId", async (req, res) => {
     const accessibleIssue = await assignedAccessibleIssue(req, req.params.issueId);
     if (!accessibleIssue) return res.status(404).json({ error: "Open assigned issue not found" });
 
-    if (!isDepartmentScope(req)) await recordFirstAssigneeView(accessibleIssue, userId);
+    await recordFirstAssigneeView(accessibleIssue, userId);
     const issue = await StationAuditIssue.findById(accessibleIssue._id)
       .select("response run checklist section originDepartment currentDepartment site snapshot status priority assignees escalation previousIssue occurrenceNumber raisedBy raisedAt resolvedBy resolvedAt updatedAt")
       .populate("site", "stationName site timezone")

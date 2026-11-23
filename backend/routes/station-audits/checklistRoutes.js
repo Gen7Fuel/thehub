@@ -11,6 +11,9 @@ const {
   isChecklistVisible,
 } = require("../../services/stationAuditIssueVisibility");
 const {
+  notifyStationAuditIssueAssigned,
+} = require("../../services/stationAuditIssueNotification");
+const {
   StationAuditSection,
   StationAuditChecklist,
   StationAuditChecklistRevision,
@@ -625,6 +628,16 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
     }
 
     if (issue && shouldCreateIssue(type, input)) {
+      if (!existingIssue && issueAssigneeUsers.length) {
+        notifyStationAuditIssueAssigned({
+          req,
+          issueId: issue._id,
+          assignees: issueAssigneeUsers.map((user, index) => ({
+            user,
+            role: index === 0 ? "owner" : "collaborator",
+          })),
+        });
+      }
       try {
         await queueIssueRaisedEmail({
           issue,

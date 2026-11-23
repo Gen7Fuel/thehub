@@ -9,7 +9,7 @@ const CRON_MODULES = [
   'weeklyArReportCron', 'itemBkSanitizationCron', 'cycleCountReportCron',
   'syncStgLiveFuelPriceCron', 'syncDailyStgLiveFuelCron', 'fetchBullochShiftsCron',
   'autoSumitCashSummaryReportCron', 'postgresParquetExportCron', 'arCustomerSyncCron',
-  'stationAuditVisitorReportCron',
+  'stationAuditVisitorReportCron', 'stationAuditUnreadIssueReminderCron',
 ];
 async function startBackground(io, onFailure) {
   const { runsWorkers, runsSchedules } = require('./role');

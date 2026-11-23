@@ -94,9 +94,9 @@ function App() {
             >
               {access?.stationAudit?.value && (
                 <>
-                  <NavButton to="/audit" label="Station Audits" icon={Layers} theme="emerald" />
+                  {/* <NavButton to="/audit" label="Station Audits" icon={Layers} theme="emerald" /> */}
                   {/* Temporarily hidden during Station Audits testing. Routes remain available by direct URL. */}
-                  {/* <NavButton to="/station-audits/checklist" label="Station Audits New" icon={ListChecks} theme="emerald" /> */}
+                  <NavButton to="/station-audits/checklist" label="Station Audits New" icon={Layers} theme="emerald" />
                 </>
               )}
               {access?.auditManager?.value && (
