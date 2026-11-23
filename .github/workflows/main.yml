@@ -19,6 +19,11 @@ on:
           - auth-backend
           - cdn
           - all
+      rotate_sage_client_secret:
+        description: Allow only the Sage client secret to change during a backend deployment
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: hub-vps-deployment
@@ -60,12 +65,17 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           SELECTED_SERVICE: ${{ inputs.service }}
+          ROTATE_SAGE_CLIENT_SECRET: ${{ inputs.rotate_sage_client_secret }}
           BACKEND_CHANGED: ${{ steps.filter.outputs.backend }}
           AUTH_BACKEND_CHANGED: ${{ steps.filter.outputs.auth-backend }}
           CDN_CHANGED: ${{ steps.filter.outputs.cdn }}
           CDN_DEPLOY_TARGET: ${{ vars.CDN_DEPLOY_TARGET }}
           FRONTEND_CHANGED: ${{ steps.filter.outputs.frontend }}
         run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$ROTATE_SAGE_CLIENT_SECRET" = "true" ] && [ "$SELECTED_SERVICE" != "backend" ]; then
+            echo "Sage client secret rotation requires a backend-only deployment"
+            exit 1
+          fi
           for service in backend auth-backend cdn frontend; do
             if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
               changed=false
@@ -287,11 +297,14 @@ jobs:
 
       - name: Execute Server Deployment Pipeline
         uses: appleboy/ssh-action@v0.1.7
+        env:
+          SAGE_CLIENT_SECRET: ${{ secrets.SAGE_CLIENT_SECRET }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.HUB_DEPLOY_SSH_KEY_V2 }}
           fingerprint: ${{ vars.HUB_DEPLOY_HOST_FINGERPRINT_V2 }}
+          envs: SAGE_CLIENT_SECRET
           command_timeout: 40m
           script: |
             set -e
@@ -337,7 +350,6 @@ jobs:
             export INTACCT_CLIENT_SECRET="${{ secrets.INTACCT_CLIENT_SECRET }}"
             export INTACCT_CALLBACK_URL="${{ secrets.INTACCT_CALLBACK_URL }}"
             export SAGE_CLIENT_ID="${{ secrets.SAGE_CLIENT_ID }}"
-            export SAGE_CLIENT_SECRET="${{ secrets.SAGE_CLIENT_SECRET }}"
             export CDN_ADMIN_TOKEN="${{ secrets.CDN_ADMIN_TOKEN }}"
             export ACADEMY_ADMIN_TOKEN="${{ secrets.ACADEMY_ADMIN_TOKEN }}"
             export NEXT_PUBLIC_SUPABASE_URL="${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}"
@@ -383,7 +395,11 @@ jobs:
             if [ "${{ needs.check-changes.outputs.backend }}" = "true" ]; then
                 echo "Draining queues and deploying API, worker, and scheduler..."
                 export HUB_RUNTIME_DEPLOYMENT_ID="${{ github.run_id }}"
-                python3 infra/vps/deploy-backend-roles.py --execute
+                if [ "${{ github.event_name == 'workflow_dispatch' && inputs.service == 'backend' && inputs.rotate_sage_client_secret }}" = "true" ]; then
+                    python3 infra/vps/deploy-backend-roles.py --execute --allow-sage-client-secret-rotation
+                else
+                    python3 infra/vps/deploy-backend-roles.py --execute
+                fi
             fi
 
             if [ "${{ needs.check-changes.outputs.cdn }}" = "true" ]; then
