@@ -26,10 +26,14 @@ workflow builds one image and deploys all three roles under its existing flock.
 No new GitHub secret or variable is needed.
 
 The rollout coordinator validates settings against the current backend before
-changing applications. If an integration secret is intentionally changed,
-update this validation deliberately as part of that change; unexpected drift
-fails before draining. CDN routing is still checked by the existing migration
-preflight and remains pointed at Azure.
+changing applications. Unexpected drift fails before draining. To apply an
+approved `SAGE_CLIENT_SECRET` rotation, manually dispatch **Deploy to Server**
+on `main` with `service=backend` and `rotate_sage_client_secret=true`. The
+candidate must be nonblank and identical across all three roles. Other settings
+must pass the usual validation. An automatic push deployment uses strict
+validation, including the automatic run that can follow merging a change under
+`infra/vps/`. Coordinate that merge as a production deployment. CDN routing is
+still checked by the existing migration preflight and remains pointed at Azure.
 
 The coordinator records each queue's original pause flag in
 `~/.hub-backend-runtime/<run-id>/state.json`, pauses those 15 queues, and allows
@@ -55,8 +59,9 @@ missed schedules. Do not run `node app.js` alongside the separated worker.
 
 A failed start or health check stops all three new roles before restoring the
 previous image as a combined `node app.js` backend. Only after that backend is
-healthy are queues restored. PostgreSQL schema changes are not reversed by an
-image rollback; keep migrations backward compatible as before.
+healthy are queues restored. Automatic rollback also restores the previous Sage
+client secret for a rotated deployment. PostgreSQL schema changes are not
+reversed by an image rollback; keep migrations backward compatible as before.
 
 If containers cannot be stopped or rollback fails, queues stay paused. The
 checkpoint survives; a later deployment refuses unfinished checkpoints. Under
@@ -71,7 +76,10 @@ restores the prior combined backend, verifies health, then restores pause flags
 using the new image's queue helper. Credentials are read from the existing
 backend container into process memory. If that container has been removed,
 recovery refuses; reconstruct the original environment through the deployment
-workflow before proceeding. Do not delete checkpoints or blindly resume queues.
+workflow before proceeding. If an interrupted rotation already replaced the
+backend, manual recovery will reuse that container's new Sage secret. Confirm
+which authorized credential this recovery should use before resuming queues.
+Do not delete checkpoints or blindly resume queues.
 Never use `docker compose down` for rollback: database volumes are shared.
 
 `python3 infra/vps/deploy-backend-roles.py` without flags is read-only. It
