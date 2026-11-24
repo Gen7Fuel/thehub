@@ -605,8 +605,8 @@ router.post('/', async (req, res) => {
       attachments: attachments
     };
 
-    // const targetMailbox = "nsporders@nspetroleum.ca"; // Production
-    const targetMailbox = "daksh@gen7fuel.com"; // testing
+    const targetMailbox = "nsporders@nspetroleum.ca"; // Production
+    // const targetMailbox = "daksh@gen7fuel.com"; // testing
     const draftJob = await fuelOrderDraftQueue.add(
       `fuel-order-draft-${Date.now()}`,
       {
