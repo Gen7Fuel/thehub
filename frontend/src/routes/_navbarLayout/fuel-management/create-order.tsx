@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelGradeOptionsQuery } from '@/api/fuel-management/fuel-grades.service'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
@@ -32,8 +33,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { getGradeTheme } from "./manage/locations/$id";
-// import { gradeConfig } from "./workspace"
+import { getOrderGradeItems, getOrderTankGrade } from '@/lib/fuelOrderGrades'
 import { PDFViewer, PDFDownloadLink, pdf } from "@react-pdf/renderer";
 import {
   Dialog,
@@ -180,7 +180,6 @@ function CreateFuelOrder() {
     ],
   });
 
-  const [_, setProjections] = useState<Record<string, GradeProjection>>({});
   // --- Fetch Locations using TanStack Query ---
   const { data: locations = [], isLoading: isLoadingLocations } = useQuery({
     queryKey: ["locations-list"],
@@ -189,74 +188,41 @@ function CreateFuelOrder() {
     },
     staleTime: 0,
   });
+  const gradeQuery = useQuery(fuelGradeOptionsQuery);
+  const catalog = gradeQuery.data ?? [];
+  const gradeByKey = new Map(catalog.map(grade => [grade.key, grade]));
+  const selectedRack = racks.find(rack => rack._id === formData.rackId);
+  const selectedSupplier = suppliers.find(supplier => supplier._id === formData.supplierId);
+  const selectedCarrier = carriers.find(carrier => carrier._id === formData.carrierId);
+  const primaryBadge = selectedSupplier?.supplierBadges.find(badge => badge.badgeNumber === formData.badgeNo);
+  const secondaryBadge = selectedSupplier?.supplierBadges.find(badge => badge.badgeNumber === formData.secondaryBadgeNo);
+  const rackGrades: string[] = selectedRack?.availableGrades ?? [];
 
-  // --- Cascading Logic: Station Selection ---
-  // Inside your RouteComponent...
+  const orderStations = (isSplit ? formData.splits : [formData]).map((section, index) => {
+    const station = locations.find(location => location._id === section.stationId);
+    const stationGrades: string[] = station?.availableStationGrades ?? [];
+    const secondaryQuantities = isSplit ? formData.secondarySplits[index].items : formData.secondaryItems;
 
-  const getDynamicStationGrades = (
-    stationGrades: string[],
-    rackGrades: string[],
-    badgeGrades: string[],
-  ) => {
-    const dynamic = [...(stationGrades || [])];
-
-    // Rule: Rack has E15, Badge has E15, and Station has "Regular"
-    const allowsSummerE15 =
-      rackGrades.includes("E15") &&
-      badgeGrades.includes("E15") &&
-      dynamic.includes("Regular");
-
-    if (allowsSummerE15 && !dynamic.includes("E15")) {
-      dynamic.push("E15");
-    }
-    return dynamic;
-  };
+    return {
+      station,
+      stationId: section.stationId,
+      poNumber: section.poNumber,
+      secondaryPoNumber: section.secondaryPoNumber,
+      projections: section.projections,
+      items: getOrderGradeItems(catalog, stationGrades, rackGrades, primaryBadge?.availableGrades ?? [], section.items),
+      secondaryItems: formData.isMultiBadge
+        ? getOrderGradeItems(catalog, stationGrades, rackGrades, secondaryBadge?.availableGrades ?? [], secondaryQuantities)
+        : [],
+    };
+  });
 
   const handleStationChange = async (stationId: string, index: number) => {
     const station = locations.find((s: any) => s._id === stationId);
     if (!station) return;
-    let logisticsDefaults:
-      | {
-          rack: any;
-          rackSuppliers: FuelSupplier[];
-          supplierId: string;
-          badgeNo: string;
-        }
-      | undefined;
-
-    // 1. Immediate State Update (Optimistic with Dynamic E15 check)
-    setFormData((prev) => {
-      const currentRack = racks.find((r) => r._id === prev.rackId);
-      const rackGrades = currentRack?.availableGrades || [];
-
-      const selectedSup = suppliers.find((s) => s._id === prev.supplierId);
-      const currentBadge = selectedSup?.supplierBadges?.find(
-        (b) => b.badgeNumber === prev.badgeNo,
-      );
-      const badgeGrades = currentBadge?.availableGrades || [];
-
-      // Evaluate dynamic station grades before setting initial arrays
-      const dynamicStationGrades = getDynamicStationGrades(
-        station.availableStationGrades || [],
-        rackGrades,
-        badgeGrades,
-      );
-
-      const newSplits = [...prev.splits];
-      newSplits[index] = {
-        ...(newSplits[index] || { items: [] }),
-        stationId,
-        items: dynamicStationGrades
-          .filter((grade: string) => rackGrades.includes(grade))
-          .map((grade: string) => {
-            const existing = prev.splits[index]?.items?.find(
-              (i) => i.grade === grade,
-            );
-            return { grade, ltrs: existing?.ltrs || 0 };
-          }),
-      };
-      return { ...prev, splits: newSplits };
-    });
+    setFormData(prev => ({
+      ...prev,
+      splits: prev.splits.map((split, splitIndex) => splitIndex === index ? { ...split, stationId } : split),
+    }));
 
     // 2. Global Logistics (Only for the first station/master)
     if (index === 0) {
@@ -276,7 +242,7 @@ function CreateFuelOrder() {
         }));
 
         if (defaultRackId) {
-          logisticsDefaults = await handleRackChange(
+          await handleRackChange(
             defaultRackId,
             stationId,
             stationDefaultCarrierId,
@@ -288,13 +254,12 @@ function CreateFuelOrder() {
       }
     }
 
-    // 3. Sync PO and Projections (This will re-run filtering cleanly)
+    // Sync the PO and tank projections.
     await syncStationData(
       stationId,
       index,
       formData.orderDate,
       formData.deliveryDate,
-      logisticsDefaults,
     );
   };
 
@@ -306,11 +271,11 @@ function CreateFuelOrder() {
   ) => {
     try {
       const rack = await fuelRacksService.get<any>(rackId, 'fuel-management.create-order');
-      const rackGrades = rack.availableGrades || [];
       const rackCarriers = rack.associatedCarriers || [];
 
       const rackSuppliers = await fuelSuppliersService.list<FuelSupplier[]>(rackId, 'fuel-management.create-order', `Fuel suppliers viewed for rack ${rackId} while creating an order`);
 
+      setRacks(current => current.map(entry => entry._id === rackId ? rack : entry));
       setSuppliers(rackSuppliers);
       setCarriers(rackCarriers);
 
@@ -329,7 +294,6 @@ function CreateFuelOrder() {
       const defaultBadge =
         defaultSup?.supplierBadges?.find((b: any) => b.isDefault) ||
         defaultSup?.supplierBadges?.[0];
-      const defaultBadgeGrades = defaultBadge?.availableGrades || []; // Get grades for dynamic check
 
       // 2. Carrier Logic...
       const targetStationId = currentStationId || formData.stationId;
@@ -352,66 +316,19 @@ function CreateFuelOrder() {
         );
       }
 
-      setFormData((prev) => {
-        // 3. Update all active splits with the new Rack's dynamically evaluated grades
-        const updatedSplits = prev.splits.map((split) => {
-          if (!split.stationId) return split;
-
-          const splitStation = locations.find(
-            (l: any) => l._id === split.stationId,
-          );
-
-          // DYNAMIC TWEAK HERE
-          const dynamicStationGrades = getDynamicStationGrades(
-            splitStation?.availableStationGrades || [],
-            rackGrades,
-            defaultBadgeGrades,
-          );
-
-          const newFilteredItems = rackGrades
-            .filter((g: string) => dynamicStationGrades.includes(g))
-            .map((g: string) => {
-              const existing = split.items.find((i) => i.grade === g);
-              return { grade: g, ltrs: existing?.ltrs || 0 };
-            });
-
-          return { ...split, items: newFilteredItems };
-        });
-
-        const update: FuelOrderFormData = {
-          ...prev,
-          rackId,
-          supplierId: defaultSup?._id || "",
-          badgeNo: defaultBadge?.badgeNumber || "",
-          carrierId: finalCarrierId,
-          splits: updatedSplits,
-          isMultiBadge: false,
-          secondaryBadgeNo: "",
-          secondaryItems:
-            updatedSplits[0]?.items.map((i: any) => ({ ...i, ltrs: 0 })) || [],
-          secondarySplits: updatedSplits.map((s) => ({
-            ...s,
-            items: s.items.map((i: any) => ({ ...i, ltrs: 0 })),
-          })),
-        };
-
-      if (!isSplit && updatedSplits[0]) {
-          update.items = updatedSplits[0].items;
-          update.carrierId = finalCarrierId;
-        }
-
-        return update;
-      });
-
-      return {
-        rack,
-        rackSuppliers,
+      setFormData(prev => ({
+        ...prev,
+        rackId,
         supplierId: defaultSup?._id || "",
         badgeNo: defaultBadge?.badgeNumber || "",
-      };
+        carrierId: finalCarrierId,
+        isMultiBadge: false,
+        secondaryBadgeNo: "",
+        secondaryItems: [],
+        secondarySplits: prev.secondarySplits.map(split => ({ ...split, items: [] })),
+      }));
     } catch (err) {
-      console.error("Error in Rack domino chain:", err);
-      return undefined;
+      console.error("Error loading rack logistics:", err);
     }
   };
 
@@ -420,59 +337,17 @@ function CreateFuelOrder() {
     const defaultBadge =
       selectedSup?.supplierBadges?.find((b) => b.isDefault) ||
       selectedSup?.supplierBadges?.[0];
-    const badgeGrades = defaultBadge?.availableGrades || [];
 
-    setFormData((prev) => {
-      const currentRack = racks.find((r) => r._id === prev.rackId);
-      const rackGrades = currentRack?.availableGrades || [];
-
-      // Recalculate and filter current primary splits tracking configurations
-      const updatedSplits = prev.splits.map((split) => {
-        if (!split.stationId) return split;
-
-        const splitStation = locations.find(
-          (l: any) => l._id === split.stationId,
-        );
-        const dynamicStationGrades = getDynamicStationGrades(
-          splitStation?.availableStationGrades || [],
-          rackGrades,
-          badgeGrades,
-        );
-
-        const newFilteredItems = rackGrades
-          .filter((g: string) => dynamicStationGrades.includes(g))
-          .map((g: string) => {
-            const existing = split.items.find((i) => i.grade === g);
-            return { grade: g, ltrs: existing?.ltrs || 0 };
-          });
-
-        return { ...split, items: newFilteredItems };
-      });
-
-      const update = {
-        ...prev,
-        supplierId,
-        badgeNo: defaultBadge?.badgeNumber || "",
-        splits: updatedSplits,
-        isMultiBadge: false,
-        secondaryBadgeNo: "",
-        secondaryPoNumber: "",
-        secondaryItems: (updatedSplits[0]?.items || prev.items).map((i:any) => ({
-          ...i,
-          ltrs: 0,
-        })),
-        secondarySplits: updatedSplits.map((s) => ({
-          ...s,
-          items: s.items.map((i:any) => ({ ...i, ltrs: 0 })),
-        })),
-      };
-
-      if (!isSplit && updatedSplits[0]) {
-        update.items = updatedSplits[0].items;
-      }
-
-      return update;
-    });
+    setFormData(prev => ({
+      ...prev,
+      supplierId,
+      badgeNo: defaultBadge?.badgeNumber || "",
+      isMultiBadge: false,
+      secondaryBadgeNo: "",
+      secondaryPoNumber: "",
+      secondaryItems: [],
+      secondarySplits: prev.secondarySplits.map(split => ({ ...split, items: [] })),
+    }));
   };
 
   // ADD THIS HELPER ABOVE YOUR COMPONENT
@@ -621,11 +496,12 @@ function CreateFuelOrder() {
     setRacks([]);
     setCarriers([]);
     setSuppliers([]);
-    setProjections({});
     setIsSplit(false); // Reset to single mode
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting || !gradeQuery.isSuccess) return;
+
     // 1. Validation Logic
     if (isSplit) {
       const hasMissingSplit = formData.splits.some(
@@ -654,54 +530,18 @@ function CreateFuelOrder() {
 
     try {
       setIsSubmitting(true);
-      const orderSections: any[] = [];
+      const orderSections = orderStations.flatMap(section => {
+        const primary = {
+          station: section.station, stationId: section.stationId, poNumber: section.poNumber,
+          items: section.items, badgeNo: formData.badgeNo,
+        };
+        if (!formData.isMultiBadge) return [primary];
 
-      // Helper: Only adds to the array if there is actual volume
-      const addOrder = (
-        stationId: string,
-        items: any[],
-        po: string,
-        badgeNo: string,
-      ) => {
-        if (items.some((i) => (i.ltrs || 0) > 0)) {
-          orderSections.push({ stationId, items, poNumber: po, badgeNo });
-        }
-      };
-
-      // Build the list
-      if (isSplit) {
-        formData.splits.forEach((split, idx) => {
-          addOrder(
-            split.stationId,
-            split.items,
-            split.poNumber,
-            formData.badgeNo,
-          );
-          if (formData.isMultiBadge) {
-            addOrder(
-              split.stationId,
-              formData.secondarySplits[idx].items,
-              split.secondaryPoNumber,
-              formData.secondaryBadgeNo,
-            );
-          }
-        });
-      } else {
-        addOrder(
-          formData.stationId,
-          formData.items,
-          formData.poNumber,
-          formData.badgeNo,
-        );
-        if (formData.isMultiBadge) {
-          addOrder(
-            formData.stationId,
-            formData.secondaryItems,
-            formData.secondaryPoNumber,
-            formData.secondaryBadgeNo,
-          );
-        }
-      }
+        return [primary, {
+          ...primary, poNumber: section.secondaryPoNumber,
+          items: section.secondaryItems, badgeNo: formData.secondaryBadgeNo,
+        }];
+      }).filter(section => hasVolume(section.items));
 
       if (orderSections.length === 0) {
         alert("No volumes detected. Cannot create empty POs.");
@@ -711,9 +551,7 @@ function CreateFuelOrder() {
       // 3. Generate PDFs for each identified section
       const processedOrders = await Promise.all(
         orderSections.map(async (section) => {
-          const stationObj = locations.find(
-            (l: any) => l._id === section.stationId,
-          );
+          const stationObj = section.station;
 
           // Find the specific accounting ID for the badge used in this section
           const badgeData = selectedSupplier?.supplierBadges?.find(
@@ -723,6 +561,7 @@ function CreateFuelOrder() {
 
           const doc = (
             <POPreviewDocument
+              grades={catalog}
               data={{
                 ...formData,
                 poNumber: section.poNumber,
@@ -770,8 +609,8 @@ function CreateFuelOrder() {
       );
       handleReset();
       setIsPreviewOpen(false);
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to save orders.");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to save orders.");
       console.error(err);
     } finally {
       setIsSubmitting(false);
@@ -853,22 +692,9 @@ function CreateFuelOrder() {
     index: number,
     orderDate: string,
     deliveryDate: string,
-    logisticsDefaults?: {
-      rack: any;
-      rackSuppliers: FuelSupplier[];
-      supplierId: string;
-      badgeNo: string;
-    },
   ) => {
     const station = locations.find((s: any) => s._id === stationId);
     if (!station) return;
-
-    // 1. Get the current Rack data to know which grades are supported
-    // We look at the master rackId in formData
-    const currentRack =
-      logisticsDefaults?.rack || racks.find((r) => r._id === formData.rackId);
-    const rackGrades = currentRack?.availableGrades || [];
-    const stationGrades = station.availableStationGrades || [];
 
     const tasks: Promise<any>[] = [];
     tasks.push(getPONumberHelper(station, orderDate, deliveryDate));
@@ -893,142 +719,35 @@ function CreateFuelOrder() {
           return acc;
         }, {}) || {};
 
-      // Inside syncStationData ...
-      // setFormData((prev) => {
-      //   const filteredItems = stationGrades
-      //     .filter((grade: string) => rackGrades.includes(grade))
-      //     .map((grade: string) => {
-      //       const existing = prev.splits[index]?.items.find(
-      //         (i) => i.grade === grade,
-      //       );
-      //       return { grade, ltrs: existing?.ltrs || 0 };
-      //     });
-      setFormData((prev) => {
-        // Determine if E15 is logistically available upstream
-        // const currentRack = racks.find((r) => r._id === formData.rackId);
-        // const rackGrades = currentRack?.availableGrades || [];
+      setFormData(prev => {
+        if (prev.splits[index]?.stationId !== stationId) return prev;
 
-        const activeSupplierId =
-          logisticsDefaults?.supplierId || prev.supplierId || formData.supplierId;
-        const activeBadgeNo =
-          logisticsDefaults?.badgeNo || prev.badgeNo || formData.badgeNo;
-        const supplierList = logisticsDefaults?.rackSuppliers || suppliers;
-        const selectedSup = supplierList.find((s) => s._id === activeSupplierId);
-        const currentBadge = selectedSup?.supplierBadges?.find(
-          (b) => b.badgeNumber === activeBadgeNo,
-        );
-        const badgeGrades = currentBadge?.availableGrades || [];
-
-        // Check condition: Rack has E15, Badge has E15, and Station has "Regular"
-        const allowsSummerE15 =
-          rackGrades.includes("E15") &&
-          badgeGrades.includes("E15") &&
-          stationGrades.includes("Regular");
-
-        // Dynamic evaluation checklist
-        let dynamicStationGrades = [...stationGrades];
-        if (allowsSummerE15 && !dynamicStationGrades.includes("E15")) {
-          dynamicStationGrades.push("E15");
-        }
-
-        const filteredItems = dynamicStationGrades
-          .filter((grade: string) => rackGrades.includes(grade))
-          .map((grade: string) => {
-            const existing = prev.splits[index]?.items.find(
-              (i) => i.grade === grade,
-            );
-            return { grade, ltrs: existing?.ltrs || 0 };
-          });
-        // NEW: Prepare the secondary items for this station
-        const secondaryFilteredItems = filteredItems.map((item: any) => ({
-          grade: item.grade,
-          ltrs:
-            prev.secondarySplits[index]?.items.find(
-              (i) => i.grade === item.grade,
-            )?.ltrs || 0,
-        }));
-
-        const primaryPO = poData.po;
-        const secondaryPO = prev.isMultiBadge
-          ? generateSecondaryPO(primaryPO)
-          : "";
-
-        // const newSplits = [...prev.splits];
-        // newSplits[index] = {
-        //   ...newSplits[index],
-        //   stationId,
-        //   poNumber: primaryPO,
-        //   secondaryPoNumber: secondaryPO, // Store the second PO
-        //   projections: groupedProjections,
-        //   items: filteredItems,
-        // };
-
-        // // FIX: Update the secondarySplits array for the specific index
-        // const newSecondarySplits = [...prev.secondarySplits];
-        // newSecondarySplits[index] = {
-        //   ...newSecondarySplits[index],
-        //   stationId, // keep IDs in sync
-        //   items: secondaryFilteredItems,
-        // };
-        // Ensure array slots exist safely
-        const newSplits = [...(prev.splits || [])];
-        const newSecondarySplits = [...(prev.secondarySplits || [])];
-
-        newSplits[index] = {
-          ...(newSplits[index] || { items: [] }), // Safe structural fallback
-          stationId,
-          poNumber: primaryPO,
-          secondaryPoNumber: secondaryPO,
-          projections: groupedProjections,
-          items: filteredItems,
-        };
-
-        newSecondarySplits[index] = {
-          ...(newSecondarySplits[index] || { items: [] }), // Safe structural fallback
-          stationId,
-          items: secondaryFilteredItems,
-        };
-
-        const update = {
-          ...prev,
-          splits: newSplits,
-          secondarySplits: newSecondarySplits, // Apply the fix here
-          orderDate: poData.finalOrderDate,
-        };
+        const poNumber = poData.po;
+        const secondaryPoNumber = prev.isMultiBadge ? generateSecondaryPO(poNumber) : "";
+        const splits = prev.splits.map((split, splitIndex) => splitIndex === index
+          ? { ...split, poNumber, secondaryPoNumber, projections: groupedProjections }
+          : split);
 
         if (!isSplit && index === 0) {
-          update.stationId = stationId;
-          update.poNumber = primaryPO;
-          update.secondaryPoNumber = secondaryPO;
-          update.projections = groupedProjections;
-          update.items = filteredItems;
-          // Also sync root secondary items for single mode
-          update.secondaryItems = secondaryFilteredItems;
+          return {
+            ...prev, splits, stationId, poNumber, secondaryPoNumber,
+            projections: groupedProjections, orderDate: poData.finalOrderDate,
+          };
         }
 
-        return update;
+        return { ...prev, splits, orderDate: poData.finalOrderDate };
       });
     } catch (err) {
       console.error("Sync Error:", err);
     }
   };
 
-  // Find selected details for the PDF
-  const selectedStation = locations.find(
-    (s: any) => s._id === formData.stationId,
-  );
-  const selectedCarrier = carriers.find((c) => c._id === formData.carrierId);
-  const selectedRack = racks.find((r) => r._id === formData.rackId);
-  const selectedSupplier = suppliers.find((s) => s._id === formData.supplierId);
-  // Find the accountingId for the current badge selected
-  // const activeBadge = selectedSupplier?.supplierBadges?.find(
-  //   (b: any) => b.badgeNumber === formData.badgeNo
-  // );
-  // const currentSupplierAccountingId = activeBadge?.accountingId || '';
-  // const currentCarrierId = selectedCarrier?.carrierId || '';
-
   // Function to trigger the flow
   const handleGenerateClick = () => {
+    if (!orderStations.some(order => hasVolume(order.items) || hasVolume(order.secondaryItems))) {
+      alert("Enter a quantity for an eligible fuel grade before generating a PO.");
+      return;
+    }
     setIsVerifyOpen(true);
   };
 
@@ -1094,86 +813,34 @@ function CreateFuelOrder() {
     });
   };
 
-  // Helper to filter grades by badge capabilities
-  // const getBadgeCompatibleItems = (
-  //   items: any[],
-  //   badgeNo: string,
-  //   supplierId: string,
-  // ) => {
-  //   const supplier = suppliers.find((s) => s._id === supplierId);
-  //   const badge = supplier?.supplierBadges?.find(
-  //     (b) => b.badgeNumber === badgeNo,
-  //   );
-  //   // Assuming your badge object has an 'allowedGrades' array
-  //   const allowed = badge?.availableGrades || [];
-  //   return items.filter((item) => allowed.includes(item.grade));
-  // };
-  const getBadgeCompatibleItems = (
-    items: any[],
-    badgeNo: string,
-    supplierId: string,
-  ) => {
-    const supplier = suppliers.find((s) => s._id === supplierId);
-    const badge = supplier?.supplierBadges?.find(
-      (b) => b.badgeNumber === badgeNo,
-    );
-    const allowed = badge?.availableGrades || [];
-
-    return items.filter((item) => allowed.includes(item.grade));
-  };
-
   const handleQtyChange = (
     sectionIdx: number,
     grade: string,
     value: number,
     isSecondary: boolean,
   ) => {
-    setFormData((prev) => {
-      // 1. Handle SPLIT Mode
-      if (isSplit) {
-        const targetArrayKey = isSecondary ? "secondarySplits" : "splits";
+    const updateQuantity = (items: FuelOrderItem[]) => [
+      ...items.filter(item => item.grade !== grade),
+      { grade, ltrs: value },
+    ];
 
-        const updatedSplits = prev[targetArrayKey].map((section, sIdx) => {
-          if (sIdx !== sectionIdx) return section;
-
-          return {
-            ...section,
-            items: section.items.map((item) =>
-              item.grade === grade ? { ...item, ltrs: value } : item,
-            ),
-          };
-        });
-
-        return { ...prev, [targetArrayKey]: updatedSplits };
+    setFormData(prev => {
+      if (!isSplit) {
+        const key = isSecondary ? "secondaryItems" : "items";
+        return { ...prev, [key]: updateQuantity(prev[key]) };
       }
 
-      // 2. Handle SINGLE Mode
-      const targetItemsKey = isSecondary ? "secondaryItems" : "items";
-
+      const key = isSecondary ? "secondarySplits" : "splits";
       return {
         ...prev,
-        [targetItemsKey]: prev[targetItemsKey].map((item) =>
-          item.grade === grade ? { ...item, ltrs: value } : item,
-        ),
+        [key]: prev[key].map((section, index) => index === sectionIdx
+          ? { ...section, items: updateQuantity(section.items) }
+          : section),
       };
     });
   };
 
-  // const GRADE_ORDER = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
-  // Find this constant in your file and append "E15"
-  const GRADE_ORDER = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
-
-  const sortGrades = (items: FuelOrderItem[]) => {
-    return [...items].sort((a, b) => {
-      const indexA = GRADE_ORDER.indexOf(a.grade);
-      const indexB = GRADE_ORDER.indexOf(b.grade);
-      // If a grade isn't in our list, move it to the end
-      return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
-    });
-  };
-
-  const hasVolume = (items: any[]) =>
-    items.some((item) => (item.ltrs || 0) > 0);
+  const hasVolume = (items: FuelOrderItem[]) => items.some(item => item.ltrs > 0);
 
   // CSS for the highlight (Add to your global CSS or use a Tailwind class)
   // @keyframes pulse-highlight { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); } 70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
@@ -1222,7 +889,7 @@ function CreateFuelOrder() {
           <Button
             className="bg-blue-600 hover:bg-blue-700"
             onClick={handleGenerateClick}
-            disabled={!formData.stationId || isSubmitting}
+            disabled={!formData.stationId || isSubmitting || !gradeQuery.isSuccess}
           >
             Generate PO PDF
           </Button>
@@ -1301,79 +968,21 @@ function CreateFuelOrder() {
             <DialogContent className="w-[85vw] !max-w-[1200px] h-[92vh] flex flex-col p-6">
               {/* Helper variables to keep the JSX clean */}
               {(() => {
-                // Logic to determine which Site and Badge combinations actually exist
-                const validSplits = isSplit
-                  ? formData.splits
-                      .map((s, idx) => ({
-                        idx,
-                        hasData:
-                          hasVolume(s.items) ||
-                          (formData.isMultiBadge &&
-                            hasVolume(formData.secondarySplits[idx].items)),
-                      }))
-                      .filter((s) => s.hasData)
-                  : [];
+                const validSplits = orderStations
+                  .map((order, index) => ({ order, index }))
+                  .filter(({ order }) => hasVolume(order.items) || hasVolume(order.secondaryItems));
+                const selectedSplit = validSplits.find(({ index }) => index === activeSplitIdx) ?? validSplits[0];
+                if (!selectedSplit) return <DialogTitle>No eligible fuel volumes to preview</DialogTitle>;
 
-                // 1. Check volume for all possible combinations
-                const badge1HasVolume = isSplit
-                  ? hasVolume(formData.splits[activeSplitIdx].items)
-                  : hasVolume(formData.items);
-
-                const badge2HasVolume = isSplit
-                  ? hasVolume(formData.secondarySplits[activeSplitIdx].items)
-                  : hasVolume(formData.secondaryItems);
-
-                // 2. SMART INDEX RESOLUTION
-                // If the currently selected badge has no volume, but the other one does,
-                // we "pivot" the view temporarily for the preview logic.
-                let effectiveBadgeIdx = activeBadgeIdx;
-                if (
-                  !badge1HasVolume &&
-                  badge2HasVolume &&
-                  activeBadgeIdx === 0
-                ) {
-                  effectiveBadgeIdx = 1;
-                } else if (
-                  !badge2HasVolume &&
-                  badge1HasVolume &&
-                  activeBadgeIdx === 1
-                ) {
-                  effectiveBadgeIdx = 0;
-                }
-
-                // 3. Use the EFFECTIVE index for your UI variables
-                const isPrimary = effectiveBadgeIdx === 0;
-
-                const currentStation = isSplit
-                  ? locations.find(
-                      (l: any) =>
-                        l._id === formData.splits[activeSplitIdx].stationId,
-                    )
-                  : selectedStation;
-
-                const currentStationName =
-                  currentStation?.fuelCustomerName || "Unknown Station";
-
-                const currentBadge = isPrimary
-                  ? formData.badgeNo
-                  : formData.secondaryBadgeNo;
-
-                // Resolve PO and Items using the effective isPrimary
-                const currentPo = isSplit
-                  ? isPrimary
-                    ? formData.splits[activeSplitIdx].poNumber
-                    : formData.splits[activeSplitIdx].secondaryPoNumber
-                  : isPrimary
-                    ? formData.poNumber
-                    : formData.secondaryPoNumber;
-
-                const currentItems = isSplit
-                  ? isPrimary
-                    ? formData.splits[activeSplitIdx].items
-                    : formData.secondarySplits[activeSplitIdx].items
-                  : isPrimary
-                    ? formData.items
-                    : formData.secondaryItems;
+                const { order: previewOrder, index: previewSplitIndex } = selectedSplit;
+                const badge1HasVolume = hasVolume(previewOrder.items);
+                const badge2HasVolume = hasVolume(previewOrder.secondaryItems);
+                const isPrimary = badge1HasVolume && (!badge2HasVolume || activeBadgeIdx === 0);
+                const currentStation = previewOrder.station;
+                const currentStationName = currentStation?.fuelCustomerName || "Unknown Station";
+                const currentBadge = isPrimary ? formData.badgeNo : formData.secondaryBadgeNo;
+                const currentPo = isPrimary ? previewOrder.poNumber : previewOrder.secondaryPoNumber;
+                const currentItems = isPrimary ? previewOrder.items : previewOrder.secondaryItems;
 
                 // 3. Resolve Accounting IDs
                 const activeBadgeData = selectedSupplier?.supplierBadges?.find(
@@ -1398,7 +1007,7 @@ function CreateFuelOrder() {
                           <span
                             className={cn(
                               "px-2 py-0.5 rounded text-[10px] font-black uppercase",
-                              activeBadgeIdx === 0
+                              isPrimary
                                 ? "bg-slate-100 text-slate-600"
                                 : "bg-orange-100 text-orange-700",
                             )}
@@ -1416,18 +1025,8 @@ function CreateFuelOrder() {
                               Select Delivery Site
                             </span>
                             <div className="flex bg-slate-100 p-1 rounded-lg border">
-                              {formData.splits.map((split, idx) => {
-                                if (
-                                  !hasVolume(split.items) &&
-                                  !hasVolume(
-                                    formData.secondarySplits[idx].items,
-                                  )
-                                )
-                                  return null;
-                                const name =
-                                  locations.find(
-                                    (l: any) => l._id === split.stationId,
-                                  )?.fuelCustomerName || `Site ${idx + 1}`;
+                              {validSplits.map(({ order, index: idx }) => {
+                                const name = order.station?.fuelCustomerName || `Site ${idx + 1}`;
                                 return (
                                   <Button
                                     key={idx}
@@ -1435,7 +1034,7 @@ function CreateFuelOrder() {
                                     size="sm"
                                     className={cn(
                                       "h-7 px-3 text-[10px] font-bold transition-all",
-                                      activeSplitIdx === idx
+                                      previewSplitIndex === idx
                                         ? "bg-white text-blue-600 shadow-sm"
                                         : "text-slate-500",
                                     )}
@@ -1462,7 +1061,7 @@ function CreateFuelOrder() {
                                   variant="ghost"
                                   className={cn(
                                     "h-7 px-4 text-[10px] font-bold",
-                                    effectiveBadgeIdx === 0
+                                    isPrimary
                                       ? "bg-white text-blue-600 shadow-sm"
                                       : "text-slate-500",
                                   )}
@@ -1475,7 +1074,7 @@ function CreateFuelOrder() {
                                   size="sm"
                                   className={cn(
                                     "h-7 px-4 text-[10px] font-bold",
-                                    activeBadgeIdx === 1
+                                    !isPrimary
                                       ? "bg-white text-orange-600"
                                       : "text-slate-500",
                                   )}
@@ -1492,6 +1091,7 @@ function CreateFuelOrder() {
                     <div className="flex-1 border rounded-lg overflow-hidden bg-slate-50 px-4 py-2">
                       <PDFViewer width="100%" height="100%" showToolbar={false}>
                         <POPreviewDocument
+                          grades={catalog}
                           data={{
                             ...formData,
                             poNumber: currentPo,
@@ -1512,6 +1112,7 @@ function CreateFuelOrder() {
                       <PDFDownloadLink
                         document={
                           <POPreviewDocument
+                            grades={catalog}
                             data={{
                               ...formData,
                               poNumber: currentPo,
@@ -1552,6 +1153,7 @@ function CreateFuelOrder() {
                         <Button
                           className="bg-green-600 hover:bg-green-700 font-bold"
                           onClick={handleSubmit}
+                          disabled={isSubmitting || !gradeQuery.isSuccess}
                         >
                           Finalize All Orders
                         </Button>
@@ -1564,6 +1166,14 @@ function CreateFuelOrder() {
           </Dialog>
         </div>
       </div>
+
+      {gradeQuery.isPending && <p role="status" className="text-sm text-muted-foreground">Loading fuel grades…</p>}
+      {gradeQuery.isError && (
+        <div className="flex items-center gap-3">
+          <p role="alert" className="text-sm text-destructive">Could not load fuel grades.</p>
+          <Button size="sm" variant="outline" onClick={() => void gradeQuery.refetch()}>Retry</Button>
+        </div>
+      )}
 
       <div className="grid grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN: Logistics & Form */}
@@ -2129,47 +1739,14 @@ function CreateFuelOrder() {
             </CardHeader>
 
             <CardContent className={cn("pt-4 flex-1 space-y-6")}>
-              {(isSplit
-                ? formData.splits
-                : [
-                    {
-                      stationId: formData.stationId,
-                      items: formData.items,
-                      secondaryItems: formData.secondaryItems,
-                      projections: formData.projections,
-                      poNumber: formData.poNumber,
-                    },
-                  ]
-              ).map((section, sIdx) => {
-                if (!section.stationId) return null;
+              {orderStations.map((section, sIdx) => {
+                if (!section.station) return null;
 
-                const sectionStation = locations.find(
-                  (l: any) => l._id === section.stationId,
-                );
-
-                // Dynamic Badge Configuration
                 const badgeConfigs = [
-                  {
-                    id: "primary",
-                    badge: formData.badgeNo,
-                    // section.items correctly points to splits[sIdx].items in split mode
-                    // or formData.items in single mode because of your wrapper array.
-                    items: section.items || [],
-                    isSecondary: false,
-                  },
-                  ...(formData.isMultiBadge
-                    ? [
-                        {
-                          id: "secondary",
-                          badge: formData.secondaryBadgeNo,
-                          // FIX: We must explicitly grab the secondary items for THIS station index
-                          items: isSplit
-                            ? formData.secondarySplits?.[sIdx]?.items || []
-                            : formData.secondaryItems || [],
-                          isSecondary: true,
-                        },
-                      ]
-                    : []),
+                  { id: "primary", badge: formData.badgeNo, items: section.items, isSecondary: false },
+                  ...(formData.isMultiBadge ? [{
+                    id: "secondary", badge: formData.secondaryBadgeNo, items: section.secondaryItems, isSecondary: true,
+                  }] : []),
                 ];
 
                 return (
@@ -2180,7 +1757,7 @@ function CreateFuelOrder() {
                     {/* Station Header */}
                     <div className="flex justify-between items-center bg-slate-50 p-2 rounded-lg border">
                       <span className="text-xs font-black text-blue-800 uppercase">
-                        {sectionStation?.stationName}
+                        {section.station.stationName}
                       </span>
                       <span className="text-[10px] font-mono bg-white px-2 border rounded">
                         PO: {section.poNumber}
@@ -2198,17 +1775,6 @@ function CreateFuelOrder() {
                       )}
                     >
                       {badgeConfigs.map((bc) => {
-                        // 1. FILTER: Badge Compatibility
-                        // 2. SORT: Apply your GRADE_ORDER sorting
-                        const rawCompatible = getBadgeCompatibleItems(
-                          bc.items || [],
-                          bc.badge,
-                          formData.supplierId,
-                        );
-                        const sortedCompatible = sortGrades(rawCompatible);
-
-                        // If a badge is selected but has no compatible items, we still show the header
-                        // but might want a placeholder.
                         return (
                           bc.badge && (
                             <div
@@ -2237,17 +1803,11 @@ function CreateFuelOrder() {
                                 </Badge>
                               </div>
 
-                              {/* {sortedCompatible.length > 0 ? sortedCompatible.map((item) => { */}
-                              {sortedCompatible.length > 0 ? (
+                              {bc.items.length > 0 ? (
                                 <>
-                                  {sortedCompatible.map((item) => {
-                                    const theme = getGradeTheme(item.grade);
-
-                                    // CRITICAL TWEAK: If the entry line is E15, look up the projection data using the "Regular" key
-                                    const projectionKey =
-                                      item.grade === "E15"
-                                        ? "Regular"
-                                        : item.grade;
+                                  {bc.items.map((item) => {
+                                    const grade = gradeByKey.get(item.grade);
+                                    const projectionKey = getOrderTankGrade(item.grade);
                                     const projection = section.projections?.[
                                       projectionKey
                                     ] || {
@@ -2258,13 +1818,7 @@ function CreateFuelOrder() {
                                     };
 
                                     // Find total volume for this grade across BOTH badges for inventory calculation
-                                    const otherBadgeItems = bc.isSecondary
-                                      ? section.items || []
-                                      : isSplit
-                                        ? formData.secondarySplits?.[sIdx]
-                                            ?.items || []
-                                        : formData.secondaryItems || [];
-
+                                    const otherBadgeItems = bc.isSecondary ? section.items : section.secondaryItems;
                                     const otherQty = Number(
                                       otherBadgeItems?.find(
                                         (i) => i.grade === item.grade,
@@ -2284,16 +1838,14 @@ function CreateFuelOrder() {
                                         className="p-2 bg-white rounded-lg border shadow-sm relative overflow-hidden"
                                       >
                                         <div
-                                          className={cn(
-                                            "absolute left-0 top-0 bottom-0 w-1",
-                                            theme.color,
-                                          )}
+                                          className="absolute left-0 top-0 bottom-0 w-1"
+                                          style={{ backgroundColor: grade?.color }}
                                         />
 
                                         <div className="flex items-center justify-between gap-4">
                                           <div className="flex flex-col">
                                             <span className="text-[12px] font-black uppercase italic">
-                                              {item.grade}
+                                              {grade?.name ?? item.grade}
                                             </span>
                                             {otherQty > 0 && (
                                               <span className="text-[8px] text-blue-500 font-bold">
@@ -2305,6 +1857,7 @@ function CreateFuelOrder() {
 
                                           <Input
                                             type="number"
+                                            min={0}
                                             className="h-7 w-24 text-right font-mono font-bold text-sm border-blue-200 focus-visible:ring-blue-500"
                                             value={item.ltrs || ""}
                                             onChange={(e) =>
@@ -2391,7 +1944,7 @@ function CreateFuelOrder() {
                                   })}
                                   {/* ADDED: Total sum for this specific Badge/Station combination */}
                                   {(() => {
-                                    const badgeTotal = sortedCompatible.reduce(
+                                    const badgeTotal = bc.items.reduce(
                                       (sum, item) =>
                                         sum + (Number(item.ltrs) || 0),
                                       0,

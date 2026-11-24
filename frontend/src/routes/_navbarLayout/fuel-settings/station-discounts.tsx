@@ -61,7 +61,7 @@ function RouteComponent() {
   const [formStationSk, setFormStationSk] = useState('')
   const [formLocation, setFormLocation] = useState('')
   const [formProvince, setFormProvince] = useState('')
-  const [formCategoryType, setFormCategoryType] = useState('') // "GAS" or "DIESEL"
+  const [formCategoryType, setFormCategoryType] = useState('')
   const [formDiscountValue, setFormDiscountValue] = useState('')
   const [newEntriesList, setNewEntriesList] = useState<any[]>([])
 
@@ -164,7 +164,12 @@ function RouteComponent() {
     if (isNaN(discNum)) return;
 
     // Determine the expansion grade array exactly like before
-    const targetedGrades = formCategoryType === "GAS" ? ["REG", "PNL"] : ["DYED", "DSL"];
+    const gradesByCategory: Record<string, string[]> = {
+      GAS: ["REG", "PNL"],
+      DIESEL: ["DYED", "DSL"],
+      "GAS-DYED": ["GAS-DYED"],
+    };
+    const targetedGrades = gradesByCategory[formCategoryType] ?? [];
 
     // Normalize comparing tokens to prevent casing/spacing anomalies
     const stationSkToken = formStationSk.trim().toUpperCase();
@@ -798,6 +803,7 @@ function RouteComponent() {
                   <option value="">-- Choose Category --</option>
                   <option value="GAS">GAS (REG & PNL)</option>
                   <option value="DIESEL">DIESEL (DSL & DYED)</option>
+                  <option value="GAS-DYED">GAS-DYED</option>
                 </select>
               </div>
 

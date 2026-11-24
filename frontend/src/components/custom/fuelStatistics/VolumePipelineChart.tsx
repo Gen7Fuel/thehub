@@ -1,4 +1,6 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
+import type { FuelGradeOption } from "@/api/fuel-management/fuel-grades.service";
+import { getFuelGradeDisplay } from "@/lib/fuelGradeDisplay";
 import {
   BarChart,
   Bar,
@@ -22,18 +24,15 @@ interface RawOrder {
   items: OrderItem[];
 }
 
-export interface GradeTheme {
-  color: string;
-  label: string;
-  icon?: React.ElementType;
-  raw: string;
-  light: string;
+interface PipelineRow {
+  status: string;
+  volumes: Map<string, number>;
 }
 
 interface VolumePipelineChartProps {
   orders: RawOrder[];
   selectedGrades: string[];
-  getGradeTheme: (grade: string) => GradeTheme;
+  grades: readonly FuelGradeOption[];
   isLoading?: boolean;
 }
 
@@ -42,44 +41,28 @@ const ORDER_STATUSES = ["Delivered", "In Transit", "Created", "Cancelled"];
 export function VolumePipelineChart({
   orders,
   selectedGrades,
-  getGradeTheme,
+  grades,
   isLoading = false,
 }: VolumePipelineChartProps) {
   // Aggregate volume grouped by Order Status and Fuel Grade
   const { chartData, totalVolume } = useMemo(() => {
-    const statusMap: Record<string, Record<string, number>> = {
-      Delivered: {},
-      "In Transit": {},
-      Created: {},
-      Cancelled: {},
-    };
+    const statusMap = new Map(ORDER_STATUSES.map(status => [status, new Map<string, number>()]));
 
     let grandTotal = 0;
 
     (orders || []).forEach((order) => {
-      const status = order.currentStatus;
-      if (!statusMap[status]) return;
+      const volumes = statusMap.get(order.currentStatus);
+      if (!volumes) return;
 
       (order.items || []).forEach((item) => {
         if (!selectedGrades.includes(item.grade)) return;
         const volume = Number(item.ltrs) || 0;
-        statusMap[status][item.grade] =
-          (statusMap[status][item.grade] || 0) + volume;
+        volumes.set(item.grade, (volumes.get(item.grade) ?? 0) + volume);
         grandTotal += volume;
       });
     });
 
-    const data = ORDER_STATUSES.map((status) => {
-      const rowVolume = Object.values(statusMap[status]).reduce(
-        (a, b) => a + b,
-        0,
-      );
-      return {
-        status,
-        statusTotal: rowVolume,
-        ...statusMap[status],
-      };
-    });
+    const data: PipelineRow[] = [...statusMap].map(([status, volumes]) => ({ status, volumes }));
 
     return { chartData: data, totalVolume: grandTotal };
   }, [orders, selectedGrades]);
@@ -194,16 +177,16 @@ export function VolumePipelineChart({
 
             {/* Dynamic Stacked Bars for Selected Grades */}
             {selectedGrades.map((grade, index) => {
-              const theme = getGradeTheme(grade);
+              const { label, color } = getFuelGradeDisplay(grade, grades);
               const isLast = index === selectedGrades.length - 1;
 
               return (
                 <Bar
                   key={grade}
-                  dataKey={grade}
-                  name={grade}
+                  dataKey={(row: PipelineRow) => row.volumes.get(grade) ?? 0}
+                  name={label}
                   stackId="pipeline"
-                  fill={theme?.raw || "#94a3b8"}
+                  fill={color}
                   radius={isLast ? [0, 6, 6, 0] : [0, 0, 0, 0]}
                   barSize={24}
                 />

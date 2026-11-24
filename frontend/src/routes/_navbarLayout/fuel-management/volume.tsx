@@ -1,6 +1,11 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fuelGradeOptionsQuery, type FuelGradeOption } from '@/api/fuel-management/fuel-grades.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
+import { FuelGradeLabel } from '@/components/custom/FuelGradeLabel'
+import { getGradeLabelColor, sortByFuelGrade } from '@/lib/fuelGradeDisplay'
+import { cn } from '@/lib/utils'
 import { Loader2, RefreshCw, Cylinder, History, LayoutDashboard, Edit3, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from "@/components/ui/button";
@@ -17,6 +22,11 @@ type VolumeSearch = {
   site?: string
 }
 
+type ReconciliationDay = {
+  date: string
+  grades: { grade: string; salesVolume: number; physicalDraw: number }[]
+}
+
 export const Route = createFileRoute('/_navbarLayout/fuel-management/volume')({
   // Ensure this returns VolumeSearch exactly
   validateSearch: (search: Record<string, unknown>): VolumeSearch => ({
@@ -29,6 +39,7 @@ export const Route = createFileRoute('/_navbarLayout/fuel-management/volume')({
 function VolumeDashboard() {
   const { site } = Route.useSearch()
   const navigate = useNavigate({ from: Route.fullPath })
+  const { data: grades = [] } = useQuery(fuelGradeOptionsQuery)
   
   const { user } = useAuth();
   const access = user?.access || {};
@@ -38,8 +49,7 @@ function VolumeDashboard() {
   // States
   const [viewMode, setViewMode] = useState<'live' | 'historical'>('live');
   const [allTanks, setAllTanks] = useState<any[]>([])
-  const [historicalData, setHistoricalData] = useState<any[]>([])
-  const [selectedGrade, setSelectedGrade] = useState<string>('');
+  const [selectedGrade, setSelectedGrade] = useState('');
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
 
@@ -53,24 +63,6 @@ function VolumeDashboard() {
     } finally {
       setLoading(false);
       setSyncing(false);
-    }
-  }
-
-  // Fetch Historical Reconciliation Data
-  const fetchHistorical = async (stationId: string) => {
-    setLoading(true);
-    try {
-      const data = await fuelStationTanksService.getReconciliation<any[]>(stationId)
-      setHistoricalData(data);
-
-      // Automatically set the grade to the first one available in the new data
-      if (data.length > 0 && data[0].grades.length > 0) {
-        setSelectedGrade(data[0].grades[0].grade);
-      }
-    } catch (err) {
-      toast.error("Historical fetch failed");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -102,13 +94,27 @@ function VolumeDashboard() {
     return groups;
   }, [allTanks, site]);
 
-  // Filter reconciliation data for the chart based on selected grade
-  const chartData = useMemo(() => {
-    // REMOVED: No more frontend filtering. 
-    // Trust that the backend reconciliation route is only returning closed days.
+  const selectedTank = allTanks.find(t => t.stationName === site);
+  const currentStationId = selectedTank?.stationId?._id || selectedTank?.stationId;
+  const {
+    data: historicalData = [],
+    isLoading: isHistoryLoading,
+    isError: isHistoryError,
+  } = useQuery({
+    queryKey: ['fuel-tank-reconciliation', currentStationId],
+    queryFn: () => fuelStationTanksService.getReconciliation<ReconciliationDay[]>(currentStationId),
+    enabled: viewMode === 'historical' && Boolean(currentStationId) && Boolean(canViewHistoricalSalesVolumeChart),
+    retry: false,
+  });
+  const historicalGrades = useMemo(() => {
+    const gradeKeys = new Set(historicalData.flatMap(day => day.grades.map(({ grade }) => grade)));
+    return sortByFuelGrade([...gradeKeys].map(grade => ({ grade })), grades);
+  }, [historicalData, grades]);
+  const activeGrade = historicalGrades.find(({ grade }) => grade === selectedGrade)?.grade ?? historicalGrades[0]?.grade;
 
+  const chartData = useMemo(() => {
     return historicalData.map(day => {
-      const gradeData = day.grades.find((g: any) => g.grade === selectedGrade);
+      const gradeData = day.grades.find(({ grade }) => grade === activeGrade);
       return {
         // Pass the date directly as it comes from the server
         date: day.date,
@@ -116,29 +122,12 @@ function VolumeDashboard() {
         physicalDraw: gradeData?.physicalDraw || 0,
       };
     });
-  }, [historicalData, selectedGrade]);
-
-  // UI helpers...
-  // Change this line in your VolumeDashboard
-  // Find the tank for the selected site
-  const selectedTank = allTanks.find(t => t.stationName === site);
-
-  // If stationId was populated, it is an object. We need the ._id from inside it.
-  const currentStationId = selectedTank?.stationId?._id || selectedTank?.stationId;
+  }, [historicalData, activeGrade]);
   /* Temporary CStore fallback URL; restore with the warning block above if needed.
   const cstoreVolumeUrl = selectedTank?.stationId?.csoCode
     ? `https://03.cstoreoffice.com/daily-fuel-inv.php?Station=${encodeURIComponent(selectedTank.stationId.csoCode)}`
     : 'https://03.cstoreoffice.com/daily-fuel-inv.php';
   */
-
-  useEffect(() => {
-    // If we are in historical mode and the site changes, refresh the data
-    if (viewMode === 'historical' && currentStationId) {
-      fetchHistorical(currentStationId);
-    }
-  }, [site, viewMode, currentStationId]);
-  // Adding currentStationId to dependencies ensures that once allTanks 
-  // loads and we resolve the ID, the fetch triggers immediately.
 
   if (loading) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>
 
@@ -160,10 +149,7 @@ function VolumeDashboard() {
           {canViewHistoricalSalesVolumeChart && (
             <Button
               variant="ghost"
-              onClick={() => {
-                if (viewMode === 'live') fetchHistorical(currentStationId);
-                setViewMode(viewMode === 'live' ? 'historical' : 'live');
-              }}
+              onClick={() => setViewMode(viewMode === 'live' ? 'historical' : 'live')}
               className="rounded-2xl font-black uppercase text-[10px] tracking-wide gap-2"
             >
               {viewMode === 'live' ? <History className="h-4 w-4" /> : <LayoutDashboard className="h-4 w-4" />}
@@ -216,35 +202,50 @@ function VolumeDashboard() {
         <div className="flex gap-6 w-full pb-4 items-stretch">
           {/* items-stretch ensures all grade boxes are the same height */}
           {Object.entries(groupedTanks).map(([grade, tanks]) => (
-            <GradeWrapper key={grade} grade={grade} tanks={tanks} onUpdate={fetchAndSync} />
+            <GradeWrapper key={grade} grade={grade} grades={grades} tanks={tanks} onUpdate={fetchAndSync} />
           ))}
         </div>
+      ) : isHistoryLoading ? (
+        <div role="status" className="flex items-center gap-2 text-sm text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading tank history…
+        </div>
+      ) : isHistoryError ? (
+        <p role="alert" className="text-sm text-red-600">Unable to load tank history.</p>
+      ) : !activeGrade ? (
+        <p className="text-sm text-slate-500">
+          {currentStationId ? 'No reconciliation data is available for this station.' : 'Select a station to view tank history.'}
+        </p>
       ) : (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Grade Selector for History */}
-          <div className="flex gap-2">
-            {['Regular', 'Premium', 'Diesel', 'Dyed Diesel'].map(g => (
+          <div role="group" aria-label="Fuel grade" className="flex flex-wrap gap-2">
+            {historicalGrades.map(({ grade }) => (
               <Button
-                key={g}
-                onClick={() => setSelectedGrade(g)}
-                className={`rounded-xl px-6 font-black uppercase text-[10px] tracking-wide ${selectedGrade === g ? 'bg-blue-600' : 'bg-slate-100 text-slate-400'}`}
+                key={grade}
+                variant="outline"
+                aria-pressed={activeGrade === grade}
+                onClick={() => setSelectedGrade(grade)}
+                className={cn('rounded-xl', activeGrade === grade && 'border-blue-600 bg-blue-50 ring-1 ring-blue-600')}
               >
-                {g}
+                <FuelGradeLabel grade={grade} grades={grades} tank fallbackColor={getGradeTheme(grade).raw} />
               </Button>
             ))}
           </div>
 
           <SalesVsTankVarianceChart auditData={chartData} />
 
-          {/* You could add a simple table here as well */}
         </div>
       )}
     </div>
   )
 }
 
-function GradeWrapper({ grade, tanks, onUpdate }: { grade: string; tanks: any[]; onUpdate: () => void }) {
-  const theme = getGradeTheme(grade);
+function GradeWrapper({ grade, grades, tanks, onUpdate }: {
+  grade: string;
+  grades: readonly FuelGradeOption[];
+  tanks: any[];
+  onUpdate: () => void;
+}) {
+  const gradeColor = grades.find(option => option.key === grade)?.color ?? getGradeTheme(grade).raw;
 
   // 1. Calculate sum ONLY for tanks that have valid recent readings
   // We exclude anything that explicitly says "No latest reading available"
@@ -260,14 +261,14 @@ function GradeWrapper({ grade, tanks, onUpdate }: { grade: string; tanks: any[];
 
   return (
     <div
-      className={`flex flex-col gap-3 p-4 rounded-[45px] border-2 border-dashed ${theme.raw}25 bg-white/40 backdrop-blur-sm transition-all duration-300`}
-      style={{ flex: `${tanks.length} 0 auto`, minWidth: `${tanks.length * 200}px` }}
+      className="flex flex-col gap-3 p-4 rounded-[45px] border-2 border-dashed bg-white/40 backdrop-blur-sm transition-all duration-300"
+      style={{ borderColor: `${gradeColor}25`, flex: `${tanks.length} 0 auto`, minWidth: `${tanks.length * 200}px` }}
     >
       <div className="flex justify-between items-center px-4 py-1">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${theme.color} animate-pulse`} />
-          <h3 className={`text-[12px] font-black uppercase tracking-[0.2em] ${theme.label}`}>
-            {grade}
+          <div className="h-2 w-2 rounded-full animate-pulse" style={{ backgroundColor: gradeColor }} />
+          <h3>
+            <FuelGradeLabel grade={grade} grades={grades} tank fallbackColor={gradeColor} className="text-[12px]" />
           </h3>
         </div>
 
@@ -283,7 +284,7 @@ function GradeWrapper({ grade, tanks, onUpdate }: { grade: string; tanks: any[];
       <div className={`grid grid-cols-${tanks.length} gap-3 w-full`}>
         {tanks.map((tank) => (
           <div key={tank._id} className="w-full">
-            <VolumeTankCard tank={tank} onUpdate={onUpdate} />
+            <VolumeTankCard tank={tank} grades={grades} gradeColor={gradeColor} onUpdate={onUpdate} />
           </div>
         ))}
       </div>
@@ -291,8 +292,13 @@ function GradeWrapper({ grade, tanks, onUpdate }: { grade: string; tanks: any[];
   );
 }
 
-function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void }) {
-  const theme = getGradeTheme(tank.grade);
+function VolumeTankCard({ tank, grades, gradeColor, onUpdate }: {
+  tank: any;
+  grades: readonly FuelGradeOption[];
+  gradeColor: string;
+  onUpdate: () => void;
+}) {
+  const { icon: GradeIcon } = getGradeTheme(tank.grade);
   const [manualVolume, setManualVolume] = useState("");
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualTime, setManualTime] = useState("");
@@ -435,7 +441,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
                   <div className="space-y-6 py-4">
                     {/* STATION INFO HEADER WITH LOCAL TIME CLOCK */}
                     <div className="bg-slate-50 p-5 rounded-[30px] border border-slate-100 relative overflow-hidden">
-                      <div className={`absolute top-0 right-0 h-full w-1.5 ${theme.color}`} />
+                      <div className="absolute top-0 right-0 h-full w-1.5" style={{ backgroundColor: gradeColor }} />
 
                       <div className="flex flex-col gap-4">
                         <div className="flex justify-between items-start">
@@ -448,11 +454,7 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
                             </div>
                           </div>
 
-                          <div className={`${theme.color} px-4 py-1.5 rounded-full shadow-sm`}>
-                            <span className="text-[11px] font-black uppercase text-white tracking-wide">
-                              {tank.grade}
-                            </span>
-                          </div>
+                          <FuelGradeLabel grade={tank.grade} grades={grades} tank fallbackColor={gradeColor} className="px-4 py-1.5 rounded-full shadow-sm text-[11px]" />
                         </div>
                       </div>
                     </div>
@@ -524,8 +526,11 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
               </Button>
             )}
 
-            <div className={`${theme.color} p-1.5 rounded-xl text-white ${isStale && !isManual ? 'grayscale' : ''}`}>
-              <theme.icon className="h-4 w-4" />
+            <div
+              className={`p-1.5 rounded-xl ${isStale && !isManual ? 'grayscale' : ''}`}
+              style={{ backgroundColor: gradeColor, color: getGradeLabelColor(gradeColor) }}
+            >
+              <GradeIcon className="h-4 w-4" />
             </div>
           </div>
         </div>
@@ -533,10 +538,11 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
         {/* Cylinder */}
         <div className={`relative h-56 w-full bg-slate-50 rounded-[30px] border-4 border-white shadow-inner overflow-hidden mb-4 transition-all duration-500 ${isStale && !isManual ? 'blur-md grayscale' : ''}`}>
           <div
+            data-slot="tank-liquid"
             className="absolute bottom-0 w-full transition-all duration-1000 ease-in-out"
             style={{
               height: `${fillPercentage}%`,
-              background: `linear-gradient(180deg, ${theme.raw} 0%, ${theme.raw}cc 100%)`
+              background: `linear-gradient(180deg, ${gradeColor} 0%, ${gradeColor}cc 100%)`
             }}
           >
             <div className="absolute top-0 w-full h-1.5 bg-white/20 blur-[1px]" />
@@ -611,7 +617,10 @@ function VolumeTankCard({ tank, onUpdate }: { tank: any; onUpdate: () => void })
           <div className="flex justify-between items-center mb-8">
             <div>
               <DialogTitle className="text-2xl font-black italic">Volume Analytics</DialogTitle>
-              <p className="text-slate-400 text-sm font-medium">Tank #0{tank.tankNo} — {tank.grade}</p>
+              <p className="flex items-center gap-2 text-slate-400 text-sm font-medium">
+                Tank #0{tank.tankNo}
+                <FuelGradeLabel grade={tank.grade} grades={grades} tank fallbackColor={gradeColor} />
+              </p>
             </div>
 
             {/* DATE SLIDER */}

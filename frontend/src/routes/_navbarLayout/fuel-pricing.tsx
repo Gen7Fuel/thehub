@@ -33,6 +33,7 @@ const GRADES = [
   { id: "DSL", label: "Diesel", lookup: "Diesel" },
   { id: "PNL", label: "Premium", lookup: "Premium" },
   { id: "DYED", label: "Dyed Diesel", lookup: "Dyed Diesel" },
+  { id: "GAS-DYED", label: "Dyed Premium", lookup: "Dyed Premium" },
 ];
 
 export const getGradeTheme = (grade: string) => {
@@ -68,6 +69,14 @@ export const getGradeTheme = (grade: string) => {
         border: "border-amber-400",
         icon: Truck,
         light: "bg-amber-50/50",
+      };
+    case "Dyed Premium":
+      return {
+        color: "bg-[#c6395c]",
+        label: "text-[#c6395c]",
+        border: "border-[#c6395c]",
+        icon: Truck,
+        light: "bg-[#c6395c]/10",
       };
     case "Dyed Diesel":
       return {
@@ -457,7 +466,7 @@ function FuelPricingDashboard() {
       >
         <div className="min-w-0 p-6 border-r border-slate-200 flex flex-col space-y-5 overflow-hidden">
           {/* TOP: HORIZONTAL GRADE SELECTOR ROW */}
-          <div className="grid grid-cols-4 gap-4 w-full">
+          <div className="grid grid-cols-2 gap-4 w-full sm:grid-cols-3 xl:grid-cols-5">
             {GRADES.map((grade) => {
               const isAvailable = activeGradesAtStation.includes(grade.id);
               const isSelected = selectedGrade === grade.id;

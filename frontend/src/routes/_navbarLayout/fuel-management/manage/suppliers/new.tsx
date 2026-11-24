@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { FuelGradeCheckboxes } from '@/components/custom/FuelGradeCheckboxes'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Save, UserCheck, Plus, Trash2, CheckCircle2 } from 'lucide-react'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
@@ -170,15 +171,27 @@ function NewSupplierComponent() {
   const [formData, setFormData] = useState({
     supplierName: '',
     associatedRack: '',
-    // Added accountingId here
-    supplierBadges: [{ badgeName: '', badgeNumber: '', accountingId: '', isDefault: true }]
+    supplierBadges: [{ badgeName: '', badgeNumber: '', accountingId: '', isDefault: true, availableGrades: [] as string[] }]
   })
+
+  const rackSupportedGrades: string[] = racks.find(rack => rack._id === formData.associatedRack)?.availableGrades ?? []
+
+  const changeRack = (associatedRack: string) => {
+    const grades: string[] = racks.find(rack => rack._id === associatedRack)?.availableGrades ?? []
+    setFormData(current => ({
+      ...current,
+      associatedRack,
+      supplierBadges: current.supplierBadges.map(badge => ({
+        ...badge,
+        availableGrades: badge.availableGrades.filter(key => grades.includes(key)),
+      })),
+    }))
+  }
 
   const addBadge = () => {
     setFormData({
       ...formData,
-      // Added accountingId here as well
-      supplierBadges: [...formData.supplierBadges, { badgeName: '', badgeNumber: '', accountingId: '', isDefault: false }]
+      supplierBadges: [...formData.supplierBadges, { badgeName: '', badgeNumber: '', accountingId: '', isDefault: false, availableGrades: [] }]
     })
   }
 
@@ -235,7 +248,7 @@ function NewSupplierComponent() {
 
           <div className="space-y-2">
             <label className="text-xs font-bold uppercase text-slate-500">Pick-up Rack</label>
-            <Select onValueChange={(val) => setFormData({ ...formData, associatedRack: val })}>
+            <Select value={formData.associatedRack} onValueChange={changeRack}>
               <SelectTrigger className="bg-white">
                 <SelectValue placeholder="Select a Rack" />
               </SelectTrigger>
@@ -257,43 +270,51 @@ function NewSupplierComponent() {
           </div>
 
           {formData.supplierBadges.map((badge, index) => (
-            <div key={index} className="flex items-end gap-3 p-4 border rounded-lg bg-white shadow-sm relative group">
-              <div className="flex-[2] space-y-2">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground">Badge Name</label>
-                <Input value={badge.badgeName} onChange={e => handleBadgeChange(index, 'badgeName', e.target.value)} placeholder="e.g. Suncor Card" />
-              </div>
-              
-              <div className="flex-1 space-y-2">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground">Badge Number</label>
-                <Input value={badge.badgeNumber} onChange={e => handleBadgeChange(index, 'badgeNumber', e.target.value)} placeholder="000123" />
-              </div>
+            <div key={index} className="space-y-4 p-4 border rounded-lg bg-white shadow-sm">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="flex-[2] space-y-2">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Badge Name</label>
+                  <Input value={badge.badgeName} onChange={e => handleBadgeChange(index, 'badgeName', e.target.value)} placeholder="e.g. Suncor Card" />
+                </div>
 
-              {/* NEW ACCOUNTING ID FIELD */}
-              <div className="flex-1 space-y-2">
-                <label className="text-[10px] font-bold uppercase text-muted-foreground">Bookworks ID</label>
-                <Input 
-                  value={badge.accountingId} 
-                  onChange={e => handleBadgeChange(index, 'accountingId', e.target.value)} 
-                  placeholder="Bookworks ID for Mapping" 
-                  className="border-blue-100 focus:border-blue-400"
-                />
-              </div>
+                <div className="flex-1 space-y-2">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Badge Number</label>
+                  <Input value={badge.badgeNumber} onChange={e => handleBadgeChange(index, 'badgeNumber', e.target.value)} placeholder="000123" />
+                </div>
 
-              <Button
-                type="button"
-                variant={badge.isDefault ? "default" : "ghost"}
-                size="icon"
-                onClick={() => handleBadgeChange(index, 'isDefault', true)}
-                className="shrink-0 h-10 w-10"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-              </Button>
-              
-              {formData.supplierBadges.length > 1 && (
-                <Button variant="ghost" size="icon" onClick={() => removeBadge(index)} className="text-red-500 h-10 w-10">
-                  <Trash2 className="h-4 w-4" />
+                <div className="flex-1 space-y-2">
+                  <label className="text-[10px] font-bold uppercase text-muted-foreground">Bookworks ID</label>
+                  <Input
+                    value={badge.accountingId}
+                    onChange={e => handleBadgeChange(index, 'accountingId', e.target.value)}
+                    placeholder="Bookworks ID for Mapping"
+                    className="border-blue-100 focus:border-blue-400"
+                  />
+                </div>
+
+                <Button
+                  type="button"
+                  variant={badge.isDefault ? "default" : "ghost"}
+                  size="icon"
+                  onClick={() => handleBadgeChange(index, 'isDefault', true)}
+                  className="shrink-0 h-10 w-10"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
                 </Button>
-              )}
+
+                {formData.supplierBadges.length > 1 && (
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeBadge(index)} className="text-red-500 h-10 w-10">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              <fieldset className="space-y-2">
+                <legend className="text-[10px] font-bold uppercase text-muted-foreground">Badge grades</legend>
+                {formData.associatedRack ? (
+                  <FuelGradeCheckboxes allowedKeys={rackSupportedGrades} selected={badge.availableGrades}
+                    onChange={grades => handleBadgeChange(index, 'availableGrades', grades)} />
+                ) : <p className="text-sm text-muted-foreground">Select a rack to choose badge grades.</p>}
+              </fieldset>
             </div>
           ))}
         </div>

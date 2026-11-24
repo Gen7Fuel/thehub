@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import type { FuelGradeOption } from "@/api/fuel-management/fuel-grades.service";
+import { FuelGradeLabel } from "@/components/custom/FuelGradeLabel";
 import { Building2, Check, Droplets, Warehouse } from "lucide-react";
 import {
   Cell,
@@ -53,7 +55,7 @@ export interface VolumeShareDatum {
 interface SupplierRackVolumeChartProps {
   orders: SupplierRackOrder[];
   selectedGrades: string[];
-  getGradeTheme: (grade: string) => { raw: string };
+  grades: readonly FuelGradeOption[];
   isLoading?: boolean;
 }
 
@@ -160,7 +162,7 @@ export function aggregateSupplierRackVolumes(
       name,
       detail,
       litres: 0,
-      grades: {},
+      grades: Object.create(null),
       orderIds: new Set<string>(),
     };
     if (detail && !current.detail.includes(detail)) {
@@ -227,7 +229,7 @@ function VolumeShareTooltip({
 export function SupplierRackVolumeChart({
   orders,
   selectedGrades,
-  getGradeTheme,
+  grades,
   isLoading = false,
 }: SupplierRackVolumeChartProps) {
   const [dimension, setDimension] = useState<VolumeDimension>("supplier");
@@ -269,7 +271,7 @@ export function SupplierRackVolumeChart({
   );
 
   const detailGrades = useMemo(() => {
-    const gradeTotals: Record<string, number> = {};
+    const gradeTotals: Record<string, number> = Object.create(null);
 
     if (selectedEntity) {
       Object.assign(gradeTotals, selectedEntity.grades);
@@ -495,13 +497,7 @@ export function SupplierRackVolumeChart({
                       className="rounded-lg border border-slate-200 bg-white px-3 py-2"
                     >
                       <div className="mb-1 flex items-center justify-between gap-2">
-                        <span className="flex min-w-0 items-center gap-1.5 truncate text-[11px] font-black text-slate-700">
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{ backgroundColor: getGradeTheme(grade).raw }}
-                          />
-                          {grade}
-                        </span>
+                        <FuelGradeLabel grade={grade} grades={grades} />
                         <span className="text-[10px] font-bold text-slate-400">
                           {share.toFixed(1)}%
                         </span>

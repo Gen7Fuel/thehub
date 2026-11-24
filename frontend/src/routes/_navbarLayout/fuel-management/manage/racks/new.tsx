@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { FuelGradeCheckboxes } from '@/components/custom/FuelGradeCheckboxes'
 import { Save, Warehouse } from 'lucide-react'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { useQueryClient } from '@tanstack/react-query'
@@ -10,8 +10,6 @@ import { useQueryClient } from '@tanstack/react-query'
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/racks/new')({
   component: NewRackComponent,
 })
-
-const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"]
 
 function NewRackComponent() {
   const navigate = useNavigate()
@@ -21,15 +19,6 @@ function NewRackComponent() {
     rackLocation: '',
     availableGrades: [] as string[]
   })
-
-  const toggleGrade = (grade: string) => {
-    setFormData(prev => ({
-      ...prev,
-      availableGrades: prev.availableGrades.includes(grade)
-        ? prev.availableGrades.filter(g => g !== grade)
-        : [...prev.availableGrades, grade]
-    }))
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,18 +54,8 @@ function NewRackComponent() {
 
           <div className="space-y-3">
             <label className="text-xs font-bold uppercase text-slate-500">Available Fuel Grades</label>
-            <div className="grid grid-cols-2 gap-4">
-              {AVAILABLE_GRADES.map(grade => (
-                <div key={grade} className="flex items-center space-x-2 bg-white p-3 rounded-md border shadow-sm">
-                  <Checkbox 
-                    id={grade} 
-                    checked={formData.availableGrades.includes(grade)}
-                    onCheckedChange={() => toggleGrade(grade)}
-                  />
-                  <label htmlFor={grade} className="text-sm font-medium leading-none cursor-pointer">{grade}</label>
-                </div>
-              ))}
-            </div>
+            <FuelGradeCheckboxes selected={formData.availableGrades}
+              onChange={availableGrades => setFormData(current => ({ ...current, availableGrades }))} />
           </div>
         </div>
 

@@ -55,6 +55,9 @@ const MAPPING_CONFIG = {
     { supplierItem: "DIESEL", inventoryItem: "ULSD" },
     { supplierItem: "DIESEL", inventoryItem: "WULSD" },
     { supplierItem: "DYED", inventoryItem: "ULSDD" }
+  ],
+  "GAS-DYED": [
+    { supplierItem: "GAS-DYED", inventoryItem: "PULD91" }
   ]
 } as const;
 
@@ -645,6 +648,7 @@ export function RouteComponent() {
                   <option value="GAS">GAS (RUL & PUL)</option>
                   <option value="GAS-E15">GAS (E15)</option>
                   <option value="DIESEL & DYED">DIESEL & DYED</option>
+                  <option value="GAS-DYED">GAS-DYED(PULD91)</option>
                 </select>
               </div>
 

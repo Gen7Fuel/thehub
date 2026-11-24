@@ -3,7 +3,10 @@ import { useState, useMemo, useEffect } from 'react';
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { buildFuelOrderAccessGroupId, fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelGradeOptionsQuery, type FuelGradeOption } from '@/api/fuel-management/fuel-grades.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
+import { FuelGradeLabel } from '@/components/custom/FuelGradeLabel'
+import { sortByFuelGrade } from '@/lib/fuelGradeDisplay'
 import { format, addDays, startOfDay, isAfter, isBefore } from 'date-fns';
 import {
   ChevronLeft, ChevronRight, Filter, ArrowRight,
@@ -33,6 +36,7 @@ export function OrderPipelineComponent() {
   const [provinceSearch, setProvinceSearch] = useState("");
 
   // --- 2. DATA FETCHING ---
+  const { data: grades = [] } = useQuery(fuelGradeOptionsQuery);
   const { data: locations = [], isLoading: isLocationsLoading } = useQuery({
     queryKey: ['all-locations-pipeline'],
     queryFn: () => fuelStationTanksService.listLocations<any[]>('fuel-management.order-pipeline', 'Fuel order pipeline stations viewed', 'fuelManagement.orderPipeline'),
@@ -238,6 +242,7 @@ export function OrderPipelineComponent() {
                 key={site._id}
                 site={site}
                 date={selectedDate}
+                grades={grades}
                 orderAccessContext={orderAccessContext}
                 projectionAccessContext={projectionAccessContext}
               />
@@ -252,23 +257,17 @@ export function OrderPipelineComponent() {
 function PipelineBlock({
   site,
   date,
+  grades,
   orderAccessContext,
   projectionAccessContext,
 }: {
   site: any;
   date: Date;
+  grades: readonly FuelGradeOption[];
   orderAccessContext: { message: string; groupId: string };
   projectionAccessContext: { message: string; groupId: string };
 }) {
   const [stationTime, setStationTime] = useState('');
-  const gradeMap: Record<string, string> = {
-    'Regular': 'REG',
-    'Premium': 'PUL',
-    'Diesel': 'ULSD',
-    'Dyed Diesel': 'DYED'
-  };
-
-  const sortOrder = ['Regular', 'Premium', 'Diesel', 'Dyed Diesel'];
 
   // 1. FORMAT AS STRING (Avoids .toISOString() shifting dates for UTC stakeholders)
   const selectedDateStr = format(date, 'yyyy-MM-dd');
@@ -322,8 +321,8 @@ function PipelineBlock({
       summary[gradeKey].total += (t.tankCapacity || 0);
     });
 
-    return summary;
-  }, [tankData]);
+    return sortByFuelGrade(Object.values(summary), grades);
+  }, [tankData, grades]);
 
   const { data: orders = [], isLoading: isOrdersLoading, isError: isOrdersError, isFetching: isOrdersFetching } = useQuery({
     queryKey: ['pipeline-orders', site._id, selectedDateStr],
@@ -399,7 +398,7 @@ function PipelineBlock({
           </div>
         </div>
 
-        {/* GRADE INVENTORY - SORTED 2x2 GRID WITH RISK BORDERS */}
+        {/* GRADE INVENTORY WITH RISK BORDERS */}
         <div className="grid grid-cols-2 gap-2 mb-5">
           {isTanksLoading ? (
             <div className="col-span-2 h-[178px] flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
@@ -409,17 +408,15 @@ function PipelineBlock({
             <div className="col-span-2 h-[178px] flex items-center justify-center bg-red-50 rounded-2xl border border-dashed border-red-100 text-[10px] font-bold uppercase text-red-400">
               Unable to load tank data
             </div>
-          ) : sortOrder
-            .filter(gradeName => gradeSummary[gradeName])
-            .map(gradeName => {
-              const data = gradeSummary[gradeName] || { sales: 0, closing: 0, min: 0, max: 0, total: 0 };
+          ) : gradeSummary.map(data => {
+              const gradeName = data.grade;
               const theme = getGradeTheme(gradeName);
+              const gradeColor = grades.find(grade => grade.key === gradeName)?.color ?? '#475569';
 
               const isLow = !isPast && data.closing <= data.min;
               const isOverflow = !isPast && data.closing > data.total;
               const isWarning = !isPast && data.closing > data.max && !isOverflow;
 
-              // Logic: Keep original theme color, but override border and add shadow for alerts
               let ringClass = "border-slate-100";
               let shadowStyle = {};
 
@@ -436,9 +433,9 @@ function PipelineBlock({
               return (
                 <div
                   key={gradeName}
-                  style={shadowStyle}
+                  style={{ ...shadowStyle, backgroundColor: `${gradeColor}15` }}
                   className={`
-                  ${theme.light} ${ringClass}
+                  ${ringClass}
                   border-2 p-3 rounded-2xl flex flex-col gap-2 min-h-[85px] transition-all duration-300 relative overflow-hidden
                 `}
                 >
@@ -448,8 +445,8 @@ function PipelineBlock({
                   )}
 
                   <div className="flex justify-between items-center">
-                    <span className={`text-[10px] font-black ${theme.label}`}>{gradeMap[gradeName] || gradeName}</span>
-                    <theme.icon className={`h-3 w-3 ${theme.label} opacity-60`} />
+                    <FuelGradeLabel grade={gradeName} grades={grades} tank />
+                    <theme.icon className="h-3 w-3" style={{ color: gradeColor }} />
                   </div>
 
                   <div className="space-y-1">
@@ -461,7 +458,7 @@ function PipelineBlock({
                     </div>
                     <div className="flex items-center justify-between border-t border-black/5 pt-1">
                       <Droplets className="h-2.5 w-2.5 text-blue-400" />
-                      <span className={`text-[11px] font-mono font-black ${theme.label}`}>
+                      <span className="text-[11px] font-mono font-black text-slate-900">
                         {data.closing.toLocaleString()}
                       </span>
                     </div>
@@ -544,6 +541,7 @@ function PipelineBlock({
                       </div>
                       <OrderDetailsDialog
                         order={order}
+                        grades={grades}
                         trigger={
                           <button className="p-1 hover:bg-white/50 rounded-md transition-colors">
                             <Eye className="h-3.5 w-3.5" />
@@ -582,7 +580,11 @@ function PipelineBlock({
 }
 
 
-const OrderDetailsDialog = ({ order, trigger }: { order: any, trigger?: React.ReactNode }) => (
+const OrderDetailsDialog = ({ order, grades, trigger }: {
+  order: any;
+  grades: readonly FuelGradeOption[];
+  trigger?: React.ReactNode;
+}) => (
   <Dialog>
     <DialogTrigger asChild>
       {trigger || (
@@ -637,19 +639,10 @@ const OrderDetailsDialog = ({ order, trigger }: { order: any, trigger?: React.Re
             Order Breakdown
           </label>
           <div className="grid grid-cols-2 gap-x-8 gap-y-1">
-            {order.items
-              ?.filter((item: any) => (item.ltrs || 0) > 0) // Only show items with quantities
-              .sort((a: any, b: any) => {
-                const GRADE_ORDER = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
-                const indexA = GRADE_ORDER.indexOf(a.grade);
-                const indexB = GRADE_ORDER.indexOf(b.grade);
-                return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
-              })
+            {sortByFuelGrade((order.items || []).filter((item: any) => (item.ltrs || 0) > 0), grades)
               .map((item: any) => (
                 <div key={item._id} className="flex justify-between border-b border-slate-200 py-1">
-                  <span className="text-[10px] font-bold text-slate-600 uppercase">
-                    {item.grade}
-                  </span>
+                  <FuelGradeLabel grade={item.grade} grades={grades} />
                   <span className="text-[10px] font-mono font-black text-blue-700">
                     {item.ltrs?.toLocaleString()} L
                   </span>
