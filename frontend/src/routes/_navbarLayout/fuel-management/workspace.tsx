@@ -2,10 +2,13 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"; // Recommended for fetching
 import { buildFuelOrderAccessGroupId, fuelOrdersService } from '@/api/fuel-management/fuel-orders.service'
+import { fuelGradeOptionsQuery, type FuelGradeOption } from '@/api/fuel-management/fuel-grades.service'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
 import { fuelSalesService } from '@/api/fuel-management/fuel-sales.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
 import { fuelSuppliersService } from '@/api/fuel-management/fuel-suppliers.service'
+import { FuelGradeLabel } from '@/components/custom/FuelGradeLabel'
+import { sortByFuelGrade } from '@/lib/fuelGradeDisplay'
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -34,6 +37,8 @@ import {
   format,
   addDays,
   isAfter,
+  isValid,
+  parseISO,
   startOfDay,
   subDays,
   isBefore,
@@ -59,7 +64,6 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 // import { Label } from "@/components/ui/label";
-import { getGradeTheme } from "./manage/locations/$id";
 import {
   POPreviewDocument,
   formatPDFDate,
@@ -77,9 +81,18 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 
+const workspaceDateFormat = "yyyy-MM-dd";
+
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/workspace",
 )({
+  validateSearch: (search: Record<string, unknown>): { date?: string } => {
+    const { date } = search;
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { date: undefined };
+
+    const parsed = parseISO(date);
+    return { date: isValid(parsed) && format(parsed, workspaceDateFormat) === date ? date : undefined };
+  },
   component: WorkspaceComponent,
 });
 
@@ -106,7 +119,19 @@ export const getStatusColor = (status: string) => {
 };
 
 function WorkspaceComponent() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const { date } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const selectedDate = date ? parseISO(date) : startOfDay(new Date());
+  const setSelectedDate = (nextDate: Date) => {
+    void navigate({
+      search: (previous: Record<string, unknown>) => ({
+        ...previous,
+        date: format(nextDate, workspaceDateFormat),
+      }),
+      resetScroll: false,
+    });
+  };
+  const { data: grades = [] } = useQuery(fuelGradeOptionsQuery);
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   // 1. Fetch Real Locations from your Backend
@@ -153,7 +178,7 @@ function WorkspaceComponent() {
     });
   }, [selectedStationIds, locations]);
 
-  const selectedDateLabel = format(selectedDate, "yyyy-MM-dd");
+  const selectedDateLabel = format(selectedDate, workspaceDateFormat);
   const orderAccessContext = useMemo(() => {
     const eligibleLocations = locations.filter((location: any) => location.tankCount > 0);
     const isAllSites = eligibleLocations.length > 0
@@ -411,6 +436,7 @@ function WorkspaceComponent() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Previous day"
                   className="text-slate-400 hover:text-white hover:bg-slate-800"
                   onClick={() => shiftDate(-1)}
                 >
@@ -427,6 +453,7 @@ function WorkspaceComponent() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Next day"
                   className="text-slate-400 hover:text-white hover:bg-slate-800"
                   onClick={() => shiftDate(1)}
                 >
@@ -479,6 +506,7 @@ function WorkspaceComponent() {
               key={locData._id}
               location={locData}
               date={selectedDate}
+              grades={grades}
               racks={racks}
               locations={locations}
               orderAccessContext={orderAccessContext}
@@ -494,6 +522,7 @@ function WorkspaceComponent() {
 function StationStrip({
   location,
   date,
+  grades,
   racks,
   locations,
   orderAccessContext,
@@ -501,6 +530,7 @@ function StationStrip({
 }: {
   location: any;
   date: Date;
+  grades: readonly FuelGradeOption[];
   racks: any[];
   locations: any[];
   orderAccessContext: { message: string; groupId: string };
@@ -552,7 +582,7 @@ function StationStrip({
   };
 
   const stationTz = location.timezone || "America/Toronto";
-  const selectedDateStr = format(date, "yyyy-MM-dd");
+  const selectedDateStr = format(date, workspaceDateFormat);
 
   const {
     data: tankResponse,
@@ -617,16 +647,8 @@ function StationStrip({
       summary[gradeKey].totalCapacity += tank.tankCapacity || 0;
     });
 
-    return Object.values(summary).sort((a: any, b: any) => {
-      const priority: Record<string, number> = {
-        Regular: 1,
-        Premium: 2,
-        Diesel: 3,
-        "Dyed Diesel": 4,
-      };
-      return (priority[a.grade] || 99) - (priority[b.grade] || 99);
-    });
-  }, [tanks]);
+    return sortByFuelGrade(Object.values(summary), grades);
+  }, [tanks, grades]);
 
   // Fetch Orders (Your existing logic)
   const {
@@ -677,13 +699,6 @@ function StationStrip({
       // toast.success("Sales Synced");
     },
   });
-
-  const gradeMap: Record<string, string> = {
-    Regular: "REG",
-    Premium: "PUL",
-    Diesel: "ULSD",
-    "Dyed Diesel": "DYED",
-  };
 
   useEffect(() => {
     const tz = location?.timezone || "America/Toronto";
@@ -838,7 +853,6 @@ function StationStrip({
                       </tr>
                     ) : (
                       gradeInventory.map((item: any) => {
-                        const theme = getGradeTheme(item.grade);
                         const rowColorClass = getRowStatusColor(item);
 
                         // Status Flags
@@ -856,17 +870,7 @@ function StationStrip({
                             className={`${rowColorClass} transition-colors`}
                           >
                             <td className="py-1.5 px-3 flex items-center gap-2">
-                              <span
-                                className={`text-[10px] font-black px-1.5 py-0.5 rounded border ${theme.label}`}
-                                style={{
-                                  backgroundColor: `${theme.raw}15`,
-                                  borderColor: `${theme.raw}30`,
-                                }}
-                              >
-                                {item.grade === "Regular"
-                                  ? "REG | E15"
-                                  : gradeMap[item.grade] || item.grade}
-                              </span>
+                              <FuelGradeLabel grade={item.grade} grades={grades} tank />
 
                               {/* Added Min Limit in brackets */}
                               {item.minLimit !== undefined && (
@@ -1190,47 +1194,17 @@ function StationStrip({
                         {/* RIGHT: Fuel Qtys */}
                         <div className="flex items-center gap-2">
                           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar max-w-[500px]">
-                            {order.items
-                              ?.slice()
-                              .sort((a: any, b: any) => {
-                                const priority: Record<string, number> = {
-                                  Regular: 1,
-                                  E15: 2,
-                                  Premium: 3,
-                                  Diesel: 4,
-                                  "Dyed Diesel": 5,
-                                };
-                                return (
-                                  (priority[a.grade] || 99) -
-                                  (priority[b.grade] || 99)
-                                );
-                              })
-                              .map((item: any) => {
-                                const theme = getGradeTheme(item.grade);
-                                return (
-                                  <div
-                                    key={item.grade}
-                                    className="flex items-center gap-2 px-2 py-1 rounded-lg border"
-                                    style={{
-                                      backgroundColor: `${theme.raw}10`,
-                                      borderColor: `${theme.raw}25`,
-                                    }}
-                                  >
-                                    <span
-                                      className={`text-[12px] font-black uppercase tracking-tight ${theme.label}`}
-                                    >
-                                      {item.grade
-                                        .replace("Dyed Diesel", "DYED")
-                                        .replace("Regular", "REG")
-                                        .replace("Premium", "PUL")
-                                        .replace("Diesel", "ULSD")}
-                                    </span>
-                                    <span className="font-mono font-black text-slate-900 text-[12px]">
-                                      {(item.ltrs || 0).toLocaleString()}
-                                    </span>
-                                  </div>
-                                );
-                              })}
+                            {sortByFuelGrade(order.items || [], grades).map((item: any) => (
+                              <div
+                                key={item.grade}
+                                className="flex items-center gap-2 px-2 py-1 rounded-lg border border-slate-200"
+                              >
+                                <FuelGradeLabel grade={item.grade} grades={grades} className="text-[12px] tracking-tight" />
+                                <span className="font-mono font-black text-slate-900 text-[12px]">
+                                  {(item.ltrs || 0).toLocaleString()}
+                                </span>
+                              </div>
+                            ))}
                           </div>
                           {canEditOrderQty && (
                             <Button
@@ -1301,6 +1275,7 @@ function StationStrip({
           onEditSchedule={openRescheduleFromStatus}
           onEditQty={openEditQtyFromStatus}
           locations={locations}
+          grades={grades}
         />
       )}
 
@@ -1322,6 +1297,7 @@ function StationStrip({
       {editQtyOrder && (
         <EditQtyDialog
           order={editQtyOrder}
+          grades={grades}
           open={!!editQtyOrder}
           // onOpenChange={(open: any) => !open && setEditQtyOrder(null)}
           onOpenChange={(open: any) => {
@@ -1438,6 +1414,7 @@ function StationStrip({
               );
 
               const commonProps = {
+                grades,
                 data: {
                   deliveryDate: getISODateOnly(viewingPO.originalDeliveryDate),
                   poNumber: viewingPO.poNumber,
@@ -1666,6 +1643,7 @@ export function UpdateStatusDialog({
   onEditSchedule,
   onEditQty,
   locations = [],
+  grades,
 }: any) {
   const [pendingStatus, setPendingStatus] = useState<string | null>(
     initialStep ? "Delivered" : null,
@@ -1889,16 +1867,8 @@ export function UpdateStatusDialog({
     },
   });
 
-  const sortOrderItems = (items: any[] = []) =>
-    [...items].sort((a, b) => {
-      return (
-        (gradeConfig[a.grade]?.priority || 99) -
-        (gradeConfig[b.grade]?.priority || 99)
-      );
-    });
-
   const openRetainDialog = () => {
-    const sortedItems = sortOrderItems(order.items || []).map((item) => ({
+    const sortedItems = sortByFuelGrade(order.items || [], grades).map((item: any) => ({
       grade: item.grade,
       ltrs: Number(item.ltrs || 0),
     }));
@@ -2052,7 +2022,7 @@ export function UpdateStatusDialog({
                     key={item.grade}
                     className="flex justify-between font-mono text-sm font-black"
                   >
-                    <span className="text-slate-500">{item.grade}</span>
+                    <FuelGradeLabel grade={item.grade} grades={grades} />
                     <span className="text-slate-900">
                       {item.ltrs.toLocaleString()} L
                     </span>
@@ -2219,7 +2189,9 @@ export function UpdateStatusDialog({
                       onChange={(e) => updateRetainActualQty(item.grade, e.target.value)}
                       className="h-9 w-full rounded-md border px-2 text-sm font-mono"
                     />
-                    <div className="text-center text-sm font-semibold text-slate-700">{item.grade}</div>
+                    <div className="text-center">
+                      <FuelGradeLabel grade={item.grade} grades={grades} />
+                    </div>
                     <Input
                       type="number"
                       min={0}
@@ -2372,7 +2344,7 @@ export function UpdateStatusDialog({
                 <div className="divide-y">
                   {retainedPositiveItems.map((item) => (
                     <div key={item.grade} className="flex justify-between p-2 text-sm">
-                      <span className="font-semibold text-slate-600">{item.grade}</span>
+                      <FuelGradeLabel grade={item.grade} grades={grades} />
                       <span className="font-mono font-black">{Number(item.ltrs).toLocaleString()} L</span>
                     </div>
                   ))}
@@ -2389,6 +2361,7 @@ export function UpdateStatusDialog({
                   style={{ border: "none" }}
                 >
                   <POPreviewDocument
+                    grades={grades}
                     data={{
                       deliveryDate: retainDeliveryDate,
                       poNumber: retainPoNumber,
@@ -2437,6 +2410,7 @@ export function UpdateStatusDialog({
               <PDFDownloadLink
                 document={
                   <POPreviewDocument
+                    grades={grades}
                     data={{
                       deliveryDate: retainDeliveryDate,
                       poNumber: retainPoNumber,
@@ -2607,83 +2581,55 @@ export function EditMetaDialog({
   racks,
   onUpdateSuccess,
 }: any) {
-  const [selectedRack, setSelectedRack] = useState(
-    order.rack?._id || order.rack,
-  );
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState(
-    order.supplier?._id || order.supplier,
-  );
-  const [badgeNo, setBadgeNo] = useState(order.badgeNo || "");
-  const [carrierName, _] = useState(order.carrier?.carrierName || "No Carrier");
-  const [loading, setLoading] = useState(false);
+  const savedRack = order.rack?._id ?? order.rack ?? "";
+  const savedSupplier = order.supplier?._id ?? order.supplier ?? "";
+  const savedBadge = order.badgeNo ?? "";
+  const [selectedRack, setSelectedRack] = useState<string>(savedRack);
+  // null opts into a default after an explicit change. An empty saved value stays empty.
+  const [supplierChoice, setSupplierChoice] = useState<string | null>(savedSupplier);
+  const [badgeChoice, setBadgeChoice] = useState<string | null>(savedBadge);
+  const carrierName = order.carrier?.carrierName || "No Carrier";
 
-  // Initialize and handle Rack changes
-  const handleRackChange = async (rackId: string) => {
-    try {
-      setLoading(true);
-      setSelectedRack(rackId);
+  const supplierQuery = useQuery({
+    queryKey: ["workspace-logistics-suppliers", selectedRack],
+    queryFn: () => fuelSuppliersService.list<{
+      _id: string;
+      supplierName: string;
+      supplierBadges?: { badgeNumber: string; badgeName: string; isDefault?: boolean }[];
+    }[]>(selectedRack, 'fuel-management.workspace', `Fuel suppliers viewed for rack ${selectedRack} while editing order logistics`),
+    enabled: isOpen && Boolean(selectedRack),
+  });
+  const suppliers = supplierQuery.data ?? [];
+  const rack = racks.find((entry: any) => entry._id === selectedRack);
+  const defaultSupplierId = rack?.defaultSupplier?._id ?? rack?.defaultSupplier;
+  const defaultSupplier = suppliers.find(entry => entry._id === defaultSupplierId) ?? suppliers[0];
+  const selectedSupplier = supplierChoice ?? defaultSupplier?._id ?? "";
+  const supplier = suppliers.find(entry => entry._id === selectedSupplier);
+  const badges = supplier?.supplierBadges ?? [];
+  const defaultBadge = badges.find(entry => entry.isDefault) ?? badges[0];
+  const badgeNo = badgeChoice ?? defaultBadge?.badgeNumber ?? "";
+  const hasBadge = badges.some(entry => entry.badgeNumber === badgeNo);
+  const canSave = Boolean(rack && supplier && hasBadge && supplierQuery.isSuccess);
+  const savedSupplierLabel = order.supplier?.supplierName ?? savedSupplier;
 
-      // 1. Fetch Suppliers for this Rack
-      const rackSuppliers = await fuelSuppliersService.list<any[]>(rackId, 'fuel-management.workspace', `Fuel suppliers viewed for rack ${rackId} while editing order logistics`);
-      setSuppliers(rackSuppliers);
-
-      // 2. Fetch Rack details for defaults
-      const rackData = await fuelRacksService.get<any>(rackId, 'fuel-management.workspace');
-
-      // 3. Set Defaults
-      const defaultSup =
-        rackSuppliers.find((s: any) => s._id === rackData.defaultSupplier) ||
-        rackSuppliers[0];
-      setSelectedSupplier(defaultSup?._id || "");
-
-      const defaultBadge =
-        defaultSup?.supplierBadges?.find((b: any) => b.isDefault) ||
-        defaultSup?.supplierBadges?.[0];
-      setBadgeNo(defaultBadge?.badgeNumber || "");
-
-      setLoading(false);
-    } catch (err) {
-      console.error("Rack Change Error:", err);
-      setLoading(false);
-    }
+  const handleRackChange = (rackId: string) => {
+    setSelectedRack(rackId);
+    setSupplierChoice(rackId === savedRack ? savedSupplier : null);
+    setBadgeChoice(rackId === savedRack ? savedBadge : null);
   };
 
-  // Handle manual supplier change
-  const handleSupplierChange = (supId: string) => {
-    setSelectedSupplier(supId);
-    const sup = suppliers.find((s) => s._id === supId);
-    const defaultBadge =
-      sup?.supplierBadges?.find((b: any) => b.isDefault) ||
-      sup?.supplierBadges?.[0];
-    setBadgeNo(defaultBadge?.badgeNumber || "");
-  };
-
-  // Initial load
-  useEffect(() => {
-    if (isOpen && selectedRack) {
-      handleRackChange(selectedRack);
-    }
-  }, [isOpen]);
-
-  const handleSave = async () => {
-    try {
-      await fuelOrdersService.update(
-        order._id,
-        {
-          rack: selectedRack,
-          supplier: selectedSupplier,
-          badgeNo: badgeNo,
-        },
-        `Fuel order ${order.poNumber || order._id} logistics update requested`,
-        'fuelManagement.workspace.editOrderMetadata',
-      );
+  const saveMutation = useMutation({
+    mutationFn: () => fuelOrdersService.update(
+      order._id,
+      { rack: selectedRack, supplier: selectedSupplier, badgeNo },
+      `Fuel order ${order.poNumber || order._id} logistics update requested`,
+      'fuelManagement.workspace.editOrderMetadata',
+    ),
+    onSuccess: () => {
       onUpdateSuccess();
       onOpenChange(false);
-    } catch (err) {
-      console.error("Update failed", err);
-    }
-  };
+    },
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -2700,9 +2646,11 @@ export function EditMetaDialog({
             <label className="text-[10px] font-black uppercase text-slate-400">
               Fuel Rack
             </label>
-            <Select value={selectedRack} onValueChange={handleRackChange}>
-              <SelectTrigger className="font-bold">
-                <SelectValue placeholder="Select Rack" />
+            <Select value={selectedRack} onValueChange={handleRackChange} disabled={saveMutation.isPending}>
+              <SelectTrigger aria-label="Fuel Rack" className="font-bold">
+                <SelectValue placeholder="Select Rack">
+                  {rack ? undefined : order.rack?.rackName ?? selectedRack}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {racks.map((r: any) => (
@@ -2725,14 +2673,19 @@ export function EditMetaDialog({
             </label>
             <Select
               value={selectedSupplier}
-              onValueChange={handleSupplierChange}
-              disabled={loading}
+              onValueChange={(supplierId) => {
+                setSupplierChoice(supplierId);
+                setBadgeChoice(null);
+              }}
+              disabled={!selectedRack || !supplierQuery.isSuccess || saveMutation.isPending}
             >
-              <SelectTrigger className="font-bold">
-                <SelectValue placeholder="Select Supplier" />
+              <SelectTrigger aria-label="Supplier" className="font-bold">
+                <SelectValue placeholder="Select Supplier">
+                  {supplier ? undefined : selectedSupplier === savedSupplier ? savedSupplierLabel : selectedSupplier}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {suppliers.map((s: any) => (
+                {suppliers.map((s) => (
                   <SelectItem
                     key={s._id}
                     value={s._id}
@@ -2752,35 +2705,30 @@ export function EditMetaDialog({
             </label>
             <Select
               value={badgeNo}
-              onValueChange={(v) => setBadgeNo(v)}
-              disabled={loading || !selectedSupplier}
+              onValueChange={setBadgeChoice}
+              disabled={!supplier || !supplierQuery.isSuccess || saveMutation.isPending}
             >
-              <SelectTrigger className="font-mono w-full overflow-hidden border-2 border-slate-200">
+              <SelectTrigger aria-label="Badge Number" className="font-mono w-full overflow-hidden border-2 border-slate-200">
                 <div className="truncate text-left font-bold">
-                  <SelectValue placeholder="Select Badge" />
+                  <SelectValue placeholder="Select Badge">{hasBadge ? undefined : badgeNo}</SelectValue>
                 </div>
               </SelectTrigger>
               <SelectContent className="max-w-[300px]">
-                {/* Find the current supplier from our local state list 
-                  to map through their specific badges 
-                */}
-                {suppliers
-                  .find((s) => s._id === selectedSupplier)
-                  ?.supplierBadges.map((b: any) => (
-                    <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">{b.badgeNumber}</span>
-                        <span className="text-slate-400 text-xs truncate">
-                          — {b.badgeName}
+                {badges.map((b) => (
+                  <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">{b.badgeNumber}</span>
+                      <span className="text-slate-400 text-xs truncate">
+                        — {b.badgeName}
+                      </span>
+                      {b.isDefault && (
+                        <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">
+                          DEF
                         </span>
-                        {b.isDefault && (
-                          <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">
-                            DEF
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -2796,8 +2744,18 @@ export function EditMetaDialog({
           </div>
         </div>
 
+        {supplierQuery.isError && (
+          <p role="alert" className="text-sm text-destructive">Could not load suppliers for this rack.</p>
+        )}
+        {supplierQuery.isSuccess && !canSave && (
+          <p role="status" className="text-sm text-muted-foreground">Select an available rack, supplier, and badge to save.</p>
+        )}
+        {saveMutation.isError && (
+          <p role="alert" className="text-sm text-destructive">Could not save order logistics.</p>
+        )}
         <Button
-          onClick={handleSave}
+          onClick={() => saveMutation.mutate()}
+          disabled={!canSave || saveMutation.isPending}
           className="w-full font-black uppercase h-12 bg-blue-600"
         >
           Save Changes
@@ -2807,28 +2765,18 @@ export function EditMetaDialog({
   );
 }
 
-// 1. Defined Sort Order & Abbreviations
-export const gradeConfig: Record<string, { priority: number; short: string }> =
-  {
-    Regular: { priority: 1, short: "REG" },
-    Premium: { priority: 2, short: "PUL" },
-    Diesel: { priority: 3, short: "ULSD" },
-    "Dyed Diesel": { priority: 4, short: "DYED" },
-  };
-
-export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
+export function EditQtyDialog({ order, open, onOpenChange, locationId, grades }: {
+  order: any;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  locationId: string;
+  grades: readonly FuelGradeOption[];
+}) {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<any[]>([]);
   useEffect(() => {
     if (order?.items) {
-      // 2. Sort items based on the defined priority before setting state
-      const sortedItems = [...order.items].sort((a, b) => {
-        return (
-          (gradeConfig[a.grade]?.priority || 99) -
-          (gradeConfig[b.grade]?.priority || 99)
-        );
-      });
-      setItems(sortedItems);
+      setItems([...order.items]);
     }
   }, [order]);
 
@@ -2873,30 +2821,16 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
         </DialogHeader>
 
         <div className="grid gap-5 py-6">
-          {items.map((item) => {
-            const theme = getGradeTheme(item.grade);
-            const shortName = gradeConfig[item.grade]?.short || item.grade;
+          {sortByFuelGrade(items, grades).map((item) => {
+            const gradeColor = grades.find(grade => grade.key === item.grade)?.color ?? '#475569';
 
             return (
               <div
                 key={item.grade}
                 className="grid grid-cols-4 items-center gap-4"
               >
-                {/* 3. Styled Label using your existing Theme */}
                 <div className="text-right">
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "uppercase text-[10px] font-black px-2 py-1 shadow-none",
-                      theme.label,
-                    )}
-                    style={{
-                      backgroundColor: `${theme.raw}10`,
-                      borderColor: `${theme.raw}40`,
-                    }}
-                  >
-                    {shortName}
-                  </Badge>
+                  <FuelGradeLabel grade={item.grade} grades={grades} />
                 </div>
 
                 <div className="col-span-3 relative group">
@@ -2907,9 +2841,8 @@ export function EditQtyDialog({ order, open, onOpenChange, locationId }: any) {
                       "focus-visible:ring-0 focus-visible:ring-offset-0",
                     )}
                     style={{
-                      borderColor: `${theme.raw}20`,
-                      // When user focuses, highlight with the grade color
-                      borderLeft: `6px solid ${theme.raw}`,
+                      borderColor: `${gradeColor}20`,
+                      borderLeft: `6px solid ${gradeColor}`,
                     }}
                     value={item.ltrs}
                     onChange={(e) =>

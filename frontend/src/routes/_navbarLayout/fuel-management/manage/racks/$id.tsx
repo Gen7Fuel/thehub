@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import { FuelGradeCheckboxes } from '@/components/custom/FuelGradeCheckboxes'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Save, Warehouse, Loader2, Search, Plus, X, Truck, CreditCard, ShieldCheck } from 'lucide-react'
@@ -14,8 +15,6 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 export const Route = createFileRoute('/_navbarLayout/fuel-management/manage/racks/$id')({
   component: EditRackComponent,
 })
-
-const AVAILABLE_GRADES = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"]
 
 function EditRackComponent() {
   const { id } = Route.useParams()
@@ -81,14 +80,6 @@ function EditRackComponent() {
     setFormData({ ...formData, associatedCarriers: updated })
   }
 
-  const toggleGrade = (grade: string) => {
-    const currentGrades = formData.availableGrades || []
-    const updatedGrades = currentGrades.includes(grade)
-      ? currentGrades.filter((g: string) => g !== grade)
-      : [...currentGrades, grade]
-    setFormData({ ...formData, availableGrades: updatedGrades })
-  }
-
   const handleUpdate = async () => {
     setIsSaving(true)
     try {
@@ -146,14 +137,8 @@ function EditRackComponent() {
 
           <div className="p-6 border rounded-xl bg-slate-50/50 space-y-4">
             <h3 className="text-xs font-bold uppercase text-slate-400 tracking-widest">Supported Grades</h3>
-            <div className="space-y-2">
-              {AVAILABLE_GRADES.map(grade => (
-                <div key={grade} className={`flex items-center space-x-3 p-3 rounded-lg border transition-colors ${formData.availableGrades?.includes(grade) ? 'bg-white border-blue-200' : 'border-transparent'}`}>
-                  <Checkbox checked={formData.availableGrades?.includes(grade)} onCheckedChange={() => toggleGrade(grade)} />
-                  <span className="text-sm font-semibold">{grade}</span>
-                </div>
-              ))}
-            </div>
+            <FuelGradeCheckboxes selected={formData.availableGrades ?? []}
+              onChange={availableGrades => setFormData({ ...formData, availableGrades })} />
           </div>
           <Button onClick={handleUpdate} disabled={isSaving} className="w-full gap-2">
             <Save className="h-4 w-4" /> {isSaving ? "Saving..." : "Save All Changes"}

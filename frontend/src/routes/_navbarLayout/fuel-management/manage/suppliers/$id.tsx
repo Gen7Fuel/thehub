@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { FuelGradeCheckboxes } from '@/components/custom/FuelGradeCheckboxes'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Save, UserCheck, Plus, Trash2, CheckCircle2, Loader2, AlertCircle } from 'lucide-react'
 import { fuelRacksService } from '@/api/fuel-management/fuel-racks.service'
@@ -21,8 +22,6 @@ function EditSupplierComponent() {
   const [formData, setFormData] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-
-  // const AVAILABLE_GRADES = ["Regular", "Premium", "Diesel", "Dyed Diesel"];
 
   // Fetch Racks for the dropdown with Authorization
   const { data: racks = [] } = useQuery({
@@ -65,20 +64,6 @@ function EditSupplierComponent() {
         { badgeName: '', badgeNumber: '', accountingId: '', isDefault: false, availableGrades: [] }
       ]
     });
-  };
-
-  // Helper to toggle grades for a specific badge index
-  const toggleBadgeGrade = (badgeIndex: number, grade: string) => {
-    const updatedBadges = [...formData.supplierBadges];
-    const currentGrades = updatedBadges[badgeIndex].availableGrades || [];
-
-    if (currentGrades.includes(grade)) {
-      updatedBadges[badgeIndex].availableGrades = currentGrades.filter((g: string) => g !== grade);
-    } else {
-      updatedBadges[badgeIndex].availableGrades = [...currentGrades, grade];
-    }
-
-    setFormData({ ...formData, supplierBadges: updatedBadges });
   };
 
   const removeBadge = (index: number) => {
@@ -278,33 +263,8 @@ function EditSupplierComponent() {
                       Badge Capabilities (Limited by {selectedRackData?.rackName || 'Rack'})
                     </label>
 
-                    <div className="flex flex-wrap gap-x-6 gap-y-2">
-                      {rackSupportedGrades.length > 0 ? (
-                        rackSupportedGrades.map((grade: string) => (
-                          <label key={grade} className="flex items-center gap-2 cursor-pointer group">
-                            <div
-                              onClick={() => toggleBadgeGrade(index, grade)}
-                              className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${badge.availableGrades?.includes(grade)
-                                ? 'bg-blue-600 border-blue-600'
-                                : 'border-slate-300 bg-white group-hover:border-blue-400'
-                                }`}
-                            >
-                              {badge.availableGrades?.includes(grade) && (
-                                <CheckCircle2 className="h-3.5 w-3.5 text-white" />
-                              )}
-                            </div>
-                            <span className={`text-sm font-semibold ${badge.availableGrades?.includes(grade) ? 'text-slate-900' : 'text-slate-500'
-                              }`}>
-                              {grade}
-                            </span>
-                          </label>
-                        ))
-                      ) : (
-                        <span className="text-xs italic text-amber-600 flex items-center gap-1">
-                          <AlertCircle className="h-3 w-3" /> No grades configured for this rack.
-                        </span>
-                      )}
-                    </div>
+                    <FuelGradeCheckboxes allowedKeys={rackSupportedGrades} selected={badge.availableGrades ?? []}
+                      onChange={grades => handleBadgeChange(index, 'availableGrades', grades)} />
                   </div>
 
                   {/* ACTION BUTTONS */}

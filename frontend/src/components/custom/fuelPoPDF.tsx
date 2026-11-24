@@ -1,4 +1,5 @@
 import { Document, Page, Text, View, StyleSheet, Image } from '@react-pdf/renderer';
+import type { FuelGradeOption } from '@/api/fuel-management/fuel-grades.service';
 
 // Helper to format: April 10th, 2026 or April 10th
 export const formatPDFDate = (dateStr: string, includeYear: boolean = true) => {
@@ -130,6 +131,7 @@ interface POData {
 
 interface POPreviewProps {
   data: POData;
+  grades: readonly FuelGradeOption[];
   selectedStation: any; // Or your specific Location interface
   carrierName?: string;
   rackName?: string;
@@ -140,6 +142,7 @@ interface POPreviewProps {
 
 export const POPreviewDocument: React.FC<POPreviewProps> = ({
   data,
+  grades,
   selectedStation,
   carrierName,
   rackName,
@@ -147,6 +150,15 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
   carrierBookworksId,
   supplierBookworksId
 }) => {
+  const gradeRows = data.items.map(({ grade }) => {
+    const entry = grades.find(option => option.key === grade);
+    const name = entry?.name ?? grade;
+    const shortName = entry?.shortName;
+    return {
+      key: grade,
+      label: shortName && shortName !== name ? `${shortName} (${name})` : name,
+    };
+  });
 
   const getQty = (gradeKey: string): string => {
     const item = data.items.find(
@@ -213,14 +225,8 @@ export const POPreviewDocument: React.FC<POPreviewProps> = ({
                 {selectedStation?.fuelCustomerName || 'Quantity'}
               </Text>
             </View>
-            {[
-              { label: 'RUL (Regular)', key: 'Regular' },
-              { label: 'E15', key: 'E15' },
-              { label: 'PUL (Premium)', key: 'Premium' },
-              { label: 'ULSD (Diesel)', key: 'Diesel' },
-              { label: 'DYED (Dyed)', key: 'Dyed Diesel' }
-            ].map((grade, i) => (
-              <View key={i} style={[styles.tableRow, { borderBottom: '0.5pt solid #eee' }]}>
+            {gradeRows.map(grade => (
+              <View key={grade.key} style={[styles.tableRow, { borderBottom: '0.5pt solid #eee' }]}>
                 <Text style={styles.tableColStation}>{grade.label}</Text>
                 <Text style={styles.tableColValue}>{getQty(grade.key)}</Text>
               </View>

@@ -274,4 +274,4 @@ const authSocket = async (socket, next) => {
 
 // To use with Socket.IO: io.use(authSocket);
 
-export { auth, authSocket };
+export { auth, authSocket, hasEffectiveAccess };

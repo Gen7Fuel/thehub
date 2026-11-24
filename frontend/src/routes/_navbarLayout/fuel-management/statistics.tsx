@@ -3,7 +3,11 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { isApiError } from '@/api/core/errors'
 import { fuelStatisticsService } from '@/api/fuel-management/fuel-statistics.service'
+import { fuelGradeOptionsQuery } from '@/api/fuel-management/fuel-grades.service'
 import { fuelStationTanksService } from '@/api/fuel-management/fuel-station-tanks.service'
+import { FuelGradeLabel } from '@/components/custom/FuelGradeLabel'
+import { getFuelGradeDisplay, getGradeLabelColor } from '@/lib/fuelGradeDisplay'
+import { getOrderTankGrade } from '@/lib/fuelOrderGrades'
 import { cn } from "@/lib/utils";
 import {
   Search,
@@ -12,8 +16,6 @@ import {
   Filter,
   Calendar as CalendarIcon,
   BarChart3,
-  Car,
-  Zap,
   Truck,
   Check,
   Package,
@@ -65,8 +67,7 @@ export const Route = createFileRoute(
   component: FuelStatisticsComponent,
 });
 
-// Removed Mid Grade
-const ALL_GRADES = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
+const EMPTY_ROWS: never[] = [];
 
 export const getStatusColor = (status: string) => {
   switch (status) {
@@ -85,50 +86,6 @@ export const getStatusColor = (status: string) => {
   }
 };
 
-export const getGradeTheme = (grade: string) => {
-  switch (grade) {
-    case "Regular":
-      return {
-        color: "bg-green-500",
-        label: "text-green-700",
-        icon: Car,
-        raw: "#22c55e",
-        light: "bg-green-50",
-      };
-    case "Premium":
-      return {
-        color: "bg-red-500",
-        label: "text-red-700",
-        icon: Zap,
-        raw: "#ef4444",
-        light: "bg-red-50",
-      };
-    case "Diesel":
-      return {
-        color: "bg-amber-400",
-        label: "text-amber-700",
-        icon: Truck,
-        raw: "#fbbf24",
-        light: "bg-amber-50",
-      };
-    case "Dyed Diesel":
-      return {
-        color: "bg-red-800",
-        label: "text-red-950",
-        icon: Truck,
-        raw: "#991b1b",
-        light: "bg-red-50/40",
-      };
-    default:
-      return {
-        color: "bg-slate-600",
-        label: "text-slate-700",
-        icon: Car,
-        raw: "#475569",
-        light: "bg-slate-50",
-      };
-  }
-};
 
 // Smooth Animated Count-Up Component (2s duration)
 function AnimatedNumber({
@@ -186,7 +143,8 @@ function FuelStatisticsComponent() {
   const navigate = useNavigate();
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
-  const [selectedGrades, setSelectedGrades] = useState<string[]>(ALL_GRADES);
+  const [gradeSelection, setGradeSelection] = useState<string[] | null>(null);
+  const { data: grades = EMPTY_ROWS, isLoading: isGradesLoading } = useQuery(fuelGradeOptionsQuery);
 
   // Modal inspection state for KPI Cards
   const [inspectModalStatus, setInspectModalStatus] = useState<string | null>(
@@ -287,7 +245,7 @@ function FuelStatisticsComponent() {
     }
   }, [locations]);
 
-  const { data: rawTanksResponse = [], isLoading: isTanksLoading } = useQuery({
+  const { data: rawTanksResponse = EMPTY_ROWS, isLoading: isTanksLoading } = useQuery({
     queryKey: ["fuel-tank-live-volumes"],
     queryFn: async () => {
       const data = await fuelStationTanksService
@@ -300,50 +258,8 @@ function FuelStatisticsComponent() {
     },
   });
 
-  const activeTankCoveragePairs = useMemo(() => {
-    const selectedStations = new Set(selectedStationIds);
-    const pairs = new Map<string, { stationId: string; grade: string }>();
-
-    (rawTanksResponse || []).forEach((tank: any) => {
-      const stationId =
-        typeof tank.stationId === "string" ? tank.stationId : tank.stationId?._id;
-      const reading = tank.lastUpdatedVolumeReadingDateTime;
-      const isActive = Boolean(
-        reading && reading !== "No latest reading available" && stationId,
-      );
-
-      if (!isActive || !selectedStations.has(stationId) || !tank.grade) return;
-      if (!selectedGrades.includes(tank.grade) && !(tank.grade === "Regular" && selectedGrades.includes("E15"))) return;
-
-      pairs.set(`${stationId}:${tank.grade}`, { stationId, grade: tank.grade });
-    });
-
-    return Array.from(pairs.values());
-  }, [rawTanksResponse, selectedGrades, selectedStationIds]);
-
-  const {
-    data: inventoryCoverageResponse = { byGrade: {}, forecastDays: [] },
-    isLoading: isInventoryCoverageLoading,
-  } = useQuery({
-    queryKey: ["inventory-coverage", activeTankCoveragePairs],
-    queryFn: async () => {
-      if (activeTankCoveragePairs.length === 0) {
-        return { byGrade: {}, forecastDays: [] };
-      }
-      const data = await fuelStatisticsService
-        .inventoryCoverage<any>(activeTankCoveragePairs, 14)
-        .catch((err) => {
-          if (handleApiErrorCheck(err)) {
-            return { data: { byGrade: {}, forecastDays: [] } };
-          }
-          throw err;
-        });
-      return data?.data || { byGrade: {}, forecastDays: [] };
-    },
-    enabled: activeTankCoveragePairs.length > 0,
-  });
   // Query Backend Pipeline Summary
-  const { data: rawOrdersResponse = [], isLoading: isOrdersLoading } = useQuery(
+  const { data: rawOrdersResponse = EMPTY_ROWS, isLoading: isOrdersLoading } = useQuery(
     {
       queryKey: ["pipeline-summary", selectedStationIds, fromMonth, toMonth],
       queryFn: async () => {
@@ -363,7 +279,7 @@ function FuelStatisticsComponent() {
     },
   );
   // --- Query 2: Backend Daily Sales Summary (FuelSales + FuelSalesArchived) ---
-  const { data: rawSalesResponse = [], isLoading: isSalesLoading } = useQuery({
+  const { data: rawSalesResponse = EMPTY_ROWS, isLoading: isSalesLoading } = useQuery({
     queryKey: ["sales-summary", selectedStationIds, fromMonth, toMonth],
     queryFn: async () => {
       if (selectedStationIds.length === 0 || !fromMonth || !toMonth) {
@@ -379,6 +295,67 @@ function FuelStatisticsComponent() {
     },
     enabled:
       selectedStationIds.length > 0 && Boolean(fromMonth) && Boolean(toMonth),
+  });
+
+  const gradeOptions = useMemo(() => {
+    const recorded = new Set<string>();
+    const selectedStations = new Set(selectedStationIds);
+    for (const tank of rawTanksResponse) {
+      const stationId = typeof tank.stationId === "string" ? tank.stationId : tank.stationId?._id;
+      if (tank.grade && selectedStations.has(stationId)) recorded.add(getOrderTankGrade(tank.grade));
+    }
+    for (const order of rawOrdersResponse) {
+      for (const item of order.items ?? []) {
+        if (item.grade && Number(item.ltrs) > 0) recorded.add(item.grade);
+      }
+    }
+    for (const day of rawSalesResponse) {
+      for (const item of day.salesData ?? []) {
+        if (item.grade && Number(item.volume) > 0) recorded.add(item.grade);
+      }
+    }
+    const catalogKeys = grades
+      .filter(grade => grade.active || recorded.has(grade.key))
+      .map(grade => grade.key);
+    return [...new Set([...catalogKeys, ...recorded])];
+  }, [grades, rawTanksResponse, rawOrdersResponse, rawSalesResponse, selectedStationIds]);
+
+  const selectedGrades = useMemo(
+    () => gradeSelection ? gradeOptions.filter(grade => gradeSelection.includes(grade)) : gradeOptions,
+    [gradeOptions, gradeSelection],
+  );
+  const allGradesSelected = selectedGrades.length === gradeOptions.length;
+  const selectedTankGrades = useMemo(() => new Set(selectedGrades.map(getOrderTankGrade)), [selectedGrades]);
+
+  const activeTankCoveragePairs = useMemo(() => {
+    const selectedStations = new Set(selectedStationIds);
+    const pairs = new Map<string, { stationId: string; grade: string }>();
+
+    for (const tank of rawTanksResponse) {
+      const stationId = typeof tank.stationId === "string" ? tank.stationId : tank.stationId?._id;
+      const reading = tank.lastUpdatedVolumeReadingDateTime;
+      if (!selectedStations.has(stationId) || !tank.grade || !reading || reading === "No latest reading available") continue;
+      if (!selectedTankGrades.has(getOrderTankGrade(tank.grade))) continue;
+      pairs.set(`${stationId}:${tank.grade}`, { stationId, grade: tank.grade });
+    }
+    return [...pairs.values()];
+  }, [rawTanksResponse, selectedTankGrades, selectedStationIds]);
+
+  const {
+    data: inventoryCoverageResponse,
+    isLoading: isInventoryCoverageLoading,
+  } = useQuery({
+    queryKey: ["inventory-coverage", activeTankCoveragePairs],
+    queryFn: async () => {
+      const data = await fuelStatisticsService
+        .inventoryCoverage<any>(activeTankCoveragePairs, 14)
+        .catch((err) => {
+          if (handleApiErrorCheck(err)) return undefined;
+          throw err;
+        });
+      return data?.data ?? null;
+    },
+    enabled: activeTankCoveragePairs.length > 0,
   });
 
   // Temporarily consume the variables to satisfy TypeScript compiler
@@ -413,10 +390,9 @@ function FuelStatisticsComponent() {
       let hasMatchingGrade = false;
 
       items.forEach((item: any) => {
-        if (!selectedGrades.includes(item.grade)) return;
-        hasMatchingGrade = true;
-
         const volume = Number(item.ltrs) || 0;
+        if (volume <= 0 || !selectedGrades.includes(item.grade)) return;
+        hasMatchingGrade = true;
 
         if (status === "Delivered") {
           deliveredLtrs += volume;
@@ -485,17 +461,14 @@ function FuelStatisticsComponent() {
   };
 
   const toggleGrade = (grade: string) => {
-    setSelectedGrades((prev) =>
-      prev.includes(grade) ? prev.filter((g) => g !== grade) : [...prev, grade],
-    );
+    setGradeSelection((previous) => {
+      const selection = previous ?? gradeOptions;
+      return selection.includes(grade) ? selection.filter(key => key !== grade) : [...selection, grade];
+    });
   };
 
   const toggleAllGrades = () => {
-    if (selectedGrades.length === ALL_GRADES.length) {
-      setSelectedGrades([]);
-    } else {
-      setSelectedGrades(ALL_GRADES);
-    }
+    setGradeSelection(allGradesSelected ? [] : null);
   };
 
   const fromMonthLabel = availableMonths
@@ -737,35 +710,39 @@ function FuelStatisticsComponent() {
               variant="ghost"
               size="sm"
               onClick={toggleAllGrades}
+              disabled={gradeOptions.length === 0}
               className="text-xs font-black uppercase tracking-wider text-blue-600 hover:bg-blue-50 mr-2"
             >
-              {selectedGrades.length === ALL_GRADES.length
+              {allGradesSelected && gradeOptions.length > 0
                 ? "Clear All"
                 : "Select All"}
             </Button>
 
-            {ALL_GRADES.map((grade) => {
-              const theme = getGradeTheme(grade);
+            {isGradesLoading && <span className="text-xs text-slate-500">Loading fuel grades…</span>}
+            {gradeOptions.map((grade) => {
+              const { name, label, color } = getFuelGradeDisplay(grade, grades);
               const isSelected = selectedGrades.includes(grade);
 
               return (
                 <button
                   key={grade}
+                  type="button"
+                  title={name}
+                  aria-pressed={isSelected}
                   onClick={() => toggleGrade(grade)}
+                  style={isSelected ? { backgroundColor: color, color: getGradeLabelColor(color) } : undefined}
                   className={cn(
                     "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-black transition-all shadow-sm",
                     isSelected
-                      ? `${theme.color} text-white border-transparent shadow-md scale-105`
+                      ? "border-transparent shadow-md scale-105"
                       : "bg-slate-50 text-slate-400 border-slate-200 hover:border-slate-300",
                   )}
                 >
                   <div
-                    className={cn(
-                      "w-2 h-2 rounded-full",
-                      isSelected ? "bg-white" : "bg-slate-400",
-                    )}
+                    className="w-2 h-2 rounded-full"
+                    style={{ backgroundColor: isSelected ? "currentColor" : color }}
                   />
-                  {grade}
+                  {label}
                   {isSelected && <Check className="h-3 w-3 ml-0.5" />}
                 </button>
               );
@@ -989,7 +966,7 @@ function FuelStatisticsComponent() {
             <VolumePipelineChart
               orders={rawOrdersResponse}
               selectedGrades={selectedGrades}
-              getGradeTheme={getGradeTheme}
+              grades={grades}
               isLoading={isOrdersLoading}
             />
           </div>
@@ -1022,14 +999,14 @@ function FuelStatisticsComponent() {
           <SupplierRackVolumeChart
             orders={rawOrdersResponse}
             selectedGrades={selectedGrades}
-            getGradeTheme={getGradeTheme}
+            grades={grades}
             isLoading={isOrdersLoading}
           />
 
           <CarrierBadgeAllocationChart
             orders={rawOrdersResponse}
             selectedGrades={selectedGrades}
-            getGradeTheme={getGradeTheme}
+            grades={grades}
             isLoading={isOrdersLoading}
           />
         </section>
@@ -1049,9 +1026,9 @@ function FuelStatisticsComponent() {
           <CurrentInventoryByGradeChart
             tanks={rawTanksResponse}
             selectedStationIds={selectedStationIds}
-            selectedGrades={selectedGrades}
-            getGradeTheme={getGradeTheme}
-            coverageForecast={inventoryCoverageResponse}
+            selectedTankGrades={selectedTankGrades}
+            grades={grades}
+            coverageForecast={inventoryCoverageResponse ?? undefined}
             isLoading={isTanksLoading || isInventoryCoverageLoading}
           />
         </section>
@@ -1182,13 +1159,13 @@ function FuelStatisticsComponent() {
                     {/* Right Column: Grades Stacked Vertically */}
                     <div className="flex flex-col items-end gap-1.5 shrink-0 self-start sm:self-center">
                       {(order.items || []).map((it: any) => {
-                        if (!it.ltrs) return null;
+                        if (Number(it.ltrs) <= 0 || !selectedGrades.includes(it.grade)) return null;
                         return (
                           <span
                             key={it._id}
                             className="text-[11px] font-black px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap text-right min-w-[130px]"
                           >
-                            {it.grade}: {it.ltrs.toLocaleString()} L
+                            <FuelGradeLabel grade={it.grade} grades={grades} /> {it.ltrs.toLocaleString()} L
                           </span>
                         );
                       })}

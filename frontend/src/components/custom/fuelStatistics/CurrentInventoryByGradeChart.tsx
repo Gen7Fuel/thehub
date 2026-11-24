@@ -1,6 +1,10 @@
 import { useMemo } from "react";
 import { AlertCircle, Cylinder, Gauge, Loader2 } from "lucide-react";
 
+import type { FuelGradeOption } from "@/api/fuel-management/fuel-grades.service";
+import { FuelGradeLabel } from "@/components/custom/FuelGradeLabel";
+import { getFuelGradeDisplay, sortByFuelGrade } from "@/lib/fuelGradeDisplay";
+import { getOrderTankGrade } from "@/lib/fuelOrderGrades";
 import { cn } from "@/lib/utils";
 
 interface TankRecord {
@@ -14,13 +18,6 @@ interface TankRecord {
   minVolumeCapacity?: number;
   currentVolume?: number;
   lastUpdatedVolumeReadingDateTime?: string;
-}
-
-interface GradeTheme {
-  color: string;
-  label: string;
-  raw: string;
-  light: string;
 }
 
 interface GradeSummary {
@@ -44,13 +41,11 @@ interface CoverageForecast {
 interface CurrentInventoryByGradeChartProps {
   tanks: TankRecord[];
   selectedStationIds: string[];
-  selectedGrades: string[];
+  selectedTankGrades: ReadonlySet<string>;
   coverageForecast?: CoverageForecast;
-  getGradeTheme: (grade: string) => GradeTheme;
+  grades: readonly FuelGradeOption[];
   isLoading?: boolean;
 }
-
-const GRADE_ORDER = ["Regular", "E15", "Premium", "Diesel", "Dyed Diesel"];
 
 const formatLitres = (value: number) => `${Math.round(value).toLocaleString()} L`;
 
@@ -71,17 +66,12 @@ const isFreshTank = (tank: TankRecord) => {
   return Boolean(reading && reading !== "No latest reading available");
 };
 
-const gradeMatchesFilter = (tankGrade: string, selectedGrades: string[]) => {
-  if (selectedGrades.includes(tankGrade)) return true;
-  return tankGrade === "Regular" && selectedGrades.includes("E15");
-};
-
 export function CurrentInventoryByGradeChart({
   tanks,
   selectedStationIds,
-  selectedGrades,
+  selectedTankGrades,
   coverageForecast,
-  getGradeTheme,
+  grades,
   isLoading = false,
 }: CurrentInventoryByGradeChartProps) {
   const gradeSummaries = useMemo<GradeSummary[]>(() => {
@@ -89,11 +79,11 @@ export function CurrentInventoryByGradeChart({
     const summaryMap = new Map<string, GradeSummary>();
 
     (tanks || []).forEach((tank) => {
-      const grade = tank.grade || "Unknown";
+      const grade = getOrderTankGrade(tank.grade || "Unknown");
       const stationId = getStationId(tank);
 
       if (!selectedStations.has(stationId)) return;
-      if (!gradeMatchesFilter(grade, selectedGrades)) return;
+      if (!selectedTankGrades.has(grade)) return;
 
       const current = summaryMap.get(grade) ?? {
         grade,
@@ -124,14 +114,17 @@ export function CurrentInventoryByGradeChart({
     const summaries = Array.from(summaryMap.values()).map((summary) => {
       const availableUllage = Math.max(summary.tankCapacity - summary.liveVolume, 0);
       const forecastDays = coverageForecast?.forecastDays || [];
-      const averageDailySales = Number(coverageForecast?.byGrade?.[summary.grade]?.averageDailySales) || 0;
+      const physicalGrades = [...new Set(summary.freshTanks.map(tank => tank.grade || "Unknown"))];
+      const averageDailySales = physicalGrades.reduce((sum, grade) =>
+        sum + (Number(coverageForecast?.byGrade?.[grade]?.averageDailySales) || 0), 0);
       let remainingVolume = summary.liveVolume;
       let daysToCover: number | null = null;
 
       if (averageDailySales > 0) {
         daysToCover = 0;
         for (const forecastDay of forecastDays) {
-          const daySales = Number(forecastDay.grades?.[summary.grade]) || 0;
+          const daySales = physicalGrades.reduce((sum, grade) =>
+            sum + (Number(forecastDay.grades?.[grade]) || 0), 0);
           if (daySales <= 0) continue;
           if (remainingVolume > daySales) {
             remainingVolume -= daySales;
@@ -156,12 +149,8 @@ export function CurrentInventoryByGradeChart({
       };
     });
 
-    return summaries.sort((a, b) => {
-      const aIndex = GRADE_ORDER.indexOf(a.grade);
-      const bIndex = GRADE_ORDER.indexOf(b.grade);
-      return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
-    });
-  }, [coverageForecast, tanks, selectedGrades, selectedStationIds]);
+    return sortByFuelGrade(summaries, grades);
+  }, [coverageForecast, tanks, selectedTankGrades, selectedStationIds, grades]);
 
   const totals = useMemo(
     () =>
@@ -262,7 +251,7 @@ export function CurrentInventoryByGradeChart({
                 <CompactGradeTank
                   key={summary.grade}
                   summary={summary}
-                  getGradeTheme={getGradeTheme}
+                  grades={grades}
                 />
               ))}
             </div>
@@ -284,7 +273,7 @@ export function CurrentInventoryByGradeChart({
                   <GradeDetailCard
                     key={summary.grade}
                     summary={summary}
-                    getGradeTheme={getGradeTheme}
+                    grades={grades}
                   />
                 ))}
               </div>
@@ -307,12 +296,12 @@ function InventoryMetric({ label, value }: { label: string; value: string }) {
 
 function CompactGradeTank({
   summary,
-  getGradeTheme,
+  grades,
 }: {
   summary: GradeSummary;
-  getGradeTheme: (grade: string) => GradeTheme;
+  grades: readonly FuelGradeOption[];
 }) {
-  const theme = getGradeTheme(summary.grade);
+  const { color } = getFuelGradeDisplay(summary.grade, grades);
   const fillPercent = summary.tankCapacity > 0 ? (summary.liveVolume / summary.tankCapacity) * 100 : 0;
   const minPercent = summary.tankCapacity > 0 ? (summary.minCapacity / summary.tankCapacity) * 100 : 0;
   const maxPercent = summary.tankCapacity > 0 ? (summary.maxCapacity / summary.tankCapacity) * 100 : 0;
@@ -332,20 +321,18 @@ function CompactGradeTank({
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className={cn("truncate text-[11px] font-black uppercase tracking-[0.16em]", theme.label)}>
-            {summary.grade}
-          </p>
+          <FuelGradeLabel grade={summary.grade} grades={grades} tank />
           <p className="text-[10px] font-bold text-slate-400">
             {summary.freshTanks.length} live / {summary.tanks.length} tanks
           </p>
         </div>
-        <Gauge className={cn("h-4 w-4 shrink-0", theme.label)} />
+        <Gauge className="h-4 w-4 shrink-0" style={{ color }} />
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-slate-100 bg-slate-50">
         <div
           className="absolute bottom-0 left-0 right-0 transition-all duration-700"
-          style={{ height: `${Math.min(fillPercent, 100)}%`, backgroundColor: theme.raw }}
+          style={{ height: `${Math.min(fillPercent, 100)}%`, backgroundColor: color }}
         />
         <div
           className="absolute left-0 right-0 border-t-2 border-dashed border-red-500"
@@ -388,12 +375,12 @@ function CompactGradeTank({
 
 function GradeDetailCard({
   summary,
-  getGradeTheme,
+  grades,
 }: {
   summary: GradeSummary;
-  getGradeTheme: (grade: string) => GradeTheme;
+  grades: readonly FuelGradeOption[];
 }) {
-  const theme = getGradeTheme(summary.grade);
+  const { color } = getFuelGradeDisplay(summary.grade, grades);
   const fillPercent = summary.tankCapacity > 0 ? (summary.liveVolume / summary.tankCapacity) * 100 : 0;
   const minShare = summary.tankCapacity > 0 ? (summary.minCapacity / summary.tankCapacity) * 100 : 0;
   const maxShare = summary.tankCapacity > 0 ? (summary.maxCapacity / summary.tankCapacity) * 100 : 0;
@@ -403,8 +390,7 @@ function GradeDetailCard({
       <div className="grid grid-cols-[minmax(0,1fr)_88px_88px_88px_88px_88px_88px] items-start gap-3">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: theme.raw }} />
-            <p className="truncate text-sm font-black text-slate-800">{summary.grade}</p>
+            <FuelGradeLabel grade={summary.grade} grades={grades} tank />
           </div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
             {summary.freshTanks.length} live / {summary.tanks.length} total tanks
@@ -423,7 +409,7 @@ function GradeDetailCard({
         <div className="h-2 overflow-hidden rounded-full bg-slate-100">
           <div
             className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${Math.min(fillPercent, 100)}%`, backgroundColor: theme.raw }}
+            style={{ width: `${Math.min(fillPercent, 100)}%`, backgroundColor: color }}
           />
         </div>
         <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">

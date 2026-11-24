@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_navbarLayout/settings/sites/$id")({
   component: RouteComponent,
 });
 
-const ALL_GRADES = ["Regular", "Premium", "Mid Grade", "Diesel", "Dyed Diesel"];
+const ALL_GRADES = ["Regular", "Premium", "Mid Grade", "Diesel", "Dyed Diesel", "Dyed Premium"];
 
 const CANADIAN_PROVINCES = [
   "Alberta",

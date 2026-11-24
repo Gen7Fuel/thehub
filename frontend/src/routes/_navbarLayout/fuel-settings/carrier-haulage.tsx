@@ -87,7 +87,8 @@ export function RouteComponent() {
     "DIESEL": [
       { type: "DSL" },
       { type: "DYED" }
-    ]
+    ],
+    "GAS-DYED": [{ type: "GAS-DYED" }]
   };
 
   const fetchHaulageData = async () => {
@@ -836,6 +837,7 @@ export function RouteComponent() {
                   <option value="">-- Select Category --</option>
                   <option value="GAS">GAS</option>
                   <option value="DIESEL">DIESEL</option>
+                  <option value="GAS-DYED">GAS-DYED</option>
                 </select>
               </div>
 
