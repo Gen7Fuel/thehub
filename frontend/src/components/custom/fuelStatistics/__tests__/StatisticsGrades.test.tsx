@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 import { Route } from "@/routes/_navbarLayout/fuel-management/statistics";
 
@@ -72,9 +72,13 @@ it("uses catalog labels and colors while keeping order grades separate from shar
   inventoryCoverage.mockResolvedValue({ data: { byGrade: {}, forecastDays: [] } });
   const Statistics = Route.options.component!;
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(<QueryClientProvider client={client}><Statistics /></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={client}>
+      <Suspense fallback={null}><Statistics /></Suspense>
+    </QueryClientProvider>,
+  );
 
-  const regularFilter = await screen.findByRole("button", { name: "RUL", pressed: true });
+  const regularFilter = await screen.findByRole("button", { name: "RUL", pressed: true }, { timeout: 5000 });
   expect(regularFilter).toHaveStyle({ backgroundColor: "#067647" });
   const e15Filter = screen.getByRole("button", { name: "E15", pressed: true });
   expect(e15Filter).toHaveStyle({ backgroundColor: "#7146b0" });

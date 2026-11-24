@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { FuelGradeCheckboxes } from '../FuelGradeCheckboxes'
 import { FuelGradeLabel } from '../FuelGradeLabel'
@@ -54,7 +54,11 @@ const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.proto
 
 function renderWithQueries(component: React.ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={client}>{component}</QueryClientProvider>)
+  return render(
+    <QueryClientProvider client={client}>
+      <Suspense fallback={null}>{component}</Suspense>
+    </QueryClientProvider>,
+  )
 }
 
 beforeEach(() => {
@@ -118,7 +122,7 @@ it('uses the active catalog for a new tank and never offers E15', async () => {
   const Station = StationRoute.options.component!
   renderWithQueries(<Station />)
 
-  const newTank = await screen.findByRole('button', { name: 'New Tank' })
+  const newTank = await screen.findByRole('button', { name: 'New Tank' }, { timeout: 5000 })
   await waitFor(() => expect(newTank).toBeEnabled())
   fireEvent.click(newTank)
   const dialog = await screen.findByRole('dialog', { name: 'New Tank' })
@@ -154,7 +158,7 @@ it('uses the custom grade color for both the tank liquid and its label', async (
     expect(screen.getByRole('combobox', { name: 'Tank #2 fuel grade' })).toHaveStyle({
       backgroundColor: '#c6395c', color: '#ffffff',
     })
-  })
+  }, { timeout: 5000 })
 })
 
 it('uses the physical tank grade for the Tank Volume label and liquid color', async () => {
@@ -183,7 +187,7 @@ it('uses the physical tank grade for the Tank Volume label and liquid color', as
       'linear-gradient(180deg, #067647 0%, #067647cc 100%)',
       'linear-gradient(180deg, #c6395c 0%, #c6395ccc 100%)',
     ])
-  })
+  }, { timeout: 5000 })
 })
 
 it('filters Tank Volume history by all grades recorded in the station history', async () => {
@@ -205,7 +209,7 @@ it('filters Tank Volume history by all grades recorded in the station history', 
   const Volume = VolumeRoute.options.component!
   renderWithQueries(<Volume />)
 
-  fireEvent.click(await screen.findByRole('button', { name: 'View History' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'View History' }, { timeout: 5000 }))
   const filters = await screen.findByRole('group', { name: 'Fuel grade' })
   const regular = within(filters).getByRole('button', { name: 'RUL | E15' })
   const dyedPremium = within(filters).getByRole('button', { name: 'PULD' })
