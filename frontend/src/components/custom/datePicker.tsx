@@ -130,6 +130,7 @@ export function WorkspaceDatePicker({ date, setDate }: { date: Date, setDate: (d
           mode="single"
           selected={date}
           onSelect={(d) => d && setDate(d)}
+          defaultMonth={date}
           className="bg-white rounded-xl"
           // Disable anything more than 3 days from today
           disabled={(date) => date > maxFuture}

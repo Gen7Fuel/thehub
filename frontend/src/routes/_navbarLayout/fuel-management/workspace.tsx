@@ -37,6 +37,8 @@ import {
   format,
   addDays,
   isAfter,
+  isValid,
+  parseISO,
   startOfDay,
   subDays,
   isBefore,
@@ -79,9 +81,18 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/context/AuthContext";
 
+const workspaceDateFormat = "yyyy-MM-dd";
+
 export const Route = createFileRoute(
   "/_navbarLayout/fuel-management/workspace",
 )({
+  validateSearch: (search: Record<string, unknown>): { date?: string } => {
+    const { date } = search;
+    if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return { date: undefined };
+
+    const parsed = parseISO(date);
+    return { date: isValid(parsed) && format(parsed, workspaceDateFormat) === date ? date : undefined };
+  },
   component: WorkspaceComponent,
 });
 
@@ -108,7 +119,18 @@ export const getStatusColor = (status: string) => {
 };
 
 function WorkspaceComponent() {
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const { date } = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const selectedDate = date ? parseISO(date) : startOfDay(new Date());
+  const setSelectedDate = (nextDate: Date) => {
+    void navigate({
+      search: (previous: Record<string, unknown>) => ({
+        ...previous,
+        date: format(nextDate, workspaceDateFormat),
+      }),
+      resetScroll: false,
+    });
+  };
   const { data: grades = [] } = useQuery(fuelGradeOptionsQuery);
   const [stationSearch, setStationSearch] = useState("");
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
@@ -156,7 +178,7 @@ function WorkspaceComponent() {
     });
   }, [selectedStationIds, locations]);
 
-  const selectedDateLabel = format(selectedDate, "yyyy-MM-dd");
+  const selectedDateLabel = format(selectedDate, workspaceDateFormat);
   const orderAccessContext = useMemo(() => {
     const eligibleLocations = locations.filter((location: any) => location.tankCount > 0);
     const isAllSites = eligibleLocations.length > 0
@@ -414,6 +436,7 @@ function WorkspaceComponent() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Previous day"
                   className="text-slate-400 hover:text-white hover:bg-slate-800"
                   onClick={() => shiftDate(-1)}
                 >
@@ -430,6 +453,7 @@ function WorkspaceComponent() {
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Next day"
                   className="text-slate-400 hover:text-white hover:bg-slate-800"
                   onClick={() => shiftDate(1)}
                 >
@@ -558,7 +582,7 @@ function StationStrip({
   };
 
   const stationTz = location.timezone || "America/Toronto";
-  const selectedDateStr = format(date, "yyyy-MM-dd");
+  const selectedDateStr = format(date, workspaceDateFormat);
 
   const {
     data: tankResponse,
@@ -2557,83 +2581,55 @@ export function EditMetaDialog({
   racks,
   onUpdateSuccess,
 }: any) {
-  const [selectedRack, setSelectedRack] = useState(
-    order.rack?._id || order.rack,
-  );
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [selectedSupplier, setSelectedSupplier] = useState(
-    order.supplier?._id || order.supplier,
-  );
-  const [badgeNo, setBadgeNo] = useState(order.badgeNo || "");
-  const [carrierName, _] = useState(order.carrier?.carrierName || "No Carrier");
-  const [loading, setLoading] = useState(false);
+  const savedRack = order.rack?._id ?? order.rack ?? "";
+  const savedSupplier = order.supplier?._id ?? order.supplier ?? "";
+  const savedBadge = order.badgeNo ?? "";
+  const [selectedRack, setSelectedRack] = useState<string>(savedRack);
+  // null opts into a default after an explicit change. An empty saved value stays empty.
+  const [supplierChoice, setSupplierChoice] = useState<string | null>(savedSupplier);
+  const [badgeChoice, setBadgeChoice] = useState<string | null>(savedBadge);
+  const carrierName = order.carrier?.carrierName || "No Carrier";
 
-  // Initialize and handle Rack changes
-  const handleRackChange = async (rackId: string) => {
-    try {
-      setLoading(true);
-      setSelectedRack(rackId);
+  const supplierQuery = useQuery({
+    queryKey: ["workspace-logistics-suppliers", selectedRack],
+    queryFn: () => fuelSuppliersService.list<{
+      _id: string;
+      supplierName: string;
+      supplierBadges?: { badgeNumber: string; badgeName: string; isDefault?: boolean }[];
+    }[]>(selectedRack, 'fuel-management.workspace', `Fuel suppliers viewed for rack ${selectedRack} while editing order logistics`),
+    enabled: isOpen && Boolean(selectedRack),
+  });
+  const suppliers = supplierQuery.data ?? [];
+  const rack = racks.find((entry: any) => entry._id === selectedRack);
+  const defaultSupplierId = rack?.defaultSupplier?._id ?? rack?.defaultSupplier;
+  const defaultSupplier = suppliers.find(entry => entry._id === defaultSupplierId) ?? suppliers[0];
+  const selectedSupplier = supplierChoice ?? defaultSupplier?._id ?? "";
+  const supplier = suppliers.find(entry => entry._id === selectedSupplier);
+  const badges = supplier?.supplierBadges ?? [];
+  const defaultBadge = badges.find(entry => entry.isDefault) ?? badges[0];
+  const badgeNo = badgeChoice ?? defaultBadge?.badgeNumber ?? "";
+  const hasBadge = badges.some(entry => entry.badgeNumber === badgeNo);
+  const canSave = Boolean(rack && supplier && hasBadge && supplierQuery.isSuccess);
+  const savedSupplierLabel = order.supplier?.supplierName ?? savedSupplier;
 
-      // 1. Fetch Suppliers for this Rack
-      const rackSuppliers = await fuelSuppliersService.list<any[]>(rackId, 'fuel-management.workspace', `Fuel suppliers viewed for rack ${rackId} while editing order logistics`);
-      setSuppliers(rackSuppliers);
-
-      // 2. Fetch Rack details for defaults
-      const rackData = await fuelRacksService.get<any>(rackId, 'fuel-management.workspace');
-
-      // 3. Set Defaults
-      const defaultSup =
-        rackSuppliers.find((s: any) => s._id === rackData.defaultSupplier) ||
-        rackSuppliers[0];
-      setSelectedSupplier(defaultSup?._id || "");
-
-      const defaultBadge =
-        defaultSup?.supplierBadges?.find((b: any) => b.isDefault) ||
-        defaultSup?.supplierBadges?.[0];
-      setBadgeNo(defaultBadge?.badgeNumber || "");
-
-      setLoading(false);
-    } catch (err) {
-      console.error("Rack Change Error:", err);
-      setLoading(false);
-    }
+  const handleRackChange = (rackId: string) => {
+    setSelectedRack(rackId);
+    setSupplierChoice(rackId === savedRack ? savedSupplier : null);
+    setBadgeChoice(rackId === savedRack ? savedBadge : null);
   };
 
-  // Handle manual supplier change
-  const handleSupplierChange = (supId: string) => {
-    setSelectedSupplier(supId);
-    const sup = suppliers.find((s) => s._id === supId);
-    const defaultBadge =
-      sup?.supplierBadges?.find((b: any) => b.isDefault) ||
-      sup?.supplierBadges?.[0];
-    setBadgeNo(defaultBadge?.badgeNumber || "");
-  };
-
-  // Initial load
-  useEffect(() => {
-    if (isOpen && selectedRack) {
-      handleRackChange(selectedRack);
-    }
-  }, [isOpen]);
-
-  const handleSave = async () => {
-    try {
-      await fuelOrdersService.update(
-        order._id,
-        {
-          rack: selectedRack,
-          supplier: selectedSupplier,
-          badgeNo: badgeNo,
-        },
-        `Fuel order ${order.poNumber || order._id} logistics update requested`,
-        'fuelManagement.workspace.editOrderMetadata',
-      );
+  const saveMutation = useMutation({
+    mutationFn: () => fuelOrdersService.update(
+      order._id,
+      { rack: selectedRack, supplier: selectedSupplier, badgeNo },
+      `Fuel order ${order.poNumber || order._id} logistics update requested`,
+      'fuelManagement.workspace.editOrderMetadata',
+    ),
+    onSuccess: () => {
       onUpdateSuccess();
       onOpenChange(false);
-    } catch (err) {
-      console.error("Update failed", err);
-    }
-  };
+    },
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -2650,9 +2646,11 @@ export function EditMetaDialog({
             <label className="text-[10px] font-black uppercase text-slate-400">
               Fuel Rack
             </label>
-            <Select value={selectedRack} onValueChange={handleRackChange}>
-              <SelectTrigger className="font-bold">
-                <SelectValue placeholder="Select Rack" />
+            <Select value={selectedRack} onValueChange={handleRackChange} disabled={saveMutation.isPending}>
+              <SelectTrigger aria-label="Fuel Rack" className="font-bold">
+                <SelectValue placeholder="Select Rack">
+                  {rack ? undefined : order.rack?.rackName ?? selectedRack}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {racks.map((r: any) => (
@@ -2675,14 +2673,19 @@ export function EditMetaDialog({
             </label>
             <Select
               value={selectedSupplier}
-              onValueChange={handleSupplierChange}
-              disabled={loading}
+              onValueChange={(supplierId) => {
+                setSupplierChoice(supplierId);
+                setBadgeChoice(null);
+              }}
+              disabled={!selectedRack || !supplierQuery.isSuccess || saveMutation.isPending}
             >
-              <SelectTrigger className="font-bold">
-                <SelectValue placeholder="Select Supplier" />
+              <SelectTrigger aria-label="Supplier" className="font-bold">
+                <SelectValue placeholder="Select Supplier">
+                  {supplier ? undefined : selectedSupplier === savedSupplier ? savedSupplierLabel : selectedSupplier}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {suppliers.map((s: any) => (
+                {suppliers.map((s) => (
                   <SelectItem
                     key={s._id}
                     value={s._id}
@@ -2702,35 +2705,30 @@ export function EditMetaDialog({
             </label>
             <Select
               value={badgeNo}
-              onValueChange={(v) => setBadgeNo(v)}
-              disabled={loading || !selectedSupplier}
+              onValueChange={setBadgeChoice}
+              disabled={!supplier || !supplierQuery.isSuccess || saveMutation.isPending}
             >
-              <SelectTrigger className="font-mono w-full overflow-hidden border-2 border-slate-200">
+              <SelectTrigger aria-label="Badge Number" className="font-mono w-full overflow-hidden border-2 border-slate-200">
                 <div className="truncate text-left font-bold">
-                  <SelectValue placeholder="Select Badge" />
+                  <SelectValue placeholder="Select Badge">{hasBadge ? undefined : badgeNo}</SelectValue>
                 </div>
               </SelectTrigger>
               <SelectContent className="max-w-[300px]">
-                {/* Find the current supplier from our local state list 
-                  to map through their specific badges 
-                */}
-                {suppliers
-                  .find((s) => s._id === selectedSupplier)
-                  ?.supplierBadges.map((b: any) => (
-                    <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">{b.badgeNumber}</span>
-                        <span className="text-slate-400 text-xs truncate">
-                          — {b.badgeName}
+                {badges.map((b) => (
+                  <SelectItem key={b.badgeNumber} value={b.badgeNumber}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold">{b.badgeNumber}</span>
+                      <span className="text-slate-400 text-xs truncate">
+                        — {b.badgeName}
+                      </span>
+                      {b.isDefault && (
+                        <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">
+                          DEF
                         </span>
-                        {b.isDefault && (
-                          <span className="text-[8px] bg-blue-100 text-blue-600 px-1 rounded">
-                            DEF
-                          </span>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -2746,8 +2744,18 @@ export function EditMetaDialog({
           </div>
         </div>
 
+        {supplierQuery.isError && (
+          <p role="alert" className="text-sm text-destructive">Could not load suppliers for this rack.</p>
+        )}
+        {supplierQuery.isSuccess && !canSave && (
+          <p role="status" className="text-sm text-muted-foreground">Select an available rack, supplier, and badge to save.</p>
+        )}
+        {saveMutation.isError && (
+          <p role="alert" className="text-sm text-destructive">Could not save order logistics.</p>
+        )}
         <Button
-          onClick={handleSave}
+          onClick={() => saveMutation.mutate()}
+          disabled={!canSave || saveMutation.isPending}
           className="w-full font-black uppercase h-12 bg-blue-600"
         >
           Save Changes
