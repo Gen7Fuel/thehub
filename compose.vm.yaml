@@ -75,7 +75,7 @@ services:
   # configuration change staged separately from app image releases. The deployer uses
   # --no-deps, so start this service with the cutover procedure, not a release.
   email-service:
-    image: ghcr.io/gen7fuel/thehub-email-service@sha256:16ca66b303a61dbe11fc7de38d06d1ed8e271193ebf9e698a423a0c856895cea
+    image: ghcr.io/gen7fuel/thehub-email-service@sha256:44faa003a368e7eeac603d94d09d8ca77380d0d35c380c4be18fef58f62cae2a
     restart: unless-stopped
     environment:
       EMAIL_SERVICE_API_KEY: ${EMAIL_SERVICE_API_KEY:?set EMAIL_SERVICE_API_KEY}
@@ -85,6 +85,9 @@ services:
       SMTP_USER: ${SMTP_USER:?set SMTP_USER}
       SMTP_PASS: ${SMTP_PASS:?set SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM:?set SMTP_FROM}
+    volumes:
+      # Idempotency journal: keeps blocked and sent keys across container replacement.
+      - email-relay-state:/var/lib/email-relay
     cap_drop:
       - ALL
     security_opt:
@@ -141,3 +144,6 @@ services:
         read_only: true
         bind:
           create_host_path: false
+
+volumes:
+  email-relay-state:

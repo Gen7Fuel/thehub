@@ -37,8 +37,11 @@ The host edge connects to the frontend at `127.0.0.1:3000` by default.
   in the protected environment file; Compose refuses to render without them. The
   relay publishes no host port, and the worker reaches it at
   `http://email-service:2525`. The relay verifies SMTP at startup and exits if it
-  cannot, so it stays unhealthy rather than accepting mail it cannot send. Keep
-  exactly one worker and job retries off until the relay has duplicate protection.
+  cannot, so it stays unhealthy rather than accepting mail it cannot send. The
+  worker sends an `Idempotency-Key` per job and the relay keeps an fsynced journal on
+  the `email-relay-state` volume, so a repeat never delivers a second copy; an outcome
+  that may have been delivered blocks the key until an operator reconciles it (see
+  `email-service/README.md`). Keep exactly one worker and job retries off.
 - Set `HUB_VM_HTTP_PORT` only if the host edge uses a port other than `3000`. The
   frontend listener is bound to loopback and the data ports stay inside Docker.
 
