@@ -15,6 +15,12 @@ PREFIX=${BACKUP_BLOB_PREFIX:-gen7-vm}
 DAILY_HOUR_UTC=${GEN7_BACKUP_DAILY_HOUR_UTC:-07}
 BASE_URL=${BACKUP_BLOB_BASE_URL:?set BACKUP_BLOB_BASE_URL (https://<account>.blob.core.windows.net/<container>)}
 SAS=${BACKUP_BLOB_SAS:-}
+# How uploads authenticate: managed-identity (the VM's own Azure identity; nothing stored, nothing to
+# renew) or sas (a write-only SAS token). Default: sas when BACKUP_BLOB_SAS is set, else managed-identity.
+AUTH=${BACKUP_AUTH:-$([[ -n "$SAS" ]] && echo sas || echo managed-identity)}
+IMDS_URL=${BACKUP_IMDS_URL:-http://169.254.169.254/metadata/identity/oauth2/token}
+IDENTITY_CLIENT_ID=${BACKUP_IDENTITY_CLIENT_ID:-}   # only for a user-assigned identity
+case "$AUTH" in managed-identity | sas) ;; *) echo "BACKUP_AUTH must be managed-identity or sas" >&2; exit 2 ;; esac
 
 log() { printf '%s [gen7-backup] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
@@ -137,6 +143,16 @@ if [[ -z "${GEN7_BACKUP_FORCE_CLASSES:-}" ]]; then
     [[ "${run:9:2}" == "$DAILY_HOUR_UTC" && "${run:6:2}" == 01 ]] && classes="$classes monthly"
 fi
 
+TOKEN=
+if [[ "$BASE_URL" != file://* && "$AUTH" == managed-identity ]]; then
+    # One token per run from the VM's local identity endpoint (valid for hours, fetched fresh each run).
+    query="api-version=2018-02-01&resource=https%3A%2F%2Fstorage.azure.com%2F${IDENTITY_CLIENT_ID:+&client_id=$IDENTITY_CLIENT_ID}"
+    TOKEN=$(curl -fsS --retry 3 --retry-delay 2 --max-time 10 -H 'Metadata: true' "$IMDS_URL?$query" \
+        | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])')
+    [[ -n "$TOKEN" ]]
+    log 'acquired a storage token from the managed identity'
+fi
+
 put() { # local-file blob-path
     local file=$1 blob=$2 md5 url
     if [[ "$BASE_URL" == file://* ]]; then
@@ -146,10 +162,11 @@ put() { # local-file blob-path
     fi
     md5=$(openssl md5 -binary "$file" | base64)
     url="$BASE_URL/$blob${SAS:+?$SAS}"
-    # The URL carries the SAS token; pass it on stdin so it never appears in the process list.
-    printf 'url = "%s"\n' "$url" | curl -K - -fsS --retry 3 --retry-delay 5 --max-time 900 -X PUT \
-        -H 'x-ms-blob-type: BlockBlob' -H 'x-ms-version: 2021-08-06' -H 'Content-Type: application/octet-stream' \
-        -H "Content-MD5: $md5" --upload-file "$file" -o /dev/null
+    # The URL (SAS) and the bearer token go to curl on stdin so they never appear in the process list.
+    { printf 'url = "%s"\n' "$url"; [[ -n "$TOKEN" ]] && printf 'header = "Authorization: Bearer %s"\n' "$TOKEN"; true; } \
+        | curl -K - -fsS --retry 3 --retry-delay 5 --max-time 900 -X PUT \
+            -H 'x-ms-blob-type: BlockBlob' -H 'x-ms-version: 2021-08-06' -H 'Content-Type: application/octet-stream' \
+            -H "Content-MD5: $md5" --upload-file "$file" -o /dev/null
 }
 
 for class in $classes; do
