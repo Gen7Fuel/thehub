@@ -18,12 +18,12 @@ The host edge connects to the frontend at `127.0.0.1:3000` by default.
   containers use Docker's `unless-stopped` restart policy.
 - Supply the Hub runtime environment using a protected environment file. Set
   `BACKEND_IMAGE`, `AUTH_BACKEND_IMAGE` and `HUB_FRONTEND_IMAGE` to approved release
-  images by digest. The **Publish Hub frontend VM image** workflow builds
+  images by digest. Use `thehub-auth-backend-vm` for auth. It includes the shared
+  models and helper from the same revision. The **Publish Hub frontend VM image** workflow builds
   `frontend/Dockerfile.azure`, validates the image, and records a GHCR digest for
   `HUB_FRONTEND_IMAGE`. Run it from `main`. To publish a rollback candidate,
   supply the reviewed earlier commit's full SHA in `source_commit` and verify its
-  digest before starting the drill. Keep the checked-out models aligned with the
-  auth image because auth mounts them read-only.
+  digest before starting the drill.
 - Set `MONGO_URI` to the intended Hub database on service `mongo` and `REDIS_URL`
   to service `redis`. Supply the existing PostgreSQL, auth and integration
   settings. PostgreSQL uses service `postgres` on the Compose network. The CDN
@@ -56,3 +56,6 @@ fixtures, including a frontend-only redeploy that preserves the API, worker and
 scheduler container IDs. Protect synthetic rehearsal networks from production
 and external integrations because the worker and scheduler run their usual jobs.
 Rehearse disk-backed startup and replacement-host recovery separately.
+
+See [Azure releases for Hub and Desk](AZURE_RELEASE.md) for build-only publishing,
+GitHub identity, the host dispatcher and the production activation boundary.

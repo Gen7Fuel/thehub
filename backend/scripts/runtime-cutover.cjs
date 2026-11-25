@@ -15,8 +15,20 @@ async function main() {
   const queues = names.map(name => new Queue(name, { connection: redis }));
   function save(state) {
     const temporary = file + '.tmp';
-    fs.writeFileSync(temporary, JSON.stringify(state), { mode: 0o600 });
+    const checkpoint = fs.openSync(temporary, 'w', 0o600);
+    try {
+      fs.writeFileSync(checkpoint, JSON.stringify(state));
+      fs.fsyncSync(checkpoint);
+    } finally {
+      fs.closeSync(checkpoint);
+    }
     fs.renameSync(temporary, file);
+    const directory = fs.openSync(path.dirname(file), 'r');
+    try {
+      fs.fsyncSync(directory);
+    } finally {
+      fs.closeSync(directory);
+    }
   }
   try {
     let state;
