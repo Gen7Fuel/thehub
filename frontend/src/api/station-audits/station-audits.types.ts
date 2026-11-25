@@ -22,7 +22,7 @@ export interface StationAuditChecklistItem {
     _id: string
     name: string
     options: StationAuditStatusOption[]
-  }
+  } | null
   followUp: boolean
   completed: boolean
   run: { _id: string; periodKey: string; state: string; completedAt?: string | null } | null
@@ -87,7 +87,7 @@ export interface StationAuditSectionSummary {
   sortOrder: number
   sectionType: 'checklist' | 'order'
   summary: { total: number; completed: number; pending: number }
-  frequencies: Record<'daily' | 'weekly' | 'monthly', { total: number; completed: number; pending: number }>
+  frequencies: Record<'daily' | 'weekly' | 'monthly', { total: number; completed: number; pending: number; issues: number }>
 }
 
 export interface StationAuditSectionListReadModel {

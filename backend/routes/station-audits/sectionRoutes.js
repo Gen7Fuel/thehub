@@ -78,7 +78,7 @@ router.get("/", async (req, res) => {
       ? await StationAuditResponse.find({
           run: { $in: runs.map((run) => run._id) },
         })
-          .select("run checklist checked")
+          .select("run checklist checked issueRaised")
           .lean()
       : [];
 
@@ -94,10 +94,10 @@ router.get("/", async (req, res) => {
     const responseKeys = new Set(
       responses.map((response) => `${response.run}:${response.checklist}`)
     );
-    const completedKeys = new Set(
+    const completedResponses = new Map(
       responses
         .filter((response) => response.checked === true)
-        .map((response) => `${response.run}:${response.checklist}`)
+        .map((response) => [`${response.run}:${response.checklist}`, response])
     );
     const checklistsBySection = new Map(sectionIds.map((id) => [id.toString(), []]));
     checklists.forEach((checklist) => {
@@ -120,10 +120,17 @@ router.get("/", async (req, res) => {
         FREQUENCIES.map((frequency) => {
           const frequencyItems = items.filter((item) => item.frequency === frequency);
           const run = runBySectionFrequency.get(`${section._id}:${frequency}`);
-          const completed = run
-            ? frequencyItems.filter((item) => completedKeys.has(`${run._id}:${item._id}`)).length
-            : 0;
-          return [frequency, { total: frequencyItems.length, completed, pending: frequencyItems.length - completed }];
+          let completed = 0;
+          let issues = 0;
+          if (run) {
+            for (const item of frequencyItems) {
+              const response = completedResponses.get(`${run._id}:${item._id}`);
+              if (!response) continue;
+              completed++;
+              if (response.issueRaised) issues++;
+            }
+          }
+          return [frequency, { total: frequencyItems.length, completed, pending: frequencyItems.length - completed, issues }];
         })
       );
       const total = items.length;

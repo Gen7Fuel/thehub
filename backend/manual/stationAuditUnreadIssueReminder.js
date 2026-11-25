@@ -7,7 +7,7 @@ const {
 
 async function run() {
   await connectDB();
-  const summary = await runStationAuditUnreadIssueReminder();
+  const summary = await runStationAuditUnreadIssueReminder({ manual: true });
   console.log(JSON.stringify(summary, null, 2));
   if (summary.failed) process.exitCode = 1;
   return summary;

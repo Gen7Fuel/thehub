@@ -59,8 +59,8 @@ import { useSite } from "@/context/SiteContext";
 import { getOrderRecStatusColor } from "@/lib/utils";
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
 import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
-import { getPeriodKey } from "../_navbarLayout/audit/checklist/$id";
-import { auditService } from '@/api/audit/audit.service';
+import { stationAuditsService } from '@/api/station-audits/station-audits.service';
+import type { StationAuditSectionListReadModel } from '@/api/station-audits/station-audits.types';
 import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 import { ArrowDownRight, ArrowUpRight, Minus, Table2 } from "lucide-react";
 
@@ -508,7 +508,7 @@ function RouteComponent() {
   // const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
   // Safe balance (end-of-day) data
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
-  const [auditStats, setAuditStats] = useState<any[]>([]);
+  const [auditStats, setAuditStats] = useState<StationAuditSectionListReadModel | null>(null);
 
   const [allTickerData, setAllTickerData] = useState<SiteTickerData[]>([]);
   const [loadingTicker, setLoadingTicker] = useState<boolean>(true);
@@ -533,7 +533,6 @@ function RouteComponent() {
   const [endDate] = useState(today.toISOString().slice(0, 10));
   const [safeMaxBalance, setSafeMaxBalance] = useState<number>(25_000);
   const [payablesComparisonData, setPayablesComparisonData] = useState([]);
-  const [currentDate] = useState(new Date());
 
   const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [showWeeklyOperationsDialog, setShowWeeklyOperationsDialog] =
@@ -547,13 +546,6 @@ function RouteComponent() {
     percent: number;
   } | null>(null);
   const navigate = useNavigate({ from: Route.fullPath });
-  // Constructing period keys for the query
-  const pKeys = {
-    daily: getPeriodKey("daily", currentDate),
-    weekly: getPeriodKey("weekly", currentDate),
-    monthly: getPeriodKey("monthly", currentDate),
-  };
-  const [siteTimezone, setSiteTimezone] = useState("UTC");
 
   // Rendering passcode dialog for manager access
   useEffect(() => {
@@ -655,7 +647,7 @@ function RouteComponent() {
           locationPromise,
           cashSummaryService.getDashboardOverShort<any>(site),
           cashSummaryService.getDashboardPayablesComparison<any>(site),
-          auditService.getDashboardStats<any>(site, pKeys),
+          stationAuditsService.getDashboardProgress(site),
           dashboardService.getVendors<any[]>(site),
           dashboardService.getOrderRecs<any>(site, weekStart, weekEnd),
         ]);
@@ -777,7 +769,7 @@ function RouteComponent() {
         const payablesRes =
           payablesResult.status === "fulfilled" ? payablesResult.value : [];
         const auditRes =
-          auditResult.status === "fulfilled" ? auditResult.value : [];
+          auditResult.status === "fulfilled" ? auditResult.value : null;
         const vendorsArr =
           vendorsResult.status === "fulfilled" ? vendorsResult.value : [];
         const orderRecsArr =
@@ -819,9 +811,7 @@ function RouteComponent() {
         setVendors(updatedVendors);
         setVendorStatus(updatedVendors);
 
-        // ── Start cycle counts immediately — only needs timezone, no SQL dependency ──
-        const timezone = locationData.timezone || "UTC";
-        setSiteTimezone(timezone);
+        // Start cycle counts while the remaining dashboard data loads.
         const dailyCountsPromise = fetchDailyCounts(
           site,
           sevenDaysAgo.toISOString().slice(0, 10),
@@ -2251,11 +2241,14 @@ function RouteComponent() {
                   {/* Empty slot / placeholder: keeps grid balanced on larger screens.
                       Remove or replace with another inventory widget later. */}
                   <div className="col-span-1">
-                    <AuditSummaryChart
-                      auditStats={auditStats}
-                      periodKeys={pKeys}
-                      timezone={siteTimezone}
-                    />
+                    {auditStats ? <AuditSummaryChart auditStats={auditStats} /> : (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Audit Completion Status</CardTitle>
+                          <CardDescription>Audit progress is unavailable.</CardDescription>
+                        </CardHeader>
+                      </Card>
+                    )}
                   </div>
                 </div>
               </section>

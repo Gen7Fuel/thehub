@@ -5,6 +5,18 @@ import type { SaveStationAuditResponseInput } from './station-audits.types'
 const source = 'station-audits.checklist'
 
 export const stationAuditsService = {
+  getDashboardProgress(site: string) {
+    return stationAuditsApi.listSections(
+      { site, type: 'store' },
+      actionOptions(
+        'dashboard',
+        'dashboard.station-audit',
+        'read',
+        'audit-statistics',
+        `Station Audit statistics viewed on Dashboard for ${site}`,
+      ),
+    )
+  },
   listSections(query: Pick<StationAuditChecklistQuery, 'site' | 'type' | 'date'>) {
     return stationAuditsApi.listSections(
       query,

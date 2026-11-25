@@ -125,6 +125,14 @@ router.put("/:statusOptionSetId", async (req, res) => {
     if (req.header("X-Required-Permission") !== requiredPermission(update.field)) return res.status(403).json({ error: "The required status-option field permission was not supplied" });
     const before = await StationAuditStatusOptionSet.findById(statusOptionSetId).lean();
     if (!before) return res.status(404).json({ error: "Status-option set not found" });
+    if (update.field === "active" && update.value === false) {
+      if (await StationAuditChecklist.exists({ statusOptionSet: statusOptionSetId })) {
+        return res.status(409).json({ error: "This status-option set is used by one or more checklists. Reassign those checklists before deactivating it." });
+      }
+      if (before.default === true) {
+        return res.status(409).json({ error: "Choose a different default status-option set before deactivating this one." });
+      }
+    }
     const updated = await StationAuditStatusOptionSet.findByIdAndUpdate(statusOptionSetId, { $set: { [update.field]: update.value } }, { new: true, runValidators: true }).lean();
     const { logChange } = require("../../../middleware/changeLogger");
     await logChange(req, { action: "update", resourceType: "station-audit-status-option-set", resourceId: statusOptionSetId, success: true, statusCode: 200, before, after: updated, resourceLabel: updated.name, source: "station-audit.manager.status-options" });

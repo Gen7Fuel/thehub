@@ -1,7 +1,8 @@
 require("dotenv").config();
 require("../runtime/role").selectRole("api");
 const connectDB = require("../config/db");
-const { runStationAuditVisitorReports, validateReportDate } = require("../services/stationAuditVisitorReportService");
+const { validateReportDate } = require("../services/stationAuditVisitorReportService");
+const { runVisitorReportCron } = require("../cron_jobs/stationAuditVisitorReportCron");
 
 function dateArgument(argv = process.argv.slice(2)) {
   const inline = argv.find((value) => value.startsWith("--date="));
@@ -18,7 +19,7 @@ function dateArgument(argv = process.argv.slice(2)) {
 async function run() {
   const date = dateArgument();
   await connectDB();
-  const summary = await runStationAuditVisitorReports({ date });
+  const summary = await runVisitorReportCron({ date, manual: true });
   console.log(JSON.stringify(summary, null, 2));
   if (summary.failed) process.exitCode = 1;
   return summary;

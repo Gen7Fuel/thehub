@@ -5,6 +5,7 @@ const Location = require("../../models/Location");
 const { logChange } = require("../../middleware/changeLogger");
 const { enqueueStationAuditOrder } = require("../../queues/stationAuditOrderQueue");
 const { emailQueue } = require("../../queues/emailQueue");
+const { createChecklistRevision } = require("../../services/stationAuditChecklistRevision");
 const {
   OPEN_ISSUE_STATUSES,
   getOpenIssueChecklistIds,
@@ -17,6 +18,7 @@ const {
   StationAuditSection,
   StationAuditChecklist,
   StationAuditChecklistRevision,
+  StationAuditStatusOptionSet,
   StationAuditDepartment,
   StationAuditRun,
   StationAuditResponse,
@@ -113,6 +115,18 @@ function normalizeResponseInput(body = {}) {
 
 function shouldCreateIssue(type, input) {
   return type === "store" && input.checked === true && input.issueRaised === true;
+}
+
+function hasUsableStatusOptions(set) {
+  return set?.active === true && set.options?.length > 0;
+}
+
+async function defaultStatusOptionSet() {
+  return StationAuditStatusOptionSet.findOne({
+    active: true,
+    "options.0": { $exists: true },
+    $or: [{ default: true }, { name: "Status" }],
+  }).sort({ default: -1, _id: 1 }).select("name active options").lean();
 }
 
 async function findOrCreateRun(filter, insert) {
@@ -428,7 +442,7 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
           "department",
           "name departmentHead members defaultIssueAssignees assignmentStrategy escalationDepartment notificationEmails siteNotifications"
         )
-        .populate("statusOptionSet", "name options"),
+        .populate("statusOptionSet", "name active options"),
     ]);
 
     if (!section || !checklist) {
@@ -437,20 +451,26 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
     if (section.sectionType === "order") {
       // TODO: Apply the Station Audit order-section completion workflow here.
     }
-    if (!checklist.department || !checklist.statusOptionSet) {
+    if (!checklist.department) {
       return res.status(409).json({ error: "Checklist configuration is incomplete" });
     }
-    const checklistRevision = await StationAuditChecklistRevision.findOne({
+    const statusOptionSet = hasUsableStatusOptions(checklist.statusOptionSet)
+      ? checklist.statusOptionSet
+      : await defaultStatusOptionSet();
+    if (!statusOptionSet) {
+      return res.status(409).json({ error: "No status options are available. Ask an administrator to configure the default status-option set." });
+    }
+    let checklistRevision = await StationAuditChecklistRevision.findOne({
       checklist: checklist._id,
       current: true,
-    }).select("_id").lean();
+    }).select("_id snapshot.statusOptionSet").lean();
     if (!checklistRevision) {
       return res.status(409).json({
         error: "Checklist revision history is missing. Ask an administrator to repair the checklist configuration.",
       });
     }
 
-    const selectedOption = checklist.statusOptionSet?.options?.find(
+    const selectedOption = statusOptionSet.options.find(
       (option) => String(option._id) === input.statusOptionId
     );
     if (input.statusOptionId && !selectedOption) {
@@ -537,6 +557,19 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
       return res.status(409).json({ error: "This checklist was already completed and cannot be updated" });
     }
 
+    if (!checklist.statusOptionSet) {
+      // Only repair a missing reference. A set changed by an administrator
+      // after this request loaded the checklist must be left in place.
+      const repaired = await StationAuditChecklist.findOneAndUpdate(
+        { _id: checklist._id, statusOptionSet: null },
+        { $set: { statusOptionSet: statusOptionSet._id } },
+        { new: true, runValidators: true }
+      ).lean();
+      if (repaired && String(checklistRevision.snapshot?.statusOptionSet) !== String(statusOptionSet._id)) {
+        checklistRevision = await createChecklistRevision(repaired, { changedBy: userId });
+      }
+    }
+
     const now = new Date();
     let response = await StationAuditResponse.findOneAndUpdate(
       { run: run._id, checklist: checklist._id },
@@ -556,7 +589,7 @@ router.put("/:sectionId/responses/:checklistId", async (req, res) => {
           checkedBy: input.checked ? userId : null,
           selectedStatus: selectedOption
             ? {
-                optionSet: checklist.statusOptionSet._id,
+                optionSet: statusOptionSet._id,
                 optionId: selectedOption._id,
                 key: selectedOption.key,
                 label: selectedOption.label,
@@ -810,7 +843,7 @@ router.get("/:sectionId", async (req, res) => {
           "section item description sortOrder category frequency auditTypes department statusOptionSet followUp commentRequired requestOrderEnabled suppliesVendor"
         )
         .populate("department", "name departmentHead")
-        .populate("statusOptionSet", "name options")
+        .populate("statusOptionSet", "name active options")
         .sort({ sortOrder: 1, item: 1 })
         .lean(),
       StationAuditRun.find({
@@ -828,6 +861,9 @@ router.get("/:sectionId", async (req, res) => {
         .lean(),
     ]);
 
+    const fallbackStatusOptionSet = checklists.some((checklist) => !hasUsableStatusOptions(checklist.statusOptionSet))
+      ? await defaultStatusOptionSet()
+      : null;
     const runIds = runs.map((run) => run._id);
     checklists.sort((left, right) =>
       (FREQUENCY_ORDER.get(left.frequency) ?? Number.MAX_SAFE_INTEGER)
@@ -871,14 +907,17 @@ router.get("/:sectionId", async (req, res) => {
         continue;
       }
 
-      if (checklist.statusOptionSet?.options) {
-        checklist.statusOptionSet.options.sort((left, right) =>
+      const optionSet = hasUsableStatusOptions(checklist.statusOptionSet) ? checklist.statusOptionSet : fallbackStatusOptionSet;
+      const statusOptionSet = optionSet ? {
+        ...optionSet,
+        options: [...optionSet.options].sort((left, right) =>
           left.label.localeCompare(right.label)
-        );
-      }
+        ),
+      } : null;
 
       checklistsBySection.get(checklist.section.toString()).push({
         ...checklist,
+        statusOptionSet,
         run: run
           ? {
               _id: run._id,

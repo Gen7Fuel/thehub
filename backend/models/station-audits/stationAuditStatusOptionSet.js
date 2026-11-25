@@ -22,6 +22,7 @@ const StationAuditStatusOptionSetSchema = new mongoose.Schema(
       },
     },
     active: { type: Boolean, default: true },
+    default: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
     // Manual option sets omit this field so they do not collide in the sparse
     // unique legacy index on an explicit null value.

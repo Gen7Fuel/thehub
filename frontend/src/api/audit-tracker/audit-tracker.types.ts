@@ -148,6 +148,7 @@ export interface AuditTrackerBoardReadModel {
 
 export interface AuditTrackerHistoricalIssue {
   _id: string
+  run?: { periodKey: string } | null
   status: AuditTrackerIssueStatus
   priority: AuditTrackerIssuePriority
   snapshot: AuditTrackerIssue['snapshot']

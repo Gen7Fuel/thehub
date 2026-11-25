@@ -506,10 +506,11 @@ router.get("/:issueId/history/:historicalIssueId/activities", async (req, res) =
       ...historicalIssueFilter(currentIssue),
       _id: req.params.historicalIssueId,
     })
-      .select("snapshot status priority site currentDepartment assignees occurrenceNumber raisedAt resolvedAt updatedAt")
+      .select("snapshot status priority site currentDepartment assignees occurrenceNumber raisedAt resolvedAt updatedAt run")
       .populate("site", "stationName site")
       .populate("currentDepartment", "name")
       .populate("assignees.user", "firstName lastName email")
+      .populate("run", "periodKey")
       .lean();
     if (!historicalIssue) return res.status(404).json({ error: "Historical issue not found" });
 

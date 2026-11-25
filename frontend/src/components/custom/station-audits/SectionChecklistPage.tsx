@@ -55,12 +55,15 @@ function ChecklistResponseCard({
   onSaved: (result: SaveStationAuditResponseResult, wasCompleted: boolean) => void
 }) {
   const [statusOptionId, setStatusOptionId] = useState(checklist.response?.selectedStatus?.optionId || '')
+  const statusOptions = checklist.statusOptionSet?.options ?? []
+  const selectedStatusId = statusOptions.some(({ _id }) => _id === statusOptionId) ? statusOptionId : ''
   const [comment, setComment] = useState(checklist.response?.comment || '')
   const [photos, setPhotos] = useState(checklist.response?.photos || [])
   const [issueRaised, setIssueRaised] = useState(checklist.response?.issueRaised === true)
   const [requestOrder, setRequestOrder] = useState(checklist.response?.requestOrder === true)
   const [issueId, setIssueId] = useState(checklist.response?.issue || '')
   const [checked, setChecked] = useState(checklist.completed)
+  const [savedStatusLabel, setSavedStatusLabel] = useState(checklist.response?.selectedStatus?.label)
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [descriptionOpen, setDescriptionOpen] = useState(false)
@@ -97,8 +100,8 @@ function ChecklistResponseCard({
 
   async function saveChecked(nextChecked: boolean, issueAlreadyResolved = false, submittedResolutionComment = '') {
     if (checked || uploading || saving || !nextChecked) return
-    if (nextChecked && !statusOptionId) {
-      toast.error('Select a status before completing this checklist.')
+    if (nextChecked && !selectedStatusId) {
+      toast.error(statusOptions.length ? 'Select a status before completing this checklist.' : 'No status options are available. Contact an administrator.')
       return
     }
     if (nextChecked && checklist.commentRequired && !comment.trim()) {
@@ -115,7 +118,7 @@ function ChecklistResponseCard({
         { site, type: auditType },
         {
           checked: nextChecked,
-          statusOptionId,
+          statusOptionId: selectedStatusId,
           comment,
           photos,
           issueRaised,
@@ -124,6 +127,8 @@ function ChecklistResponseCard({
           resolutionComment: submittedResolutionComment,
         },
       )
+      setSavedStatusLabel(result.response.selectedStatus?.label ||
+        statusOptions.find((option) => option._id === selectedStatusId)?.label)
       setChecked(result.completed)
       setIssueRaised(result.response.issueRaised === true)
       setRequestOrder(result.response.requestOrder === true)
@@ -179,12 +184,18 @@ function ChecklistResponseCard({
       <CardContent className="flex flex-1 flex-col gap-2.5 px-3 pb-3 pt-0">
         <div className="space-y-1.5">
           <Label htmlFor={`status-${checklist._id}`}>Status</Label>
-          <Select value={statusOptionId} onValueChange={setStatusOptionId} disabled={saving || checked}>
-            <SelectTrigger id={`status-${checklist._id}`} className="h-11 w-full bg-white"><SelectValue placeholder="Select a status" /></SelectTrigger>
-            <SelectContent>
-              {checklist.statusOptionSet.options.map((option) => <SelectItem key={option._id} value={option._id}>{option.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {checked ? (
+            <div id={`status-${checklist._id}`} className="min-h-11 rounded-md border bg-slate-50 px-3 py-2.5 text-sm">
+              {savedStatusLabel || checklist.response?.selectedStatus?.label || 'Status not recorded'}
+            </div>
+          ) : (
+            <Select value={selectedStatusId} onValueChange={setStatusOptionId} disabled={saving || !statusOptions.length}>
+              <SelectTrigger id={`status-${checklist._id}`} className="h-11 w-full bg-white"><SelectValue placeholder={statusOptions.length ? 'Select a status' : 'No status options configured'} /></SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((option) => <SelectItem key={option._id} value={option._id}>{option.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -499,7 +510,12 @@ export function StationAuditSectionChecklistPage({
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span><strong>Complete carefully:</strong> Once an item is marked complete, it cannot be updated. Add the status, comment, images, and issue information first.</span>
+              <span>
+                <strong>Complete carefully:</strong> Once an item is marked complete, it cannot be updated. Add the status, comment, images, and issue information first.
+                {auditType === 'visitor' && (
+                  <> Issues raised during visitor audits are for recordkeeping only. Use the Store Audit Checklist to add an issue to the Audits Tracker.</>
+                )}
+              </span>
             </div>
           </div>
 

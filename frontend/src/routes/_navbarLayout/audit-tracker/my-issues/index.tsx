@@ -637,7 +637,7 @@ export function IssueDetail({
             </Card>
 
             <div className="min-h-0 overflow-y-auto">
-              <IssueActivityPanel issueId={issue._id} scope={scope} />
+              <IssueActivityPanel issue={issue} scope={scope} />
             </div>
           </div>
 

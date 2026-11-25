@@ -51,7 +51,11 @@ async function unreadIssueCounts() {
   ]);
 }
 
-async function runStationAuditUnreadIssueReminder() {
+async function runStationAuditUnreadIssueReminder({ manual = false } = {}) {
+  if (process.env.HOST !== "VPS" && manual !== true) {
+    console.log("Skipping scheduled Station Audit unread issue reminder because HOST is not VPS.");
+    return;
+  }
   const counts = await unreadIssueCounts();
   if (!counts.length) {
     console.log(
@@ -101,7 +105,7 @@ async function runStationAuditUnreadIssueReminder() {
   return summary;
 }
 
-cron.schedule("0 9 * * 1-5", runStationAuditUnreadIssueReminder, {
+cron.schedule("0 9 * * 1-5", () => runStationAuditUnreadIssueReminder(), {
   scheduled: true,
   timezone: "America/Toronto",
 });

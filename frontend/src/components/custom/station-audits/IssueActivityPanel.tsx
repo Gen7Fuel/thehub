@@ -5,6 +5,7 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
+  Download,
   History,
   ImagePlus,
   Images,
@@ -15,7 +16,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { auditTrackerService } from '@/api/audit-tracker/audit-tracker.service'
-import type { AuditTrackerActivity } from '@/api/audit-tracker/audit-tracker.types'
+import type { AuditTrackerActivity, AuditTrackerHistoricalIssue } from '@/api/audit-tracker/audit-tracker.types'
 import { cdnService } from '@/api/cdn/cdn.service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,10 @@ interface PendingImage {
   preview: string
 }
 
-export function IssueActivityPanel({ issueId, scope = 'myIssues' }: { issueId: string; scope?: 'myIssues' | 'departmentIssues' }) {
+type ActivityIssue = Pick<AuditTrackerHistoricalIssue, '_id' | 'snapshot' | 'site' | 'status' | 'raisedAt' | 'updatedAt' | 'currentDepartment' | 'assignees' | 'run'>
+
+export function IssueActivityPanel({ issue, scope = 'myIssues' }: { issue: ActivityIssue; scope?: 'myIssues' | 'departmentIssues' }) {
+  const issueId = issue._id
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -140,7 +144,10 @@ export function IssueActivityPanel({ issueId, scope = 'myIssues' }: { issueId: s
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="flex h-[88vh] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
           <DialogHeader className="border-b px-4 py-4 pr-12 sm:px-6">
-            <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-violet-600" />Issue activity</DialogTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-violet-600" />Issue activity</DialogTitle>
+              <IssueActivityExportButton issue={issue} data={activityQuery.isError ? undefined : activityQuery.data} />
+            </div>
             <DialogDescription>Comments, evidence, and issue changes are preserved in one timeline.</DialogDescription>
           </DialogHeader>
 
@@ -201,6 +208,113 @@ export function IssueActivityPanel({ issueId, scope = 'myIssues' }: { issueId: s
       </Dialog>
     </>
   )
+}
+
+const issueStatusLabels = { created: 'Created', in_progress: 'In Progress', on_hold: 'On Hold', resolved: 'Resolved' } as const
+
+export function IssueActivityExportButton({ issue, data }: {
+  issue: ActivityIssue
+  data?: { activities: AuditTrackerActivity[]; hasMore?: boolean }
+}) {
+  const [exporting, setExporting] = useState(false)
+
+  async function download() {
+    if (!data || exporting) return
+    const exportedAt = new Date()
+    const { timeZone } = Intl.DateTimeFormat().resolvedOptions()
+    setExporting(true)
+    try {
+      const { createIssueActivityPdf } = await import('./IssueActivityPDF')
+      const entries = []
+      const activities = [...data.activities].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
+      for (const activity of activities) {
+        entries.push({
+          id: activity._id,
+          heading: `${actorName(activity)} ${activityMetadata(activity).label}`,
+          timestamp: activityTimestamp(activity.createdAt).exact,
+          body: activity.body,
+          changes: activityChangeLabels(activity).map((label) => label.replaceAll(' → ', ' to ')),
+          photos: await Promise.all((activity.photos || []).map(loadActivityPhoto)),
+        })
+      }
+      const blob = await createIssueActivityPdf({
+        title: issue.snapshot.checklistItem,
+        station: issue.site.site || issue.site.stationName,
+        status: issue.status,
+        statusLabel: issueStatusLabels[issue.status],
+        raised: formatExportDate(issue.raisedAt),
+        department: issue.currentDepartment?.name || issue.snapshot.departmentName || 'Not assigned',
+        assigned: issue.assignees.flatMap(({ user }) => {
+          if (!user) return []
+          const name = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email
+          return name ? [name] : []
+        }).join(', ') || 'Unassigned',
+        updated: formatExportDate(issue.updatedAt),
+        reportDate: `${formatExportDate(exportedAt.toISOString())} (${timeZone})`,
+        partial: Boolean(data.hasMore),
+        entries,
+      }).toBlob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      const filename = [
+        filenamePart(issue.site.stationName || issue.site.site, 'UnknownStation', 64),
+        filenamePart(issue.snapshot.checklistItem, 'Checklist', 80),
+        filenamePart(issue.run?.periodKey, 'UnknownPeriod', 32),
+        'Issue',
+      ].join('_')
+      link.download = `${filename}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch {
+      toast.error('Unable to export issue activity. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <Button type="button" variant="outline" size="sm" disabled={!data || exporting} onClick={() => void download()}>
+      {exporting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
+      {exporting ? 'Exporting…' : 'Export PDF'}
+    </Button>
+  )
+}
+
+async function loadActivityPhoto(path: string) {
+  try {
+    const response = await fetch(stationAuditPhotoUrl(path), { signal: AbortSignal.timeout(15000) })
+    if (!response.ok) return null
+    const image = await createImageBitmap(await response.blob())
+    try {
+      // Normalize uploads to a format the PDF renderer supports and cap image size.
+      const scale = Math.min(1, 960 / Math.max(image.width, image.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.max(1, Math.round(image.width * scale))
+      canvas.height = Math.max(1, Math.round(image.height * scale))
+      const context = canvas.getContext('2d', { alpha: false })
+      if (!context) return null
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      return canvas.toDataURL('image/jpeg', 0.85)
+    } finally {
+      image.close()
+    }
+  } catch {
+    return null
+  }
+}
+
+function formatExportDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? 'Not recorded' : format(date, "MMM d, yyyy 'at' h:mm a")
+}
+
+function filenamePart(value: string | undefined, fallback: string, maxLength: number) {
+  return (value || '').trim().replace(/[^\p{L}\p{N}.-]+/gu, '_').slice(0, maxLength).replace(/^[_.-]+|[_.-]+$/g, '') || fallback
 }
 
 export function ActivityEntry({ activity, compact = false }: { activity: AuditTrackerActivity; compact?: boolean }) {

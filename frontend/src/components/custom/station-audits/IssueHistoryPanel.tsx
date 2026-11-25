@@ -4,7 +4,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { Building2, CalendarClock, ChevronRight, History, Loader2, MapPin, UsersRound } from 'lucide-react'
 import { auditTrackerService } from '@/api/audit-tracker/audit-tracker.service'
 import type { AuditTrackerHistoricalIssue, AuditTrackerIssue } from '@/api/audit-tracker/audit-tracker.types'
-import { ActivityEntry } from '@/components/custom/station-audits/IssueActivityPanel'
+import { ActivityEntry, IssueActivityExportButton } from '@/components/custom/station-audits/IssueActivityPanel'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -77,7 +77,10 @@ export function IssueHistoryPanel({ issue, scope = 'myIssues' }: { issue: AuditT
       <Dialog open={Boolean(selectedIssueId)} onOpenChange={(open) => !open && setSelectedIssueId(null)}>
         <DialogContent className="flex h-[88vh] w-[calc(100vw-1rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
           <DialogHeader className="border-b px-4 py-4 pr-12 sm:px-6">
-            <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-violet-600" />Historical issue activity</DialogTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <DialogTitle className="flex items-center gap-2"><History className="h-5 w-5 text-violet-600" />Historical issue activity</DialogTitle>
+              {activityQuery.data?.issue && <IssueActivityExportButton issue={activityQuery.data.issue} data={activityQuery.isError ? undefined : activityQuery.data} />}
+            </div>
             <DialogDescription>Read-only record of the actions taken during this occurrence.</DialogDescription>
           </DialogHeader>
           <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50 px-3 py-4 sm:px-6">
