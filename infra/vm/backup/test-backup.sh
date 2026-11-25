@@ -61,15 +61,29 @@ pass "fixture databases seeded"
 cat > "$work/put.py" <<'PY'
 import base64, hashlib, http.server, json, os, sys
 root, log = sys.argv[1], sys.argv[2]
+TOKEN = 'identity-token-' + hashlib.sha256(os.urandom(8)).hexdigest()[:16]
 class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        # Stands in for the VM's local identity endpoint (169.254.169.254).
+        path, _, query = self.path.partition('?')
+        if path == '/imds/token' and self.headers.get('Metadata') == 'true' and 'resource=https%3A%2F%2Fstorage.azure.com%2F' in query:
+            payload = json.dumps({'access_token': TOKEN, 'expires_in': '86399', 'token_type': 'Bearer'}).encode()
+            self.send_response(200); self.send_header('Content-Type', 'application/json'); self.end_headers()
+            self.wfile.write(payload)
+            with open(log, 'a') as out:
+                out.write(json.dumps({'imds': True, 'token': TOKEN}) + '\n')
+        else:
+            self.send_response(200 if path == '/' else 404); self.end_headers()
     def do_PUT(self):
         body = self.rfile.read(int(self.headers['Content-Length']))
         md5 = base64.b64encode(hashlib.md5(body).digest()).decode()
         ok = self.headers.get('Content-MD5') == md5 and self.headers.get('x-ms-blob-type') == 'BlockBlob'
         path = self.path.split('?')[0]
+        bearer = self.headers.get('Authorization')
+        auth = 'none' if not bearer else ('bearer' if bearer == 'Bearer ' + TOKEN else 'bearer-bad')
         with open(log, 'a') as out:
-            out.write(json.dumps({'path': path, 'query': self.path.partition('?')[2], 'md5_ok': ok}) + '\n')
-        if not ok:
+            out.write(json.dumps({'path': path, 'query': self.path.partition('?')[2], 'md5_ok': ok, 'auth': auth}) + '\n')
+        if not ok or auth == 'bearer-bad':
             self.send_response(400); self.end_headers(); return
         target = os.path.join(root, path.lstrip('/'))
         os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -117,6 +131,39 @@ grep -q 'emailQueue:1' "$blob/hub-email-journal.jsonl" || fail "relay journal no
 pass "manifest lists all six stores; Redis and relay journal captured"
 python3 -c 'import json,sys;s=json.load(open(sys.argv[1]));assert "last_success" in s' "$GEN7_BACKUP_STATE/status.json" || fail "status.json"
 pass "status.json records the last success"
+
+# --- 1b. managed identity: a bearer token from the identity endpoint, no SAS and nothing stored ---
+sleep 1
+lines_before=$(wc -l < "$work/put.log")
+BACKUP_BLOB_BASE_URL="http://127.0.0.1:$port/container-mi" BACKUP_BLOB_SAS= BACKUP_AUTH=managed-identity \
+    BACKUP_IMDS_URL="http://127.0.0.1:$port/imds/token" bash "$HERE/gen7-backup.sh" > "$work/run-mi.log" 2>&1 \
+    || { cat "$work/run-mi.log"; fail "managed identity run failed"; }
+python3 - "$work/put.log" "$lines_before" "$work/run-mi.log" <<'PY' || fail "managed identity upload checks"
+import json, sys
+log, skip, run = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+rows = [json.loads(line) for line in open(log).read().splitlines()[skip:]]
+tokens = [r for r in rows if r.get('imds')]
+puts = [r for r in rows if 'path' in r]
+assert len(tokens) == 1, 'expected exactly one token request per run'
+assert len(puts) == 8, len(puts)
+assert all(r['auth'] == 'bearer' and r['query'] == '' and r['md5_ok'] for r in puts), puts
+assert puts[-1]['path'].endswith('/MANIFEST.json')
+assert tokens[0]['token'] not in open(run).read(), 'the token appears in the run log'
+PY
+pass "managed identity: one token per run, every upload carries it, no SAS is sent, the token stays out of the log"
+
+before_mi=$(find "$work/blob/container-mi/gen7-vm/hourly" -name MANIFEST.json | wc -l)
+sleep 1
+set +e
+BACKUP_BLOB_BASE_URL="http://127.0.0.1:$port/container-mi" BACKUP_BLOB_SAS= BACKUP_AUTH=managed-identity \
+    BACKUP_IMDS_URL="http://127.0.0.1:1/imds/token" bash "$HERE/gen7-backup.sh" > "$work/run-mi-down.log" 2>&1
+code=$?
+set -e
+[[ "$code" -ne 0 ]] || fail "a run succeeded with the identity endpoint unreachable"
+expect "$(find "$work/blob/container-mi/gen7-vm/hourly" -name MANIFEST.json | wc -l)" "$before_mi" "a run without a token uploaded something"
+expect "$(ls -1 "$GEN7_BACKUP_ROOT" | grep -c partial || true)" 0 "partial run kept after a token failure"
+python3 -c 'import json,sys;s=json.load(open(sys.argv[1]));assert "last_failure" in s' "$GEN7_BACKUP_STATE/status.json" || fail "token failure not recorded"
+pass "without a working identity the run fails, uploads nothing and records the failure"
 
 # --- 2. file sink, retention classes and pruning ---------------------------------------------
 sleep 1

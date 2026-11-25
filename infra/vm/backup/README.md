@@ -29,8 +29,9 @@ snapshot across stores. That is acceptable because a restore is always followed 
 
 ## Install (inside an approved window; this is a production configuration change)
 
-1. Confirm the destination container from the existing VPS backup script (read-only inspection) and create a
-   **write-only SAS** for it: permissions `cw` only, no read, list or delete, with an expiry you can rotate.
+1. **Destination:** dedicated container `gen7-vm-backups` in storage account `gen7fuel` (created 2026-11-25; the old
+   VPS jobs use the shared `hub` container and a full-access key, which this job must not reuse). Uploads
+   authenticate as the VM's **managed identity** (recommended, see "Azure setup" below), or with a write-only SAS.
 2. On the VM: install the files, then the environment file (names in `backup.env.example`, root only):
    ```sh
    sudo install -o root -g root -m 0755 gen7-backup.sh /usr/local/libexec/gen7-backup
@@ -49,14 +50,66 @@ snapshot across stores. That is acceptable because a restore is always followed 
 Requirements on the VM: `docker`, `bash`, `python3`, `curl`, `openssl`, `flock` (all in Ubuntu 24.04), and the
 Compose project names `gen7-hub` and `gen7-desk` with services `mongo`, `postgres`, `redis`, `email-service` and `db`.
 
+## Write-only SAS (what is in use now)
+
+The managed identity below needs a role assignment that the owner's account could not create, so the job uses a
+write-only SAS, with `BACKUP_AUTH=sas` in `/etc/gen7-backup/backup.env`. The SAS is tied to a **stored access policy**
+named `vm-backup-writer` on container `gen7-vm-backups` (permissions `cw`: create and write, no read, list or delete;
+issued 2026-11-25, **expires 2027-11-25**). Checked when issued: it can create a blob, but reading it back, listing the
+container, deleting it, and writing to any other container (`hub` was tried) are all refused with 403.
+
+Because the token only references the policy, **renewing does not touch the VM**. Put a reminder in the calendar
+for about a month before expiry (2027-10-25), then extend the policy:
+
+```sh
+az storage container policy update --account-name gen7fuel -c gen7-vm-backups -n vm-backup-writer \
+    --expiry 2028-11-25T00:00Z --auth-mode key
+```
+
+To revoke the token immediately (for example if the VM is compromised), delete the policy; the token stops working at once:
+`az storage container policy delete --account-name gen7fuel -c gen7-vm-backups -n vm-backup-writer --auth-mode key`.
+To issue a new token afterwards, create the policy again and run `az storage container generate-sas -n gen7-vm-backups
+--policy-name vm-backup-writer --https-only --account-name gen7fuel --auth-mode key`, then place it in `backup.env`.
+
+The SAS is signed with a storage account key (`key2` when issued). **Rotating that key invalidates the token**, so after
+rotating either key, re-issue the SAS with the other key and re-place it. A missed expiry or rotation makes uploads fail with
+403, the run fails, and nothing is uploaded; the freshness alert is what makes that visible.
+
+## Azure setup for the managed identity (optional; needs an identity-grant approval)
+
+The job fetches a short-lived token from the VM's local identity endpoint at the start of each upload stage, so there is
+no secret on the VM and nothing to renew. The role can only write blobs, and it is assigned on the one container.
+Review `backup-writer-role.json` (fill in the subscription id), then, as someone who may create roles and assignments:
+
+```sh
+az role definition create --role-definition @backup-writer-role.json
+az vm identity assign -g Gen7ERP -n gen7-erp-vm                      # system-assigned identity
+principal=$(az vm show -g Gen7ERP -n gen7-erp-vm --query identity.principalId -o tsv)
+az role assignment create --assignee-object-id "$principal" --assignee-principal-type ServicePrincipal \
+  --role "Gen7 VM Backup Writer" \
+  --scope /subscriptions/<subscription-id>/resourceGroups/EDW_GEN7FUEL/providers/Microsoft.Storage/storageAccounts/gen7fuel/blobServices/default/containers/gen7-vm-backups
+```
+
+Role assignments can take a few minutes to take effect. The first run on the VM proves it: a `403
+AuthorizationPermissionMismatch` means a missing data action, an authentication error means the assignment has not
+propagated yet. Rollback: delete the role assignment, then the role definition, then `az vm identity remove`.
+
+**Exposure to contain:** any process on the VM that can reach `169.254.169.254` can request the same token, including the
+app containers. A compromised container could then write (not read or delete) blobs into the backup container. Block the
+endpoint from the Docker bridges, for example `iptables -I DOCKER-USER -d 169.254.169.254 -j DROP`, persisted
+across reboots, and re-run the rehearsal; the job itself runs on the host and is unaffected. Soft delete, unique blob
+names and a restore drill limit the damage of junk writes, and the freshness alert should catch missing real backups.
+
 ## Retention (storage side)
 
-The uploader cannot delete anything, so retention is an Azure Storage lifecycle policy on the container:
-delete `gen7-vm/hourly/` after 2 days, `gen7-vm/daily/` after 30 days, `gen7-vm/monthly/` after 365 days. Also
-enable blob soft delete (14 days) and versioning. These are production storage changes that need separate
-authorization. Backups in a RA-GRS account have a read-only copy in the paired region (replication is
-asynchronous). The job does not alert by itself: monitor that `last_success` in `status.json`, or the newest
-`MANIFEST.json` blob, is younger than 2 hours.
+The uploader cannot delete anything, so retention is an Azure Storage lifecycle policy. **Applied to account `gen7fuel`
+on 2026-11-25**, scoped by prefix to this container only: `gen7-vm-backups/gen7-vm/hourly/` is deleted 2 days after
+creation, `daily/` after 30 days, `monthly/` after 365 days (Azure evaluates policies about daily, so expiry can lag by a
+day). **Blob soft delete (14 days) is also on**, account-wide, so deleted or overwritten backup blobs stay recoverable for
+14 days. **Blob versioning is deliberately off**: it is an account-wide setting that would also keep every prior version of
+the CDN media in `hub`, and soft delete already covers overwrites. Backups in a RA-GRS account have a read-only copy
+in the paired region (replication is asynchronous). The job does not alert by itself: monitor that `last_success` in
+`status.json`, or the newest `MANIFEST.json` blob, is younger than 2 hours.
 
 ## Restore
 
