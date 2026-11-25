@@ -1,0 +1,2 @@
+# Shell scripts and systemd units must keep LF endings on every platform.
+* text eol=lf
