@@ -1,0 +1,28 @@
+name: VM backup checks
+
+on:
+  pull_request:
+    paths:
+      - 'infra/vm/backup/**'
+      - '.github/workflows/vm-backup-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'infra/vm/backup/**'
+      - '.github/workflows/vm-backup-checks.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  backup-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Backup and restore round trip against real databases
+        run: bash infra/vm/backup/test-backup.sh
