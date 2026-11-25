@@ -2,7 +2,8 @@
   "name": "email-service",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "hono": "^4.12.23",

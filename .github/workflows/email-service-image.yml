@@ -6,12 +6,29 @@ on:
     paths:
       - 'email-service/**'
       - '.github/workflows/email-service-image.yml'
+  pull_request:
+    paths:
+      - 'email-service/**'
+      - '.github/workflows/email-service-image.yml'
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run the relay tests
+        run: docker run --rm -v "$PWD/email-service:/src:ro" oven/bun:1 sh -c 'cp -r /src /work && cd /work && bun install --frozen-lockfile && bun test'
+
   publish:
+    needs: test
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
