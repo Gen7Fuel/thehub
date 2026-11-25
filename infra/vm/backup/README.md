@@ -50,7 +50,32 @@ snapshot across stores. That is acceptable because a restore is always followed 
 Requirements on the VM: `docker`, `bash`, `python3`, `curl`, `openssl`, `flock` (all in Ubuntu 24.04), and the
 Compose project names `gen7-hub` and `gen7-desk` with services `mongo`, `postgres`, `redis`, `email-service` and `db`.
 
-## Azure setup for the managed identity (one time, needs an identity-grant approval)
+## Write-only SAS (what is in use now)
+
+The managed identity below needs a role assignment that the owner's account could not create, so the job uses a
+write-only SAS, with `BACKUP_AUTH=sas` in `/etc/gen7-backup/backup.env`. The SAS is tied to a **stored access policy**
+named `vm-backup-writer` on container `gen7-vm-backups` (permissions `cw`: create and write, no read, list or delete;
+issued 2026-11-25, **expires 2027-11-25**). Checked when issued: it can create a blob, but reading it back, listing the
+container, deleting it, and writing to any other container (`hub` was tried) are all refused with 403.
+
+Because the token only references the policy, **renewing does not touch the VM**. Put a reminder in the calendar
+for about a month before expiry (2027-10-25), then extend the policy:
+
+```sh
+az storage container policy update --account-name gen7fuel -c gen7-vm-backups -n vm-backup-writer \
+    --expiry 2028-11-25T00:00Z --auth-mode key
+```
+
+To revoke the token immediately (for example if the VM is compromised), delete the policy; the token stops working at once:
+`az storage container policy delete --account-name gen7fuel -c gen7-vm-backups -n vm-backup-writer --auth-mode key`.
+To issue a new token afterwards, create the policy again and run `az storage container generate-sas -n gen7-vm-backups
+--policy-name vm-backup-writer --https-only --account-name gen7fuel --auth-mode key`, then place it in `backup.env`.
+
+The SAS is signed with a storage account key (`key2` when issued). **Rotating that key invalidates the token**, so after
+rotating either key, re-issue the SAS with the other key and re-place it. A missed expiry or rotation makes uploads fail with
+403, the run fails, and nothing is uploaded; the freshness alert is what makes that visible.
+
+## Azure setup for the managed identity (optional; needs an identity-grant approval)
 
 The job fetches a short-lived token from the VM's local identity endpoint at the start of each upload stage, so there is
 no secret on the VM and nothing to renew. The role can only write blobs, and it is assigned on the one container.
