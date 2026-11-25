@@ -53,7 +53,7 @@ fi
 container() {
     local ids
     ids=$(docker ps -q --filter "label=com.docker.compose.project=$1" --filter "label=com.docker.compose.service=$2")
-    test "$(printf '%s\n' "$ids" | grep -c .)" -eq 1 || { log "expected exactly one running $1/$2 container"; return 1; }
+    test "$(printf '%s\n' "$ids" | grep -c .)" -eq 1 || { log "expected exactly one running $1/$2 container" >&2; return 1; }
     printf '%s' "$ids"
 }
 hub_mongo=$(container "$HUB_PROJECT" mongo)

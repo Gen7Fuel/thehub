@@ -68,7 +68,8 @@ container() { # project service -> exactly one running container id
     local ids
     ids=$(docker ps -q --filter "label=com.docker.compose.project=$1" --filter "label=com.docker.compose.service=$2")
     if [[ $(printf '%s\n' "$ids" | grep -c .) -ne 1 ]]; then
-        log "expected exactly one running $1/$2 container, found: $(printf '%s' "$ids" | tr '\n' ' ')"
+        # stderr: this runs inside $(...), where stdout is captured and the message would be lost
+        log "expected exactly one running $1/$2 container, found: $(printf '%s' "$ids" | tr '\n' ' ')" >&2
         return 1
     fi
     printf '%s' "$ids"
