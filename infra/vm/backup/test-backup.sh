@@ -219,4 +219,16 @@ printf 'x' >> "$work/damaged/hub-postgres.dump"
 if bash "$HERE/gen7-restore.sh" "$work/damaged" >/dev/null 2>&1; then fail "a modified backup was accepted"; fi
 pass "a backup whose file no longer matches its checksum is refused"
 
+# --- 7. a wrong or missing project must say so on the console, not fail silently -------------
+set +e
+GEN7_HUB_PROJECT=no-such-project bash "$HERE/gen7-backup.sh" > "$work/lookup.log" 2>&1
+code=$?
+GEN7_HUB_PROJECT=no-such-project bash "$HERE/gen7-restore.sh" "$GEN7_BACKUP_ROOT/$latest" --apply --writers-fenced > "$work/lookup-restore.log" 2>&1
+code_restore=$?
+set -e
+[[ "$code" -ne 0 && "$code_restore" -ne 0 ]] || fail "a run against a missing project succeeded"
+grep -q 'expected exactly one running no-such-project/mongo container' "$work/lookup.log" || fail "the backup job did not say which container it could not find"
+grep -q 'expected exactly one running no-such-project/mongo container' "$work/lookup-restore.log" || fail "the restore script did not say which container it could not find"
+pass "a missing container is named in the error, for both the backup and the restore script"
+
 echo "ALL $checks CHECKS PASSED"
