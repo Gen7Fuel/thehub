@@ -1,0 +1,12 @@
+[Unit]
+Description=Gen7 backup freshness check (mails if no recent successful backup)
+After=docker.service
+Requires=docker.service
+ConditionPathExists=/etc/gen7-backup/backup.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/gen7-backup/backup.env
+ExecStart=/usr/local/libexec/gen7-backup-alert check
+TimeoutStartSec=120
+Nice=10

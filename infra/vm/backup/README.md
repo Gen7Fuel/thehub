@@ -50,6 +50,25 @@ snapshot across stores. That is acceptable because a restore is always followed 
 Requirements on the VM: `docker`, `bash`, `python3`, `curl`, `openssl`, `flock` (all in Ubuntu 24.04), and the
 Compose project names `gen7-hub` and `gen7-desk` with services `mongo`, `postgres`, `redis`, `email-service` and `db`.
 
+## Alerts
+
+Set `BACKUP_ALERT_EMAIL` (the owner's address) in `backup.env`. Mail is sent through the private email relay by
+`docker exec` into the relay container, so its API key never leaves the container and no port is published.
+
+| Alert | Trigger | Idempotency key |
+|---|---|---|
+| **Backup FAILED** | any stage of a run fails (including a 403 on upload after the SAS expires or its key is rotated) | `backup-failure:<run>`: one mail per failed run |
+| **No fresh backup** | the freshness check, a separate timer every 30 minutes, finds no successful backup in the last 170 minutes (or none ever) | `backup-stale:<yyyymmddhh>`: at most one mail per hour until a backup succeeds |
+
+Mail contents are the host, run id, failing stage and where to look; never a credential. An alert problem never masks a failure:
+the job still exits non-zero with the same status and logs that it could not send the alert.
+
+Install `gen7-backup-alert.sh` as `/usr/local/libexec/gen7-backup-alert` and the `gen7-backup-check` service and timer, and
+enable the check timer **together with the backup timer** (at cutover). The check covers a dead timer, repeated failures
+and an expired SAS. **It cannot cover the VM itself or the relay being down** (it runs on the VM and sends through the
+relay): add an Azure Monitor VM-availability alert to the same address for that, and keep a calendar reminder for the SAS
+expiry. Both are separate approvals.
+
 ## Write-only SAS (what is in use now)
 
 The managed identity below needs a role assignment that the owner's account could not create, so the job uses a
