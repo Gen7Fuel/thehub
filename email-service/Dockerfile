@@ -7,6 +7,8 @@ COPY package.json bun.lock* ./
 RUN bun install --production
 
 RUN groupadd --system appgroup && useradd --system --gid appgroup --no-create-home appuser
+# Idempotency journal. Mount a volume here so it survives container replacement.
+RUN mkdir -p /var/lib/email-relay && chown appuser:appgroup /var/lib/email-relay
 
 COPY . .
 
