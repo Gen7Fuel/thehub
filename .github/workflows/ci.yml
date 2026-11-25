@@ -15,6 +15,8 @@ jobs:
           python-version: '3.12'
       - name: Test deployment recovery paths
         run: python infra/vps/test_deploy_backend_roles.py
+      - name: Test Azure Compose promotion and rollback
+        run: python -B infra/vm/test_deploy_compose.py
       - name: Build runtime rehearsal image
         run: docker build -t hub-runtime-rehearsal:local backend
       - name: Rehearse isolated API, worker, and scheduler

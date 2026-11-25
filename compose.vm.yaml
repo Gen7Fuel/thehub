@@ -97,19 +97,7 @@ services:
     depends_on:
       mongo:
         condition: service_healthy
-    volumes:
-      - type: bind
-        source: ./backend/models
-        target: /app/models
-        read_only: true
-        bind:
-          create_host_path: false
-      - type: bind
-        source: ./backend/utils/attachSiteAlias.js
-        target: /app/utils/attachSiteAlias.js
-        read_only: true
-        bind:
-          create_host_path: false
+    volumes: !reset []
 
   frontend:
     image: ${HUB_FRONTEND_IMAGE:?set HUB_FRONTEND_IMAGE}
