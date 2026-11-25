@@ -104,8 +104,52 @@ describe('processEmailJob', () => {
       headers: {
         'Content-Type': 'application/json',
         'X-API-Key': 'test-key',
+        'Idempotency-Key': 'emailQueue:1',
       },
     }))
+  })
+
+  it('derives a stable Idempotency-Key from the job id and creation time', async () => {
+    fetch.mockResolvedValue({ ok: true })
+    const job = { id: '42', timestamp: 1764100000000, data: { to: 'a@b.com', subject: 'Hi', html: '<p>Hi</p>' } }
+
+    await processEmailJob(job)
+    await processEmailJob(job) // a stalled-job re-run of the same job
+
+    const keys = fetch.mock.calls.map(call => call[1].headers['Idempotency-Key'])
+    expect(keys).toEqual(['emailQueue:42:1764100000000', 'emailQueue:42:1764100000000'])
+    expect(keys[0]).toMatch(/^[A-Za-z0-9._:-]{1,128}$/) // the relay's accepted key format
+
+    await processEmailJob({ ...job, id: '43' })
+    expect(fetch.mock.calls[2][1].headers['Idempotency-Key']).toBe('emailQueue:43:1764100000000')
+  })
+
+  it('bounds the request with a timeout signal', async () => {
+    fetch.mockResolvedValueOnce({ ok: true })
+
+    await processEmailJob(makeJob({ to: 'a@b.com', subject: 'Hi', html: '<p>Hi</p>' }))
+
+    expect(fetch.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('fails the job, naming the key, when delivery may already have happened', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      json: vi.fn().mockResolvedValueOnce({ ok: false, error: 'ambiguous_delivery' }),
+    })
+
+    await expect(
+      processEmailJob(makeJob({ to: 'a@b.com', subject: 'Test', html: '<p>x</p>' }))
+    ).rejects.toThrow('ambiguous_delivery (Idempotency-Key emailQueue:1)')
+  })
+
+  it('treats a replayed duplicate as success', async () => {
+    fetch.mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValueOnce({ ok: true, duplicate: true }) })
+
+    await expect(
+      processEmailJob(makeJob({ to: 'a@b.com', subject: 'Hi', html: '<p>Hi</p>' }))
+    ).resolves.toBeUndefined()
   })
 
   it('sends to, subject, and body in the request payload', async () => {

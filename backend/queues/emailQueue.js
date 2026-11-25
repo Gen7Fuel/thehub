@@ -41,25 +41,38 @@ async function resolveAttachments(attachments = []) {
   );
 }
 
+// Stable for every run of the same job (including a stalled-job re-run), so the relay can
+// refuse a second delivery. The timestamp keeps keys unique if Redis is restored and its
+// job id counter restarts.
+function idempotencyKey(job) {
+  return `emailQueue:${job.id}${job.timestamp ? `:${job.timestamp}` : ""}`;
+}
+
 async function processEmailJob(job) {
   const { attachments, ...rest } = job.data;
   const resolved = await resolveAttachments(attachments);
+  const key = idempotencyKey(job);
 
   const res = await fetch(`${process.env.EMAIL_SERVICE_URL}/send`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-API-Key": process.env.EMAIL_SERVICE_API_KEY,
+      "Idempotency-Key": key,
     },
     body: JSON.stringify({
       ...rest,
       ...(resolved.length > 0 && { attachments: resolved }),
     }),
+    // Safe to abort: a repeat with the same key never sends a second copy.
+    signal: AbortSignal.timeout(Number(process.env.EMAIL_SERVICE_TIMEOUT_MS) || 180000),
   });
 
   if (!res.ok) {
+    // 409/502 ambiguous_delivery means the message may already have been delivered. The job
+    // fails (retries are off) and an operator reconciles it against the relay before replay.
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `email-service responded ${res.status}`);
+    throw new Error(`${body.error ?? `email-service responded ${res.status}`} (Idempotency-Key ${key})`);
   }
 }
 
