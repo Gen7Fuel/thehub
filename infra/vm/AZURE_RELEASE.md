@@ -36,6 +36,17 @@ older than the active release so an old rerun cannot roll it back.
    `/var/lib/gen7-deploy/<app>/active.json` with mode `0600`. Afterward use the
    active manifest's image values with `runtime.env` for manual Compose recovery.
 
+## Email relay
+
+The relay is pinned by digest in `compose.vm.yaml`, so it is not a release role and
+the dispatcher neither promotes nor restarts it (it uses `--no-deps`). Changing the
+relay image or its settings changes the reviewed configuration hash. Stage the new
+`compose.yaml`, `compose.vm.yaml` and Caddyfile, publish a fresh release whose
+`config` matches, and start or replace `email-service` as part of the cutover or a
+maintenance window. Drain the `emailQueue` first, then reconcile any job that was
+in flight before replaying it, because a send that the SMTP server accepted but that
+was not acknowledged is delivered again on a repeat request.
+
 ## Enable automatic deployment after writer handover
 
 Create `hub-azure-production` and `desk-azure-production` GitHub environments
