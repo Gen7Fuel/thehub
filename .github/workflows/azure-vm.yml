@@ -1,0 +1,194 @@
+name: Deploy Hub to Azure VM
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'auth-backend/**'
+      - 'infra/vm/**'
+      - '.github/workflows/frontend-vm-image.yml'
+      - 'compose.yaml'
+      - 'compose.vm.yaml'
+      - '.github/workflows/azure-vm.yml'
+  workflow_dispatch:
+    inputs:
+      build_only:
+        description: Publish an immutable release without contacting the VM
+        type: boolean
+        default: true
+
+permissions: {}
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && (vars.HUB_RUNTIME_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && inputs.build_only))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      config: ${{ steps.source.outputs.config }}
+      backend-source: ${{ steps.source.outputs.backend }}
+      frontend-source: ${{ steps.source.outputs.frontend }}
+      auth-source: ${{ steps.source.outputs.auth }}
+      backend-digest: ${{ steps.backend.outputs.digest }}
+      auth-digest: ${{ steps.auth.outputs.digest }}
+    env:
+      IMAGE_TAG: azure-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Record the complete desired release
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          config=$(sha256sum compose.yaml compose.vm.yaml infra/vm/Caddyfile | sha256sum | cut -d' ' -f1)
+          backend=$(git rev-parse HEAD:backend | sha256sum | cut -d' ' -f1)
+          frontend=$(git rev-parse HEAD:frontend HEAD:.github/workflows/frontend-vm-image.yml | sha256sum | cut -d' ' -f1)
+          auth=$(git rev-parse HEAD:auth-backend HEAD:backend/models HEAD:backend/utils/attachSiteAlias.js HEAD:infra/vm/auth.Dockerfile | sha256sum | cut -d' ' -f1)
+          auth_context=$(mktemp -d "$RUNNER_TEMP/hub-auth-context.XXXXXX")
+          git archive HEAD auth-backend backend/models backend/utils/attachSiteAlias.js infra/vm/auth.Dockerfile | tar -xf - -C "$auth_context"
+          printf 'config=%s\nbackend=%s\nfrontend=%s\nauth=%s\nauth-context=%s\n' "$config" "$backend" "$frontend" "$auth" "$auth_context" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Hub API
+        id: backend
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/gen7fuel/thehub-backend:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=thehub-backend
+          cache-to: type=gha,mode=max,scope=thehub-backend
+      - name: Publish Hub VM auth
+        id: auth
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ steps.source.outputs.auth-context }}
+          file: ${{ steps.source.outputs.auth-context }}/infra/vm/auth.Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/gen7fuel/thehub-auth-backend-vm:${{ env.IMAGE_TAG }}
+          cache-from: type=gha,scope=thehub-auth-backend-vm
+          cache-to: type=gha,mode=max,scope=thehub-auth-backend-vm
+
+  frontend:
+    if: github.ref == 'refs/heads/main' && (vars.HUB_RUNTIME_TARGET == 'azure' || (github.event_name == 'workflow_dispatch' && inputs.build_only))
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/frontend-vm-image.yml
+
+  release:
+    needs: [publish, frontend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      payload: ${{ steps.manifest.outputs.payload }}
+    steps:
+      - name: Assemble the pinned release manifest
+        id: manifest
+        shell: bash
+        env:
+          CONFIG: ${{ needs.publish.outputs.config }}
+          BACKEND_SOURCE: ${{ needs.publish.outputs.backend-source }}
+          FRONTEND_SOURCE: ${{ needs.publish.outputs.frontend-source }}
+          BACKEND_DIGEST: ${{ needs.publish.outputs.backend-digest }}
+          FRONTEND_IMAGE: ${{ needs.frontend.outputs.image }}
+          AUTH_SOURCE: ${{ needs.publish.outputs.auth-source }}
+          AUTH_DIGEST: ${{ needs.publish.outputs.auth-digest }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$GITHUB_RUN_NUMBER" =~ ^[1-9][0-9]*$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          for fingerprint in "$CONFIG" "$BACKEND_SOURCE" "$AUTH_SOURCE" "$FRONTEND_SOURCE"; do
+            [[ "$fingerprint" =~ ^[0-9a-f]{64}$ ]]
+          done
+          for digest in "$BACKEND_DIGEST" "$AUTH_DIGEST"; do
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          done
+
+          [[ "$FRONTEND_IMAGE" =~ ^ghcr\.io/gen7fuel/thehub-frontend-vm@sha256:[0-9a-f]{64}$ ]]
+          payload=$(jq -cn \
+            --arg commit "$GITHUB_SHA" \
+            --argjson generation "$GITHUB_RUN_NUMBER" --argjson attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg config "$CONFIG" \
+            --arg backend_source "$BACKEND_SOURCE" --arg backend_image "ghcr.io/gen7fuel/thehub-backend@$BACKEND_DIGEST" \
+            --arg frontend_source "$FRONTEND_SOURCE" --arg frontend_image "$FRONTEND_IMAGE" \
+            --arg auth_source "$AUTH_SOURCE" --arg auth_image "ghcr.io/gen7fuel/thehub-auth-backend-vm@$AUTH_DIGEST" \
+            '{app:"hub", $commit, $generation, $attempt, $config, images:{backend:{source:$backend_source,image:$backend_image},auth:{source:$auth_source,image:$auth_image},frontend:{source:$frontend_source,image:$frontend_image}}}')
+          printf '%s\n' "$payload" > gen7-release.json
+          printf 'payload=%s\n' "$(printf '%s' "$payload" | base64 -w0)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gen7-hub-release
+          path: gen7-release.json
+          if-no-files-found: error
+          retention-days: 14
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && vars.HUB_RUNTIME_TARGET == 'azure' && (github.event_name != 'workflow_dispatch' || !inputs.build_only)
+    needs: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: hub-azure-production
+    concurrency:
+      group: hub-azure-vm-deploy
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy the Hub release by digest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AZURE_VM_ID: ${{ vars.AZURE_VM_ID }}
+          PAYLOAD: ${{ needs.release.outputs.payload }}
+        run: |
+          set -euo pipefail
+          [[ "$AZURE_VM_ID" =~ ^/subscriptions/[0-9a-fA-F-]+/resourceGroups/[^/]+/providers/Microsoft\.Compute/virtualMachines/[^/]+$ ]]
+          [[ "$PAYLOAD" =~ ^[A-Za-z0-9+/]+=*$ ]]
+          work=$(mktemp -d)
+          printf "#!/bin/sh\nexec /usr/local/libexec/gen7-deploy-compose '%s'\n" "$PAYLOAD" > "$work/deploy.sh"
+
+          main_head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')
+          if [[ "$main_head" != "$GITHUB_SHA" ]]; then
+            echo 'The release commit is no longer at the tip of main.' >&2
+            exit 1
+          fi
+          if ! az vm run-command invoke --ids "$AZURE_VM_ID" --command-id RunShellScript \
+            --scripts "@$work/deploy.sh" --only-show-errors -o json > "$work/result.json"; then
+            echo 'Azure Run Command failed. Verify the VM deployment state before rerunning.' >&2
+            exit 1
+          fi
+          expected="GEN7_DEPLOY_OK hub $GITHUB_RUN_NUMBER $GITHUB_RUN_ATTEMPT"
+          if ! jq -e --arg expected "$expected" '
+            any(.value[]?;
+              if .code == "ComponentStatus/StdOut/succeeded" then
+                .message
+              elif .code == "ProvisioningState/succeeded" then
+                (.message | gsub("\r"; "") | split("[stdout]\n")
+                  | if length == 2 then .[1] | split("[stderr]")[0] else "" end)
+              else "" end
+              | split("\n") | any(rtrimstr("\r") == $expected))
+          ' "$work/result.json" > /dev/null; then
+            echo 'The VM did not confirm this Hub release. Verify its deployment state before rerunning.' >&2
+            exit 1
+          fi
+          printf '%s\n' "$expected"
