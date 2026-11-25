@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly Gen7 Hub and Desk backup
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=120
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
