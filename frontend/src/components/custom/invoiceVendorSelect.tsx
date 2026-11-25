@@ -25,11 +25,11 @@ export const EDI_VENDORS_CONFIG: Record<
   // EDI enabled for ALL stores EXCEPT these 4 (they can manually upload)
   "64990": {
     name: "COCA-COLA BOTTLING LTD",
-    excludedSites: ["Oliver", "Osoyoos", "Wavers West", "Wavers East"],
+    excludedSites: ["Oliver", "Osoyoos", "Wavers West", "Wavers East", "Sioux Valley"],
   },
   "97290": {
     name: "Coke Canada Bottling",
-    excludedSites: ["Oliver", "Osoyoos", "Wavers West", "Wavers East"],
+    excludedSites: ["Oliver", "Osoyoos", "Wavers West", "Wavers East", "Sioux Valley"],
   },
 };
 
