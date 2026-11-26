@@ -3,9 +3,8 @@
  * issue collections. Run the configuration migration first.
  *
  * Scope (America/Toronto calendar boundaries):
- *   - 2026-11-01 onward: completed instances and all their items.
- *   - 2026-10-01 onward: every still-open store issue. For an October
- *     instance, only the open issue item is copied into responses.
+ *   - 2026-09-01 onward: completed instances and all their items, including
+ *     still-open store issues linked to those instances.
  *
  * The default mode is a read-only dry run:
  *   node manual/migrate-station-audit-history.js
@@ -35,9 +34,8 @@ const {
 } = require("../models/station-audits");
 
 const apply = process.argv.includes("--apply");
-// Midnight in America/Toronto. Toronto is UTC-4 on both cutoff dates in 2026.
-const OPEN_ISSUE_CUTOFF = new Date("2026-10-01T04:00:00.000Z");
-const HISTORY_CUTOFF = new Date("2026-11-01T04:00:00.000Z");
+// Midnight on September 1, 2026 in America/Toronto.
+const HISTORY_CUTOFF = new Date("2026-09-01T04:00:00.000Z");
 const OPEN_STATUSES = new Set(["created", "in_progress", "on_hold"]);
 
 const normalize = (value) => String(value ?? "").trim();
@@ -234,7 +232,7 @@ function selectedStatus(item, checklist, config, warnings) {
 
 async function loadLegacyData() {
   const instances = await AuditInstance.find({
-    completedAt: { $gte: OPEN_ISSUE_CUTOFF, $ne: null },
+    completedAt: { $gte: HISTORY_CUTOFF, $ne: null },
   }).sort({ completedAt: 1, _id: 1 }).lean();
   const items = instances.length
     ? await AuditItem.find({ instance: { $in: instances.map((instance) => instance._id) } }).lean()
@@ -284,16 +282,10 @@ function buildPlan(legacy, config, occurrences) {
   const runs = [];
   const responses = [];
   const issues = [];
-  const skipped = { beforeNovemberWithoutOpenIssue: 0, visitorOpenIssue: 0 };
+  const skipped = { visitorOpenIssue: 0 };
 
   for (const instance of legacy.instances) {
     const allItems = legacy.itemsByInstance.get(id(instance)) || [];
-    const fullHistory = new Date(instance.completedAt) >= HISTORY_CUTOFF;
-    const openItems = allItems.filter(isOpenIssue);
-    if (!fullHistory && !openItems.length) {
-      skipped.beforeNovemberWithoutOpenIssue += 1;
-      continue;
-    }
 
     const section = config.sectionByTemplate.get(id(instance.template));
     const location = config.locationByName.get(key(instance.site));
@@ -302,9 +294,8 @@ function buildPlan(legacy, config, occurrences) {
     if (!instance.completedBy) errors.push(`Instance ${instance._id}: completedBy is missing`);
     if (!section || !location || !instance.completedBy) continue;
 
-    const selectedItems = fullHistory ? allItems : openItems;
     const mappedItems = [];
-    for (const item of selectedItems) {
+    for (const item of allItems) {
       const checklist = matchChecklist(instance, item, config);
       if (!checklist) {
         errors.push(`Item ${item._id} ("${item.item}", ${item.frequency}) in instance ${instance._id}: checklist mapping is missing or ambiguous`);
@@ -542,19 +533,11 @@ async function applyPlan(plan) {
 }
 
 function printPlan(plan) {
-  const octoberRuns = plan.runs.filter((run) => new Date(run.source.completedAt) < HISTORY_CUTOFF).length;
-  const novemberRuns = plan.runs.length - octoberRuns;
-  const octoberResponses = plan.responses.filter(
-    (response) => new Date(response.run.source.completedAt) < HISTORY_CUTOFF
-  ).length;
   console.log("\nHistorical migration preview:");
-  console.log(`  November+ full-history runs:       ${novemberRuns}`);
-  console.log(`  October open-issue-only runs:      ${octoberRuns}`);
+  console.log(`  Runs:                              ${plan.runs.length}`);
   console.log(`  Responses:                         ${plan.responses.length}`);
-  console.log(`    October issue-only responses:    ${octoberResponses}`);
   console.log(`  Open issues:                       ${plan.issues.length}`);
   console.log(`  Issue activities:                  ${plan.issues.reduce((total, issue) => total + issue.timeline.length, 0)}`);
-  console.log(`  Skipped Oct instances/no issue:    ${plan.skipped.beforeNovemberWithoutOpenIssue}`);
   console.log(`  Skipped visitor open issues:       ${plan.skipped.visitorOpenIssue}`);
 
   if (plan.warnings.length) {
@@ -573,8 +556,7 @@ async function run() {
   if (!process.env.MONGO_URI) throw new Error("MONGO_URI is not configured");
   await mongoose.connect(process.env.MONGO_URI);
   console.log(`Connected to MongoDB (${apply ? "APPLY" : "dry run"})`);
-  console.log(`Open issue cutoff: ${OPEN_ISSUE_CUTOFF.toISOString()} (Oct 1 Toronto)`);
-  console.log(`History cutoff:    ${HISTORY_CUTOFF.toISOString()} (Nov 1 Toronto)`);
+  console.log(`History and open issue cutoff: ${HISTORY_CUTOFF.toISOString()} (Sep 1 Toronto)`);
 
   const config = await loadConfiguration();
   const [legacy, occurrences] = await Promise.all([

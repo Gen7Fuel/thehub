@@ -58,9 +58,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useSite } from "@/context/SiteContext";
 import { getOrderRecStatusColor } from "@/lib/utils";
 import { PasswordProtection } from "@/components/custom/PasswordProtection";
-import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
-import { stationAuditsService } from '@/api/station-audits/station-audits.service';
-import type { StationAuditSectionListReadModel } from '@/api/station-audits/station-audits.types';
+// Re-enable the audit chart and its data request after the history migration.
+// import { AuditSummaryChart } from "@/components/custom/dashboard/auditCharts";
+// import { stationAuditsService } from '@/api/station-audits/station-audits.service';
+// import type { StationAuditSectionListReadModel } from '@/api/station-audits/station-audits.types';
 import { getGradeTheme } from "./fuel-pricing"; // Adjust relative path as needed
 import { ArrowDownRight, ArrowUpRight, Minus, Table2 } from "lucide-react";
 
@@ -508,7 +509,7 @@ function RouteComponent() {
   // const [operationalTimings, setOperationalTimings] = useState<OperationalTiming[]>([]);
   // Safe balance (end-of-day) data
   const [safeBalanceRaw, setSafeBalanceRaw] = useState<any[]>([]);
-  const [auditStats, setAuditStats] = useState<StationAuditSectionListReadModel | null>(null);
+  // const [auditStats, setAuditStats] = useState<StationAuditSectionListReadModel | null>(null);
 
   const [allTickerData, setAllTickerData] = useState<SiteTickerData[]>([]);
   const [loadingTicker, setLoadingTicker] = useState<boolean>(true);
@@ -647,7 +648,7 @@ function RouteComponent() {
           locationPromise,
           cashSummaryService.getDashboardOverShort<any>(site),
           cashSummaryService.getDashboardPayablesComparison<any>(site),
-          stationAuditsService.getDashboardProgress(site),
+          // stationAuditsService.getDashboardProgress(site),
           dashboardService.getVendors<any[]>(site),
           dashboardService.getOrderRecs<any>(site, weekStart, weekEnd),
         ]);
@@ -736,7 +737,7 @@ function RouteComponent() {
           locationResult,
           overShortResult,
           payablesResult,
-          auditResult,
+          // auditResult,
           vendorsResult,
           weekOrderRecsResult,
         ] = await slowTrackPromise;
@@ -748,7 +749,7 @@ function RouteComponent() {
           safeBalanceResult,
           overShortResult,
           payablesResult,
-          auditResult,
+          // auditResult,
         ]) {
           if (r.status === "rejected" && ((r.reason as any)?.is403 || (r.reason as any)?.status === 403)) {
             navigate({ to: "/no-access" });
@@ -768,8 +769,8 @@ function RouteComponent() {
           overShortResult.status === "fulfilled" ? overShortResult.value : [];
         const payablesRes =
           payablesResult.status === "fulfilled" ? payablesResult.value : [];
-        const auditRes =
-          auditResult.status === "fulfilled" ? auditResult.value : null;
+        // const auditRes =
+        //   auditResult.status === "fulfilled" ? auditResult.value : null;
         const vendorsArr =
           vendorsResult.status === "fulfilled" ? vendorsResult.value : [];
         const orderRecsArr =
@@ -782,7 +783,7 @@ function RouteComponent() {
         setSafeMaxBalance(locationData.safeMaxBalance ?? 25_000);
         setOverShortData(overShortRes);
         setPayablesComparisonData(payablesRes);
-        setAuditStats(auditRes);
+        // setAuditStats(auditRes);
         if (!cancelled) setLoadingAccounting(false);
 
         // ── Vendor / order rec state ──
@@ -2089,8 +2090,8 @@ function RouteComponent() {
                   className="text-2xl font-bold mb-4 pl-4"
                 >
                   {site !== "Jocko Point" && site !== "Sarnia"
-                    ? "Inventory & Audits"
-                    : "Station Audits"}
+                    ? "Inventory & Audits (Temporarily Not Available)"
+                    : "Station Audits (Temporarily Not Available)"}
                 </h2>
 
                 {/* Responsive grid: 1 col mobile, 2 col tablet, 3 col desktop */}
@@ -2238,8 +2239,7 @@ function RouteComponent() {
                       />
                     </>
                   )}
-                  {/* Empty slot / placeholder: keeps grid balanced on larger screens.
-                      Remove or replace with another inventory widget later. */}
+                  {/* Temporarily hidden until the Station Audit history migration is complete.
                   <div className="col-span-1">
                     {auditStats ? <AuditSummaryChart auditStats={auditStats} /> : (
                       <Card>
@@ -2250,6 +2250,7 @@ function RouteComponent() {
                       </Card>
                     )}
                   </div>
+                  */}
                 </div>
               </section>
             )}

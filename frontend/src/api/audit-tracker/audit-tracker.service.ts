@@ -57,6 +57,9 @@ export const auditTrackerService = {
   historicalDepartmentIssueActivities(issueId: string, historicalIssueId: string) {
     return auditTrackerApi.historicalDepartmentIssueActivities(issueId, historicalIssueId, actionOptions('auditTracker.departmentIssues', 'audit-tracker.department-issues.history', 'read', 'station-audit-issue-activity', 'Department historical issue activity viewed'))
   },
+  myIssueCounts(signal?: AbortSignal) {
+    return auditTrackerApi.myIssueCounts({ permission: 'auditTracker.myIssues', signal })
+  },
   myIssues(query: MyIssuesQuery) {
     return auditTrackerApi.myIssues(
       query,

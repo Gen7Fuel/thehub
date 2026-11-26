@@ -128,6 +128,7 @@ function ChecklistSectionPage() {
     });
   const [visibilityHelp, setVisibilityHelp] = useState(false);
   const [checklistSearch, setChecklistSearch] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [createDraft, setCreateDraft] = useState<AuditManagerChecklistCreate>(emptyChecklistCreate);
   const [saving, setSaving] = useState(false);
@@ -207,15 +208,23 @@ function ChecklistSectionPage() {
   );
   const activeCount = sorted.filter((item) => item.active).length;
   const normalizedSearch = checklistSearch.trim().toLowerCase();
-  const displayed = normalizedSearch
-    ? sorted.filter((item) => item.item.toLowerCase().includes(normalizedSearch))
-    : sorted;
+  const departments = new Map<string, string>();
+  for (const { department } of checklists) {
+    if (department) departments.set(department._id, department.name);
+  }
+  const departmentOptions = [...departments].sort(([, a], [, b]) => a.localeCompare(b));
+  const selectedFilter = departments.has(departmentFilter) ? departmentFilter : "all";
+  const isFiltered = Boolean(normalizedSearch) || selectedFilter !== "all";
+  const displayed = sorted.filter((item) =>
+    item.item.toLowerCase().includes(normalizedSearch) &&
+    (selectedFilter === "all" || item.department?._id === selectedFilter),
+  );
   const displayedByFrequency = CHECKLIST_FREQUENCIES.map((frequency) => ({
     frequency,
     checklists: displayed.filter((item) => item.active && item.frequency === frequency),
   }));
   const displayedInactive = displayed.filter((item) => !item.active);
-  const canReorder = canEdit && !reordering && !normalizedSearch;
+  const canReorder = canEdit && !reordering && !isFiltered;
 
   if (!user) return null;
   if (!canView) return <Navigate to="/no-access" replace />;
@@ -312,8 +321,7 @@ function ChecklistSectionPage() {
 
   async function handleDragEnd(event: DragEndEvent) {
     if (
-      !canEdit ||
-      reordering ||
+      !canReorder ||
       !event.over ||
       event.active.id === event.over.id
     )
@@ -475,6 +483,17 @@ function ChecklistSectionPage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <Input value={checklistSearch} onChange={(event) => setChecklistSearch(event.target.value)} placeholder="Search checklist names…" className="bg-white pl-9" />
               </div>
+              <Select value={selectedFilter} onValueChange={setDepartmentFilter}>
+                <SelectTrigger aria-label="Filter by department" className="w-full bg-white sm:w-52">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All departments</SelectItem>
+                  {departmentOptions.map(([id, name]) => (
+                    <SelectItem key={id} value={id}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {canAdd && (
                 <Button onClick={openCreateChecklist} disabled={!options} className="shrink-0">
                   <Plus className="mr-2 h-4 w-4" />
@@ -491,11 +510,11 @@ function ChecklistSectionPage() {
         <Empty message="No checklists exist in this section." />
       )}
       {!loading && !error && sorted.length > 0 && displayed.length === 0 && (
-        <Empty message="No checklist names match your search." />
+        <Empty message="No checklists match your filters." />
       )}
       {!loading && !error && displayed.length > 0 && (
         <div className="space-y-5">
-          {canEdit && !normalizedSearch && activeCount > 1 && (
+          {canEdit && !isFiltered && activeCount > 1 && (
             <p className="text-xs text-slate-500">
               Drag active checklists within their frequency section to update that frequency's order.
             </p>
@@ -596,7 +615,10 @@ function ChecklistSectionPage() {
       <Dialog open={departmentDialogTarget !== null} onOpenChange={(open) => { if (!open && !saving) setDepartmentDialogTarget(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader><DialogTitle>Select assigned department</DialogTitle></DialogHeader>
-          <p className="text-sm text-slate-600">Only departments assigned to this section are available.</p>
+          <p className="text-sm text-slate-600">Choose from the active departments you can assign in this section.</p>
+          {options && options.departments.length === 0 && (
+            <p className="text-sm text-slate-600">No departments are available to you in this section.</p>
+          )}
           <RadioGroup value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} className="max-h-[30rem] overflow-y-auto pr-1">
             {(options?.departments || []).map((department) => (
               <label key={department._id} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${selectedDepartmentId === department._id ? "border-cyan-500 bg-cyan-50" : "hover:bg-slate-50"}`}>

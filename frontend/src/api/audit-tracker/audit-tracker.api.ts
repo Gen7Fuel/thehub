@@ -76,6 +76,9 @@ export const auditTrackerApi = {
   async historicalDepartmentIssueActivities(issueId: string, historicalIssueId: string, options: RequestOptions): Promise<AuditTrackerHistoricalActivityReadModel> {
     return (await apiClient.get(`/station-audits/tracker/department-issues/${issueId}/history/${historicalIssueId}/activities`, requestConfig(options))).data
   },
+  async myIssueCounts(options: RequestOptions): Promise<{ pending: number; unread: number }> {
+    return (await apiClient.get('/station-audits/tracker/my-issues/counts', requestConfig(options))).data
+  },
   async myIssues(query: MyIssuesQuery, options: RequestOptions): Promise<MyIssuesReadModel> {
     return (
       await apiClient.get('/station-audits/tracker/my-issues', {

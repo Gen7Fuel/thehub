@@ -1,3 +1,4 @@
+import { IssuePriorityLabel, priorityFooterStyle } from "@/components/custom/station-audits/IssuePriorityLabel";
 import { useEffect, useState } from "react";
 import { createFileRoute, Navigate, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -285,9 +286,15 @@ export function IssueQueuePage({ scope }: { scope: "myIssues" | "departmentIssue
           </Dialog>
 
           <div className="min-h-[420px] bg-slate-50/70">
-            <div className="flex items-center justify-between border-b bg-white px-4 py-2.5 text-xs text-slate-500">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b bg-white px-4 py-2.5 text-xs text-slate-500">
               <span>{query.data?.pagination.total || 0} matching issues</span>
-              {query.isFetching && <Loader2 className="h-4 w-4 animate-spin text-violet-600" />}
+              <div className="flex flex-wrap items-center gap-1.5" aria-label="Priority legend">
+                <span>Priority</span>
+                {priorityLevels.map((priority) => (
+                  <IssuePriorityLabel key={priority} priority={priority} />
+                ))}
+              </div>
+              {query.isFetching && <Loader2 className="ml-auto h-4 w-4 animate-spin text-violet-600" />}
             </div>
 
             {query.isLoading ? (
@@ -369,12 +376,7 @@ const statusStyle: Record<
     className: "border-amber-200 bg-amber-50 text-amber-700",
   },
 };
-const priorityStyle: Record<AuditTrackerIssuePriority, string> = {
-  low: "bg-slate-400",
-  normal: "bg-cyan-500",
-  high: "bg-orange-500",
-  critical: "bg-red-600",
-};
+const priorityLevels = ["critical", "high", "normal", "low"] as const;
 
 function IssueCard({
   issue,
@@ -391,11 +393,11 @@ function IssueCard({
     <button
       type="button"
       onClick={onClick}
-      className="group relative w-full rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md"
+      className="group relative w-full overflow-hidden rounded-xl border bg-white px-4 pt-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-violet-300 hover:shadow-md"
     >
       {unread && <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-violet-600 ring-4 ring-violet-100" title="Unread issue" />}
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div className={cn("min-w-0", unread && "pr-5")}>
           <p className="line-clamp-2 text-sm font-bold leading-5 text-slate-900">
             {issue.snapshot.checklistItem}
           </p>
@@ -404,14 +406,6 @@ function IssueCard({
             {issue.site.site || issue.site.stationName}
           </p>
         </div>
-        <span
-          className={cn(
-            "mt-1 h-2.5 w-2.5 shrink-0 rounded-full",
-            priorityStyle[issue.priority],
-            unread && "mr-6",
-          )}
-          title={`${issue.priority} priority`}
-        />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <Badge
@@ -420,16 +414,14 @@ function IssueCard({
         >
           {status.label}
         </Badge>
-        <Badge variant="outline" className="h-5 capitalize text-[10px]">
-          {issue.priority}
-        </Badge>
         <span className="ml-auto text-[10px] text-slate-400">
           {formatDistanceToNow(new Date(issue.updatedAt), { addSuffix: true })}
         </span>
       </div>
-      <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs text-slate-500">
+      <div className={cn("-mx-4 mt-3 flex items-center justify-between gap-2 border-t px-4 py-3 text-xs text-slate-500", priorityFooterStyle[issue.priority])}>
         <span className="truncate">{issue.currentDepartment?.name || issue.snapshot.departmentName}</span>
-        <span className="flex items-center font-medium text-violet-700">Open issue<ChevronRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" /></span>
+        <IssuePriorityLabel priority={issue.priority} />
+        <span className="flex shrink-0 items-center font-medium text-violet-700">Open issue<ChevronRight className="ml-1 h-4 w-4 transition-transform group-hover:translate-x-0.5" /></span>
       </div>
     </button>
   );
@@ -476,16 +468,8 @@ export function IssueDetail({
             <Badge variant="outline" className={status.className}>
               {status.label}
             </Badge>
-            <Badge className="capitalize" variant="secondary">
-              <span
-                className={cn(
-                  "mr-1.5 h-2 w-2 rounded-full",
-                  priorityStyle[issue.priority],
-                )}
-              />
-              {issue.priority} priority
-            </Badge>
             <Badge variant="outline">Occurrence {issue.occurrenceNumber}</Badge>
+            <IssuePriorityLabel priority={issue.priority} />
           </div>
           <h2 className="text-xl font-black leading-tight text-slate-900">
             {issue.snapshot.checklistItem}

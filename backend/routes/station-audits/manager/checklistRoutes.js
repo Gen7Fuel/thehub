@@ -161,10 +161,33 @@ async function populatedChecklist(checklistId) {
   return checklist;
 }
 
-async function departmentIdsForUser(userId) {
-  return StationAuditDepartment.find({
+function departmentMembership(userId) {
+  return {
     $or: [{ departmentHead: userId }, { "members.user": userId }],
-  }).distinct("_id");
+  };
+}
+
+async function departmentIdsForUser(userId) {
+  return StationAuditDepartment.find(departmentMembership(userId)).distinct("_id");
+}
+
+async function assignableDepartmentFilter(section, userId) {
+  const membership = departmentMembership(userId);
+  const isAdmin = await StationAuditDepartment.exists({
+    isAdminDepartment: true,
+    ...membership,
+  });
+  return {
+    _id: { $in: (section.departments || []).map((department) => department._id) },
+    active: true,
+    ...(isAdmin ? {} : membership),
+  };
+}
+
+async function canAssignDepartment(section, userId, departmentId) {
+  const filter = await assignableDepartmentFilter(section, userId);
+  if (!filter._id.$in.some((id) => String(id) === String(departmentId))) return false;
+  return Boolean(await StationAuditDepartment.exists({ ...filter, _id: departmentId }));
 }
 
 async function accessibleSection(sectionId, userId) {
@@ -285,7 +308,7 @@ router.get("/sections/:sectionId/options", async (req, res) => {
       return res
         .status(404)
         .json({ error: "Section not found or unavailable to this user" });
-    const departmentIds = (section.departments || []).map((department) => department._id);
+    const departmentFilter = await assignableDepartmentFilter(section, userId);
     const [statusOptionSets, usageCounts, categories, vendors, departments] =
       await Promise.all([
         StationAuditStatusOptionSet.find({ active: true })
@@ -301,7 +324,7 @@ router.get("/sections/:sectionId/options", async (req, res) => {
         Vendor.distinct("name", {
           category: { $regex: /^station supplies$/i },
         }),
-        StationAuditDepartment.find({ _id: { $in: departmentIds }, active: true })
+        StationAuditDepartment.find(departmentFilter)
           .select("name active departmentHead defaultIssueAssignees")
           .populate("departmentHead", "firstName lastName email")
           .populate("defaultIssueAssignees", "firstName lastName email")
@@ -354,9 +377,8 @@ router.post("/sections/:sectionId/checklists", async (req, res) => {
     const allowedSites = new Set((section.sites || []).map((site) => site._id.toString()));
     if (value.assignedSites.some((site) => !allowedSites.has(site.toString())))
       return res.status(400).json({ error: "Checklist sites must belong to the section" });
-    const allowedDepartments = new Set((section.departments || []).map((department) => department._id.toString()));
-    if (!allowedDepartments.has(value.department.toString()))
-      return res.status(400).json({ error: "Checklist department must belong to the section" });
+    if (!await canAssignDepartment(section, userId, value.department))
+      return res.status(403).json({ error: "You cannot assign this checklist to that department" });
     if (!await StationAuditStatusOptionSet.exists({ _id: value.statusOptionSet, active: true }))
       return res.status(400).json({ error: "Status-option set must be active" });
     if (value.requestOrderEnabled) {
@@ -667,17 +689,8 @@ router.put("/sections/:sectionId/checklists/:checklistId", async (req, res) => {
           .status(400)
           .json({ error: "Checklist sites must belong to the section" });
     }
-    if (update.field === "department") {
-      const allowed = new Set(
-        (section.departments || []).map((department) =>
-          department._id.toString(),
-        ),
-      );
-      if (!allowed.has(update.value.toString()))
-        return res
-          .status(400)
-          .json({ error: "Checklist department must belong to the section" });
-    }
+    if (update.field === "department" && !await canAssignDepartment(section, userId, update.value))
+      return res.status(403).json({ error: "You cannot assign this checklist to that department" });
     if (
       update.field === "statusOptionSet" &&
       !(await StationAuditStatusOptionSet.exists({

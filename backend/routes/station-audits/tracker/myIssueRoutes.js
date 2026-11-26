@@ -429,6 +429,32 @@ router.get("/", async (req, res) => {
 });
 
 // GET /api/station-audits/tracker/my-issues/:issueId/activities
+router.get("/counts", async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    if (isDepartmentScope(req)) return res.sendStatus(404);
+    const userId = req.user?._id;
+    if (!userId) return res.status(401).json({ error: "Authenticated user is required" });
+    if (req.get("X-Required-Permission") !== "auditTracker.myIssues")
+      return res.status(403).json({ error: "My Issues permission is required" });
+
+    const locations = await accessibleLocations(req.user);
+    if (!locations.length) return res.json({ pending: 0, unread: 0 });
+    const filter = issueFilter({ userId, siteIds: locations.map((location) => location._id) });
+    const [pending, unread] = await Promise.all([
+      StationAuditIssue.countDocuments(filter),
+      StationAuditIssue.countDocuments({
+        ...filter,
+        assignees: { $elemMatch: { user: userId, read: { $ne: true } } },
+      }),
+    ]);
+    return res.json({ pending, unread });
+  } catch (error) {
+    console.error("Failed to count assigned Station Audit issues:", error);
+    return res.status(500).json({ error: "Failed to count assigned issues" });
+  }
+});
+
 router.get("/:issueId/activities", async (req, res) => {
   try {
     if (!req.user?._id) return res.status(401).json({ error: "Authenticated user is required" });
