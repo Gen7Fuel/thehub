@@ -37,16 +37,30 @@ start hubmongo "$hub" mongo mongo:8
 start deskmongo "$desk" db mongo:8
 start hubpg "$hub" postgres postgres:16 -e POSTGRES_USER=fixture -e POSTGRES_PASSWORD=fixture -e POSTGRES_DB=hubsql
 start hubredis "$hub" redis redis:7
+# The relay stand-in: holds a journal file like the real relay and records every /send it receives, checking the API key.
+relay_srv=$(cat <<'PY'
+import http.server, json, os
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        ok = self.headers.get('X-API-Key') == os.environ['EMAIL_SERVICE_API_KEY'] and self.path == '/send'
+        with open('/tmp/alerts.jsonl', 'a') as out:
+            out.write(json.dumps({'key': self.headers.get('Idempotency-Key'), 'to': body.get('to'), 'subject': body.get('subject'), 'text': body.get('text'), 'auth_ok': ok}) + '\n')
+        self.send_response(200 if ok else 401); self.end_headers(); self.wfile.write(b'{"ok":true}')
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', 2525), H).serve_forever()
+PY
+)
 docker run -d --name "relay-$id" --label "g7bk=$id" --label "com.docker.compose.project=$hub" \
-    --label "com.docker.compose.service=email-service" alpine:3 sh -c \
-    'mkdir -p /var/lib/email-relay && echo "{\"key\":\"emailQueue:1\",\"state\":\"sent\"}" > /var/lib/email-relay/journal.jsonl && sleep 3600' >/dev/null
+    --label "com.docker.compose.service=email-service" -e EMAIL_SERVICE_API_KEY=relay-test-key -e SRV_B64="$(printf '%s' "$relay_srv" | base64 | tr -d '\n')" alpine:3 sh -c \
+    'apk add --no-cache curl python3 >/dev/null 2>&1; mkdir -p /var/lib/email-relay && echo "{\"key\":\"emailQueue:1\",\"state\":\"sent\"}" > /var/lib/email-relay/journal.jsonl && printf %s "$SRV_B64" | base64 -d > /srv.py && exec python3 /srv.py' >/dev/null
 
 hm=hubmongo-$id; dm=deskmongo-$id; pg=hubpg-$id; rd=hubredis-$id
 until_ok docker exec "$hm" mongosh --quiet --eval 'db.runCommand({ping:1})'
 until_ok docker exec "$dm" mongosh --quiet --eval 'db.runCommand({ping:1})'
 until_ok docker exec "$pg" pg_isready -U fixture -d hubsql
 until_ok docker exec "$rd" redis-cli ping
-until_ok docker exec "relay-$id" test -f /var/lib/email-relay/journal.jsonl
+until_ok docker exec "relay-$id" sh -c 'test -f /var/lib/email-relay/journal.jsonl && curl -s -o /dev/null http://127.0.0.1:2525/'
 # postgres restarts once during init; wait for a real query
 until_ok docker exec "$pg" psql -U fixture -d hubsql -c 'select 1'
 
@@ -230,5 +244,71 @@ set -e
 grep -q 'expected exactly one running no-such-project/mongo container' "$work/lookup.log" || fail "the backup job did not say which container it could not find"
 grep -q 'expected exactly one running no-such-project/mongo container' "$work/lookup-restore.log" || fail "the restore script did not say which container it could not find"
 pass "a missing container is named in the error, for both the backup and the restore script"
+
+# --- 8. alerts: a failed run and a stale backup reach the owner, once, without leaking secrets -----------
+alerts() { docker exec "relay-$id" sh -c 'cat /tmp/alerts.jsonl 2>/dev/null || true'; }
+alert_count() { alerts | grep -c . || true; }
+export GEN7_BACKUP_ALERT_BIN="$HERE/gen7-backup-alert.sh" BACKUP_ALERT_EMAIL=ops@example.test
+[[ -x "$GEN7_BACKUP_ALERT_BIN" ]] || fail "gen7-backup-alert.sh must be executable for the backup failure hook"
+
+base=$(alert_count)
+docker stop "$rd" >/dev/null
+set +e; BACKUP_BLOB_SAS=SECRETSIG bash "$HERE/gen7-backup.sh" > "$work/alert-fail.log" 2>&1; code=$?; set -e
+docker start "$rd" >/dev/null; until_ok docker exec "$rd" redis-cli ping
+[[ "$code" -ne 0 ]] || fail "the run succeeded with Redis stopped"
+failed_run=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["last_failure"]["run"])' "$GEN7_BACKUP_STATE/status.json")
+expect "$(( $(alert_count) - base ))" 1 "failure alerts sent for one failed run"
+python3 - "$failed_run" <<PY || fail "failure alert content"
+import json, subprocess, sys
+run = sys.argv[1]
+last = json.loads(subprocess.run(['docker', 'exec', 'relay-$id', 'sh', '-c', 'tail -1 /tmp/alerts.jsonl'], capture_output=True, text=True).stdout)
+assert last['auth_ok'], 'the relay API key was not used'
+assert last['to'] == 'ops@example.test', last['to']
+assert last['key'] == 'backup-failure:' + run, last['key']
+assert 'FAILED' in last['subject'] and 'lookup' in last['text'], last
+assert 'SECRETSIG' not in json.dumps(last), 'a secret appears in the alert'
+PY
+pass "a failed run mails the owner once, through the relay with its API key, naming the stage and keyed by run, with no secret in it"
+
+set +e; GEN7_HUB_PROJECT=no-such-project GEN7_BACKUP_ALERT_BIN=/nonexistent/alert bash "$HERE/gen7-backup.sh" > "$work/alert-missing.log" 2>&1; code2=$?; set -e
+[[ "$code2" -ne 0 ]] || fail "the run succeeded"
+grep -q 'could not send the failure alert' "$work/alert-missing.log" || fail "a broken alert hook was not reported"
+expect "$code2" "$code" "an alert problem changed the failure exit status"
+pass "a missing alert command is reported but never masks the failure or its exit status"
+
+sleep 1
+bash "$HERE/gen7-backup.sh" > "$work/alert-ok.log" 2>&1 || { cat "$work/alert-ok.log"; fail "a healthy run failed"; }
+before=$(alert_count)
+bash "$HERE/gen7-backup-alert.sh" check > "$work/check-fresh.log" 2>&1
+expect "$(alert_count)" "$before" "a fresh backup produced an alert"
+grep -q 'backup is fresh' "$work/check-fresh.log" || fail "the fresh check did not say so"
+pass "the freshness check stays quiet while the newest backup is recent"
+
+python3 - "$GEN7_BACKUP_STATE/status.json" <<'PY'
+import json, sys, time
+path = sys.argv[1]
+status = json.load(open(path))
+status['last_success']['at_utc'] = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(time.time() - 5 * 3600))
+json.dump(status, open(path, 'w'))
+PY
+before=$(alert_count)
+bash "$HERE/gen7-backup-alert.sh" check > "$work/check-stale.log" 2>&1
+bash "$HERE/gen7-backup-alert.sh" check > "$work/check-stale2.log" 2>&1
+expect "$(( $(alert_count) - before ))" 2 "stale checks sent"
+python3 - "$before" <<PY || fail "stale alert content"
+import json, subprocess, sys
+rows = [json.loads(l) for l in subprocess.run(['docker', 'exec', 'relay-$id', 'sh', '-c', 'cat /tmp/alerts.jsonl'], capture_output=True, text=True).stdout.splitlines()][int(sys.argv[1]):]
+assert len(rows) == 2 and rows[0]['key'] == rows[1]['key'] and rows[0]['key'].startswith('backup-stale:'), rows
+assert 'No fresh backup' in rows[0]['subject'] and rows[0]['to'] == 'ops@example.test' and rows[0]['auth_ok']
+PY
+pass "a backup older than the threshold mails the owner, and repeat checks in the same hour reuse one key so the relay sends it once"
+
+before=$(alert_count)
+BACKUP_ALERT_EMAIL= bash "$HERE/gen7-backup-alert.sh" check > "$work/check-off.log" 2>&1
+expect "$(alert_count)" "$before" "an alert was sent without a recipient"
+grep -q 'BACKUP_ALERT_EMAIL is not set' "$work/check-off.log" || fail "the missing recipient was not reported"
+set +e; GEN7_HUB_PROJECT=no-such-project bash "$HERE/gen7-backup-alert.sh" check > "$work/check-norelay.log" 2>&1; code=$?; set -e
+[[ "$code" -ne 0 ]] && grep -q 'cannot send: expected exactly one running no-such-project/email-service' "$work/check-norelay.log" || fail "a missing relay was not reported"
+pass "without a recipient nothing is sent, and with no relay the alert tool says it cannot send and exits non-zero"
 
 echo "ALL $checks CHECKS PASSED"

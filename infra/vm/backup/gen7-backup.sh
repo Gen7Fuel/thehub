@@ -60,6 +60,8 @@ on_error() {
     log "FAILED during $stage (exit $code)"
     write_status last_failure "failed during $stage" || true
     rm -rf -- "$dir"
+    # Tell the owner (needs BACKUP_ALERT_EMAIL). Best effort: an alert problem must never mask the real failure.
+    "${GEN7_BACKUP_ALERT_BIN:-/usr/local/libexec/gen7-backup-alert}" failure "$run" "$stage" || log 'could not send the failure alert'
     exit "$code"
 }
 trap on_error ERR
