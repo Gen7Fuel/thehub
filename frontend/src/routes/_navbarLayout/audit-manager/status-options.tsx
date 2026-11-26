@@ -3,12 +3,12 @@ import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router'
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { GripVertical, ListChecks, Loader2, Pencil, Plus, Save, Search, SlidersHorizontal, X } from 'lucide-react'
+import { GripVertical, Info, ListChecks, Loader2, Pencil, Plus, Save, Search, SlidersHorizontal, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -120,7 +120,7 @@ function StatusOptionManagementPage() {
     {!loading && !error && filteredSets.length === 0 && <div className="rounded-2xl border border-dashed bg-white p-10 text-center text-sm text-slate-500">No status options match your search.</div>}
     {!loading && !error && filteredSets.length > 0 && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{filteredSets.map((set) => <StatusOptionCard key={set._id} set={set} onOpen={() => setSelected(set)} onUsage={() => void openUsage(set)} />)}</div>}
 
-    <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !editField) setSelected(null) }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">{selected && <><DialogHeader><div className="flex items-center justify-between gap-3 pr-7"><DialogTitle>{selected.name}</DialogTitle>{canEdit && <EditButton label="Edit status-option name" onClick={() => beginEdit('name')} />}</div></DialogHeader><div className="space-y-4"><Metadata label="Description" onEdit={canEdit ? () => beginEdit('description') : undefined}><p className="text-sm text-slate-700">{selected.description || 'No description provided.'}</p></Metadata><Metadata label={`Options (${selected.options.length})`} onEdit={canEdit ? () => beginEdit('options') : undefined}><div className="flex flex-wrap gap-2">{selected.options.map((option) => <Badge key={option.key} variant="secondary">{option.label}</Badge>)}</div></Metadata><Metadata label="Status" onEdit={canEdit && canUpdateStatus ? () => beginEdit('active') : undefined}><Badge variant={selected.active ? 'secondary' : 'outline'}>{selected.active ? 'Active' : 'Inactive'}</Badge></Metadata><div className="grid gap-3 sm:grid-cols-2"><Metadata label="Created"><p className="text-sm">{formatDate(selected.createdAt)}</p></Metadata><Metadata label="Last updated"><p className="text-sm">{formatDate(selected.updatedAt)}</p></Metadata></div></div></>}</DialogContent></Dialog>
+    <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open && !editField) setSelected(null) }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">{selected && <><DialogHeader><div className="flex items-center justify-between gap-3 pr-7"><div className="flex min-w-0 items-center gap-1"><DialogTitle>{selected.name}</DialogTitle><StatusOptionHelp field="name" /></div>{canEdit && <EditButton label="Edit status-option name" onClick={() => beginEdit('name')} />}</div></DialogHeader><div className="space-y-4"><Metadata label="Description" field="description" onEdit={canEdit ? () => beginEdit('description') : undefined}><p className="text-sm text-slate-700">{selected.description || 'No description provided.'}</p></Metadata><Metadata label={`Options (${selected.options.length})`} field="options" onEdit={canEdit ? () => beginEdit('options') : undefined}><div className="flex flex-wrap gap-2">{selected.options.map((option) => <Badge key={option.key} variant="secondary">{option.label}</Badge>)}</div></Metadata><Metadata label="Status" field="active" onEdit={canEdit && canUpdateStatus ? () => beginEdit('active') : undefined}><Badge variant={selected.active ? 'secondary' : 'outline'}>{selected.active ? 'Active' : 'Inactive'}</Badge></Metadata><div className="grid gap-3 sm:grid-cols-2"><Metadata label="Created"><p className="text-sm">{formatDate(selected.createdAt)}</p></Metadata><Metadata label="Last updated"><p className="text-sm">{formatDate(selected.updatedAt)}</p></Metadata></div></div></>}</DialogContent></Dialog>
 
     <Dialog open={Boolean(editField)} onOpenChange={(open) => { if (!open && !saving) setEditField(null) }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">{editField && <><DialogHeader><DialogTitle className="capitalize">Update {editField === 'options' ? 'status options' : editField}</DialogTitle></DialogHeader><StatusOptionField field={editField} draft={editDraft} setDraft={setEditDraft} inUse={Boolean(selected?.checklistCount)} />{saveError && <ErrorMessage message={saveError} />}<DialogActions saving={saving} onCancel={() => setEditField(null)} onSave={() => void saveField()} label="Update field" disabled={editField === 'active' && editDraft === false && Boolean(selected?.checklistCount)} /></>}</DialogContent></Dialog>
 
@@ -205,7 +205,46 @@ function SortableOptionRow({ option, index, canRemove, onLabelChange, onRemove }
   )
 }
 
-function Metadata({ label, children, onEdit }: { label: string; children: ReactNode; onEdit?: () => void }) { return <div className="rounded-xl border bg-slate-50/70 p-4"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-sm font-semibold">{label}</span>{onEdit && <EditButton label={`Edit ${label}`} onClick={onEdit} />}</div>{children}</div> }
+const statusOptionHelp = {
+  name: { label: 'option set name', description: 'This is the name managers see when choosing a set for a checklist. Renaming the set updates that label and keeps its checklist links and answer choices.' },
+  description: { label: 'description', description: 'Use this to explain when managers should choose this set. Editing the description changes the guidance in Audit Manager. Linked checklists keep the same answer choices.' },
+  options: { label: 'answer options', description: 'These are the answers auditors can select. Adding, renaming, removing, or reordering options changes the choices for future submissions on every linked checklist. Past submissions keep the answer that was recorded.' },
+  active: { label: 'status', description: 'Active sets are available to assign to checklists. To deactivate a set, first switch every linked checklist to another set, including inactive checklists.' },
+} satisfies Record<AuditManagerStatusOptionSetField, { label: string; description: string }>
+
+function StatusOptionHelp({ field }: { field: AuditManagerStatusOptionSetField }) {
+  const { label, description } = statusOptionHelp[field]
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button type="button" aria-label={`About ${label}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-violet-600">
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>About {label}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Metadata({ label, field, children, onEdit }: { label: string; field?: AuditManagerStatusOptionSetField; children: ReactNode; onEdit?: () => void }) {
+  return (
+    <div className="rounded-xl border bg-slate-50/70 p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-1 text-sm font-semibold">
+          {label}
+          {field && <StatusOptionHelp field={field} />}
+        </span>
+        {onEdit && <EditButton label={`Edit ${label}`} onClick={onEdit} />}
+      </div>
+      {children}
+    </div>
+  )
+}
 function EditButton({ label, onClick }: { label: string; onClick: () => void }) { return <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={label} title={label} onClick={onClick}><Pencil className="h-3.5 w-3.5" /></Button> }
 function DialogActions({ saving, onCancel, onSave, label, disabled = false }: { saving: boolean; onCancel: () => void; onSave: () => void; label: string; disabled?: boolean }) { return <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" disabled={saving} onClick={onCancel}>Cancel</Button><Button disabled={saving || disabled} onClick={onSave}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}{label}</Button></div> }
 function ErrorMessage({ message }: { message: string }) { return <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{message}</div> }

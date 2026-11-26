@@ -3,14 +3,14 @@ import { createFileRoute, Navigate, useNavigate } from '@tanstack/react-router'
 import { DndContext, KeyboardSensor, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Archive, Building2, CheckCircle2, ClipboardList, GripVertical, Loader2, MapPinned, MapPin, Pencil, Plus, Save } from 'lucide-react'
+import { Archive, Building2, CheckCircle2, ClipboardList, GripVertical, Info, Loader2, MapPinned, MapPin, Pencil, Plus, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -466,24 +466,27 @@ function SectionManagementPage() {
             <>
               <DialogHeader>
                 <div className="flex items-center justify-between gap-3 pr-7">
-                  <DialogTitle className="text-xl">{selectedSection.name}</DialogTitle>
+                  <div className="flex min-w-0 items-center gap-1">
+                    <DialogTitle className="text-xl">{selectedSection.name}</DialogTitle>
+                    <SectionFieldHelp label="Section name" description="This is the heading users see for the section. Renaming it changes the heading for all checklists in the section." />
+                  </div>
                   {canEdit && <EditButton label="Edit section name" onClick={() => beginEdit('name')} />}
                 </div>
               </DialogHeader>
               <div className="space-y-5">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <MetadataBlock label="Section type" onEdit={canEdit ? () => beginEdit('sectionType') : undefined}>
+                  <MetadataBlock label="Section type" help="Choose Checklist for regular audits or Order for store supply orders. Order sections are hidden from visitor audits and let you configure order requests on individual checklists." onEdit={canEdit ? () => beginEdit('sectionType') : undefined}>
                     <Badge className="capitalize">{selectedSection.sectionType}</Badge>
                   </MetadataBlock>
-                  <MetadataBlock label="Sort order">
+                  <MetadataBlock label="Sort order" help="This controls where the section appears in the audit list. Drag an active section in the grid to change its position. Inactive sections appear at the bottom.">
                     <p className="text-sm text-slate-700">{selectedSection.sortOrder ?? 'Not ordered'}</p>
                   </MetadataBlock>
-                  <MetadataBlock label="Status" onEdit={canEdit ? () => beginEdit('active') : undefined}>
+                  <MetadataBlock label="Status" help="Making this section inactive hides it and its checklists from live audits. Past submissions are kept. Reactivating it adds it to the end of the active section list." onEdit={canEdit ? () => beginEdit('active') : undefined}>
                     <Badge variant={selectedSection.active ? 'secondary' : 'outline'}>{selectedSection.active ? 'Active' : 'Inactive'}</Badge>
                   </MetadataBlock>
                 </div>
 
-                <MetadataBlock label="Description" onEdit={canEdit ? () => beginEdit('description') : undefined}>
+                <MetadataBlock label="Description" help="Use this to explain what the section covers. Editing it updates the description users see for the section." onEdit={canEdit ? () => beginEdit('description') : undefined}>
                   <p className="text-sm text-slate-700">{selectedSection.description || 'No description provided.'}</p>
                 </MetadataBlock>
 
@@ -496,7 +499,7 @@ function SectionManagementPage() {
                   </MetadataBlock>
                 </div>
 
-                <MetadataBlock label="Assigned departments" icon={Building2} onEdit={canEdit ? () => beginEdit('departments') : undefined}>
+                <MetadataBlock label="Assigned departments" icon={Building2} help="These departments determine who can see this section in Checklist Manager. Changing this list updates that access. Each checklist’s assigned department controls where new issues are routed." onEdit={canEdit ? () => beginEdit('departments') : undefined}>
                   <div className="flex flex-wrap gap-2">
                     {selectedSection.departments?.length
                       ? selectedSection.departments.map((department) => <Badge key={department._id} variant="secondary">{department.name}</Badge>)
@@ -504,7 +507,7 @@ function SectionManagementPage() {
                   </div>
                 </MetadataBlock>
 
-                <MetadataBlock label="Available sites" icon={MapPin} onEdit={canEdit ? () => beginEdit('sites') : undefined}>
+                <MetadataBlock label="Available sites" icon={MapPin} help="These are the stations eligible for this section. Adding a site makes it available to assign to individual checklists. Removing a site also removes it from the checklists in this section." onEdit={canEdit ? () => beginEdit('sites') : undefined}>
                   <div className="flex flex-wrap gap-2">
                     {selectedSection.sites?.length
                       ? selectedSection.sites.map((site) => <Badge key={site._id} variant="outline">{siteName(site)}</Badge>)
@@ -610,12 +613,31 @@ function SectionCard({ section, onOpen }: { section: AuditManagerSection; onOpen
   )
 }
 
-function MetadataBlock({ label, icon: Icon, onEdit, children }: { label: string; icon?: typeof Building2; onEdit?: () => void; children: ReactNode }) {
+function SectionFieldHelp({ label, description }: { label: string; description: string }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button type="button" aria-label={`About ${label.toLowerCase()}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-violet-600">
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>About {label.toLowerCase()}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function MetadataBlock({ label, icon: Icon, help, onEdit, children }: { label: string; icon?: typeof Building2; help?: string; onEdit?: () => void; children: ReactNode }) {
   return (
     <div className="rounded-xl border bg-slate-50/70 p-4">
       <div className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
           {Icon && <Icon className="h-4 w-4 text-emerald-600" />}{label}
+          {help && <SectionFieldHelp label={label} description={help} />}
         </div>
         {onEdit && <EditButton label={`Edit ${label.toLowerCase()}`} onClick={onEdit} />}
       </div>

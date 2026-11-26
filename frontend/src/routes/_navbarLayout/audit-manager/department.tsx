@@ -34,8 +34,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -185,7 +187,8 @@ function DepartmentManagementPage() {
     hasEditPermission &&
     (!selected.isAdminDepartment || hasAdminDepartmentPermission) &&
     (selected.accessScope === "admin" ||
-      selected.departmentHead?._id === user?.id),
+      selected.departmentHead?._id === user?.id ||
+      (!selected.isAdminDepartment && selected.members.some((member) => member.user?._id === user?.id))),
   );
 
   useEffect(() => {
@@ -378,9 +381,10 @@ function DepartmentManagementPage() {
               <>
                 <DialogHeader>
                   <div className="flex items-center justify-between gap-3 pr-7">
-                    <DialogTitle className="text-xl">
-                      {selected.name}
-                    </DialogTitle>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <DialogTitle className="text-xl">{selected.name}</DialogTitle>
+                      <DepartmentFieldHelp label="Department name" description="This is the name users see in Audit Manager and Audits Tracker. Renaming it updates the label while keeping its existing assignments." />
+                    </div>
                     {canEditSelected && (
                       <EditButton
                         label="Edit department name"
@@ -392,6 +396,7 @@ function DepartmentManagementPage() {
                 <div className="space-y-5">
                   <DetailBlock
                     label="Description"
+                    help="Explain what this department is responsible for. Editing this text updates the description users see in Audit Manager."
                     icon={Building2}
                     onEdit={
                       canEditSelected
@@ -406,6 +411,7 @@ function DepartmentManagementPage() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <DetailBlock
                       label="Department head"
+                      help="The head receives issue notifications and has department-level access where their Hub permissions allow it. The head can also be assigned new issues when the assignment strategy falls back to them."
                       icon={ShieldCheck}
                       onEdit={
                         canEditSelected
@@ -417,6 +423,7 @@ function DepartmentManagementPage() {
                     </DetailBlock>
                     <DetailBlock
                       label="Escalation department"
+                      help="Choose where future escalations from this department should go. If the selected department is unavailable, the tracker looks for an active admin department."
                       icon={Building2}
                       onEdit={
                         canEditSelected
@@ -433,6 +440,7 @@ function DepartmentManagementPage() {
                   {hasAdminDepartmentPermission && (
                     <DetailBlock
                       label="Administrative department"
+                      help="Admin department heads and members can see all departments in supported audit views when they have access to those pages. Active admin departments can also receive escalated issues."
                       icon={ShieldCheck}
                       onEdit={
                         canEditSelected
@@ -447,6 +455,7 @@ function DepartmentManagementPage() {
                   )}
                   <DetailBlock
                     label={`Members (${selected.memberCount})`}
+                    help="Members get access to this department’s audit records where their Hub permissions allow it. Members are eligible to be selected as default issue assignees."
                     icon={Users}
                     onEdit={
                       canEditSelected ? () => beginEdit("members") : undefined
@@ -463,6 +472,7 @@ function DepartmentManagementPage() {
                   </DetailBlock>
                   <DetailBlock
                     label="Default issue assignees"
+                    help="These users are the first choice for new issues under the default assignment strategy. Changing the list applies to future assignments."
                     icon={UserRound}
                     onEdit={
                       canEditSelected
@@ -492,6 +502,7 @@ function DepartmentManagementPage() {
                     </DetailBlock>
                     <DetailBlock
                       label="Status"
+                      help="Inactive departments are unavailable for new checklist assignments and issue transfers. Existing issue records are kept."
                       icon={CheckCircle2}
                       onEdit={
                         canEditSelected && hasStatusPermission
@@ -508,6 +519,7 @@ function DepartmentManagementPage() {
                   </div>
                   <DetailBlock
                     label="Notification emails"
+                    help="Add Hub users who should receive issue notifications for this department across its stations."
                     icon={Mail}
                     onEdit={
                       canEditSelected
@@ -592,7 +604,10 @@ function DepartmentManagementPage() {
               <>
                 <DialogHeader>
                   <div className="flex items-center justify-between gap-3 pr-7">
-                    <DialogTitle>Site notification overrides</DialogTitle>
+                    <div className="flex min-w-0 items-center gap-1">
+                      <DialogTitle>Site notification overrides</DialogTitle>
+                      <DepartmentFieldHelp label="Site notification overrides" description="Add extra notification recipients for a specific station. They receive notifications when an issue for this department is raised or updated at that station." />
+                    </div>
                     {canEditSelected && (
                       <EditButton
                         label="Edit site notification overrides"
@@ -1125,18 +1140,38 @@ function EditButton({
     </Button>
   );
 }
+function DepartmentFieldHelp({ label, description }: { label: string; description: string }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button type="button" aria-label={`About ${label.toLowerCase()}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-violet-600">
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>About {label.toLowerCase()}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function DetailBlock({
   label,
   icon: Icon,
   children,
   onEdit,
   info,
+  help,
 }: {
   label: string;
   icon?: typeof Building2;
   children: ReactNode;
   onEdit?: () => void;
   info?: () => void;
+  help?: string;
 }) {
   return (
     <div className="rounded-xl border bg-slate-50/70 p-4">
@@ -1144,6 +1179,7 @@ function DetailBlock({
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
           {Icon && <Icon className="h-4 w-4 text-blue-600" />}
           {label}
+          {help && <DepartmentFieldHelp label={label} description={help} />}
           {info && (
             <button type="button" aria-label={`About ${label}`} onClick={info}>
               <Info className="h-3.5 w-3.5 text-slate-400" />

@@ -2,7 +2,9 @@ const express = require("express");
 const mongoose = require("mongoose");
 const User = require("../../../models/User");
 const Location = require("../../../models/Location");
-const { StationAuditDepartment } = require("../../../models/station-audits");
+const { StationAuditChecklist, StationAuditDepartment } = require("../../../models/station-audits");
+const { hasEffectiveAccess } = require("../../../middleware/authMiddleware");
+const { getPermissionMap } = require("../../../utils/permissionStore");
 
 const router = express.Router();
 const GENERAL_EDIT_PERMISSION = "auditManager.department.edit";
@@ -159,7 +161,10 @@ async function hasGlobalAccess(userId) {
 }
 
 async function canEditDepartment(userId, department) {
-  return department.departmentHead?.toString() === userId.toString() || hasGlobalAccess(userId);
+  const userKey = String(userId);
+  return department.departmentHead?.toString() === userKey
+    || (!department.isAdminDepartment && department.members?.some((member) => member.user?.toString() === userKey))
+    || hasGlobalAccess(userId);
 }
 
 function populateDepartment(query) {
@@ -320,13 +325,27 @@ router.put("/:departmentId", async (req, res) => {
     if (update.error) return res.status(400).json({ error: update.error });
     const before = await StationAuditDepartment.findById(departmentId).lean();
     if (!before) return res.status(404).json({ error: "Department not found" });
-    const expectedPermission = before.isAdminDepartment || update.field === "isAdminDepartment"
+    const fieldPermission = requiredPermission(update.field);
+    const expectedPermission = before.isAdminDepartment
       ? ADMIN_DEPARTMENT_PERMISSION
-      : requiredPermission(update.field);
+      : fieldPermission;
     if (req.header("X-Required-Permission") !== expectedPermission) {
       return res.status(403).json({ error: "The required field-level permission was not supplied" });
     }
-    if (!await canEditDepartment(userId, before)) return res.status(403).json({ error: "Only this department's head or an audit administrator can edit it" });
+    if (before.isAdminDepartment && (fieldPermission === STRATEGY_PERMISSION || fieldPermission === STATUS_PERMISSION)) {
+      const permissionId = getPermissionMap().get(fieldPermission);
+      if (permissionId == null || !hasEffectiveAccess(req.user, req.user.role, permissionId)) {
+        return res.status(403).json({ error: `Access denied for ${fieldPermission}` });
+      }
+    }
+    if (!await canEditDepartment(userId, before)) return res.status(403).json({ error: "You cannot edit this department" });
+
+    if (update.field === "active" && update.value === false &&
+        await StationAuditChecklist.exists({ department: before._id })) {
+      return res.status(409).json({
+        error: "This department is still linked to existing checklists. Reassign those checklists before deactivating it.",
+      });
+    }
 
     if (update.field === "departmentHead" && update.value) {
       if (!await User.exists({ _id: update.value, is_active: true })) return res.status(400).json({ error: "Department head must be an active user" });

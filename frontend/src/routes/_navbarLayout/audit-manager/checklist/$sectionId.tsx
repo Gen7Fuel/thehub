@@ -42,8 +42,10 @@ import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -659,7 +661,6 @@ function ChecklistSectionPage() {
               canEdit={canEdit}
               canUpdateActiveStatus={canUpdateActiveStatus}
               onEdit={beginEdit}
-              onVisibilityHelp={() => setVisibilityHelp(true)}
             />
           )}
         </DialogContent>
@@ -1006,20 +1007,21 @@ function ChecklistDetails({
   canEdit,
   canUpdateActiveStatus,
   onEdit,
-  onVisibilityHelp,
 }: {
   checklist: AuditManagerChecklistDetail;
   section: AuditManagerSection | null;
   canEdit: boolean;
   canUpdateActiveStatus: boolean;
   onEdit: (field: AuditManagerChecklistUpdateField, value?: boolean) => void;
-  onVisibilityHelp: () => void;
 }) {
   return (
     <>
       <DialogHeader>
         <div className="flex items-center justify-between gap-3 pr-7">
-          <DialogTitle>{checklist.item}</DialogTitle>
+          <div className="flex min-w-0 items-center gap-1">
+            <DialogTitle>{checklist.item}</DialogTitle>
+            <ChecklistFieldHelp field="item" />
+          </div>
           {canEdit && (
             <EditButton
               onClick={() => onEdit("item")}
@@ -1031,6 +1033,7 @@ function ChecklistDetails({
       <div className="space-y-4">
         <Meta
           label="Description"
+          helpField="description"
           edit={canEdit ? () => onEdit("description") : undefined}
         >
           {checklist.description || "No description provided."}
@@ -1038,18 +1041,21 @@ function ChecklistDetails({
         <div className="grid gap-3 sm:grid-cols-3">
           <Meta
             label="Category"
+            helpField="category"
             edit={canEdit ? () => onEdit("category") : undefined}
           >
             {checklist.category || "Not categorized"}
           </Meta>
           <Meta
             label="Frequency"
+            helpField="frequency"
             edit={canEdit ? () => onEdit("frequency") : undefined}
           >
             {formatFrequency(checklist.frequency)}
           </Meta>
           <Meta
             label="Status"
+            helpField="active"
             edit={canUpdateActiveStatus ? () => onEdit("active") : undefined}
           >
             <Badge variant={checklist.active ? "secondary" : "outline"}>
@@ -1060,14 +1066,15 @@ function ChecklistDetails({
         <div className="grid gap-3 sm:grid-cols-2">
           <Meta
             label="Assigned department"
+            helpField="department"
             edit={canEdit ? () => onEdit("department") : undefined}
           >
             {checklist.department?.name || "Not assigned"}
           </Meta>
           <Meta
             label="Checklist visibility"
+            helpField="auditTypes"
             edit={canEdit ? () => onEdit("auditTypes") : undefined}
-            info={onVisibilityHelp}
           >
             {checklist.auditTypes
               .map((type) => type[0].toUpperCase() + type.slice(1))
@@ -1076,6 +1083,7 @@ function ChecklistDetails({
         </div>
         <Meta
           label={`Status options (${checklist.statusOptionSet?.options.length || 0})`}
+          helpField="statusOptionSet"
           edit={canEdit ? () => onEdit("statusOptionSet") : undefined}
         >
           <strong className="text-sm">
@@ -1091,6 +1099,7 @@ function ChecklistDetails({
         </Meta>
         <Meta
           label={`Assigned sites (${checklist.assignedSites.length})`}
+          helpField="assignedSites"
           edit={canEdit ? () => onEdit("assignedSites") : undefined}
         >
           <div className="flex flex-wrap gap-2">
@@ -1105,12 +1114,14 @@ function ChecklistDetails({
         <div className="grid gap-3 sm:grid-cols-2">
           <BooleanToggleMeta
             label="Follow-up required"
+            helpField="followUp"
             checked={checklist.followUp}
             disabled={!canEdit}
             onChange={(checked) => onEdit("followUp", checked)}
           />
           <BooleanToggleMeta
             label="Comment required"
+            helpField="commentRequired"
             checked={checklist.commentRequired}
             disabled={!canEdit}
             onChange={(checked) => onEdit("commentRequired", checked)}
@@ -1119,6 +1130,7 @@ function ChecklistDetails({
         {section?.sectionType === "order" && (
           <Meta
             label="Order creation"
+            helpField="orderConfiguration"
             edit={canEdit ? () => onEdit("orderConfiguration") : undefined}
           >
             {checklist.requestOrderEnabled
@@ -1356,27 +1368,57 @@ function SimpleSelect({
     </Select>
   );
 }
+const checklistFieldHelp = {
+  item: "This is the checklist name shown to staff and visitors. Renaming it changes what they see on the audit page.",
+  description: "Use this to tell auditors what to check or how to do it. Your changes appear in the checklist’s information dialog.",
+  category: "Categories group related checklists. Changing the category moves the checklist to that group and updates its color on the audit page.",
+  frequency: "Choose how often this item needs to be checked. Changing it moves the checklist to the daily, weekly, or monthly audit schedule you select.",
+  active: "Active checklists appear in audits for the sites and audit types selected below. Making it inactive hides it from those audits and keeps its past submissions.",
+  department: "This department handles new store issues raised for this checklist. Changing it routes future issues to the new department.",
+  auditTypes: "Choose who sees the checklist at its assigned sites. Store is for station staff and Visitor is for visiting auditors. Select both to show it in both audits where supported.",
+  statusOptionSet: "This determines the answers auditors can choose when completing this item. Changing it updates the choices for future submissions.",
+  assignedSites: "This controls which stations see the checklist. You can choose from the sites assigned to this section.",
+  followUp: "When enabled, auditors recording an issue are asked if it’s already resolved. If they say yes, they must explain how it was resolved. Order checklists skip this prompt.",
+  commentRequired: "When enabled, auditors must enter a comment before marking the checklist complete at any assigned site.",
+  orderConfiguration: "When enabled, store staff can request an order from the selected supplier. The order is queued when they mark the checklist complete with the order selected.",
+} satisfies Record<AuditManagerChecklistUpdateField, string>;
+
+function ChecklistFieldHelp({ field }: { field: AuditManagerChecklistUpdateField }) {
+  const label = fieldLabel(field);
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button type="button" aria-label={`About ${label}`} className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-slate-500 hover:bg-slate-200 hover:text-slate-700 focus-visible:outline-2 focus-visible:outline-violet-600">
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>About {label}</DialogTitle>
+          <DialogDescription>{checklistFieldHelp[field]}</DialogDescription>
+        </DialogHeader>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function Meta({
   label,
   children,
   edit,
-  info,
+  helpField,
 }: {
   label: string;
   children: ReactNode;
   edit?: () => void;
-  info?: () => void;
+  helpField?: AuditManagerChecklistUpdateField;
 }) {
   return (
     <div className="rounded-xl border bg-slate-50/70 p-4">
       <div className="mb-2 flex items-center justify-between">
         <span className="flex items-center gap-1 text-sm font-semibold">
           {label}
-          {info && (
-            <button onClick={info}>
-              <Info className="h-3.5 w-3.5 text-slate-400" />
-            </button>
-          )}
+          {helpField && <ChecklistFieldHelp field={helpField} />}
         </span>
         {edit && <EditButton onClick={edit} label={`Edit ${label}`} />}
       </div>
@@ -1386,11 +1428,13 @@ function Meta({
 }
 function BooleanToggleMeta({
   label,
+  helpField,
   checked,
   disabled,
   onChange,
 }: {
   label: string;
+  helpField?: AuditManagerChecklistUpdateField;
   checked: boolean;
   disabled: boolean;
   onChange: (checked: boolean) => void;
@@ -1398,7 +1442,10 @@ function BooleanToggleMeta({
   return (
     <div className="flex min-h-20 items-center justify-between gap-4 rounded-xl border bg-slate-50/70 p-4">
       <div>
-        <p className="text-sm font-semibold">{label}</p>
+        <div className="flex items-center gap-1 text-sm font-semibold">
+          {label}
+          {helpField && <ChecklistFieldHelp field={helpField} />}
+        </div>
         <p className="mt-1 text-xs text-slate-500">{checked ? "Enabled" : "Disabled"}</p>
       </div>
       <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} aria-label={label} />
