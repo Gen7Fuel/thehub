@@ -249,6 +249,7 @@ pass "a missing container is named in the error, for both the backup and the res
 alerts() { docker exec "relay-$id" sh -c 'cat /tmp/alerts.jsonl 2>/dev/null || true'; }
 alert_count() { alerts | grep -c . || true; }
 export GEN7_BACKUP_ALERT_BIN="$HERE/gen7-backup-alert.sh" BACKUP_ALERT_EMAIL=ops@example.test
+[[ -x "$GEN7_BACKUP_ALERT_BIN" ]] || fail "gen7-backup-alert.sh must be executable for the backup failure hook"
 
 base=$(alert_count)
 docker stop "$rd" >/dev/null
