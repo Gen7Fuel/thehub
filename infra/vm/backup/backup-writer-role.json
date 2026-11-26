@@ -1,0 +1,15 @@
+{
+  "Name": "Gen7 VM Backup Writer",
+  "IsCustom": true,
+  "Description": "Create and write blobs only (the VM backup uploader). No read, no list, no delete. Assign at a single container.",
+  "Actions": [],
+  "NotActions": [],
+  "DataActions": [
+    "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+    "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action"
+  ],
+  "NotDataActions": [],
+  "AssignableScopes": [
+    "/subscriptions/<subscription-id>/resourceGroups/EDW_GEN7FUEL"
+  ]
+}

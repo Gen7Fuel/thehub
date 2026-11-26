@@ -1,0 +1,15 @@
+[Unit]
+Description=Gen7 Hub and Desk backup to blob storage
+After=docker.service network-online.target
+Requires=docker.service
+ConditionPathExists=/etc/gen7-backup/backup.env
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/gen7-backup/backup.env
+ExecStart=/usr/local/libexec/gen7-backup
+# 75 means the previous run was still active; that is not a failure.
+SuccessExitStatus=75
+TimeoutStartSec=1800
+Nice=10
+IOSchedulingClass=idle
