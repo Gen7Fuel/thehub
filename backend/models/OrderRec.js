@@ -92,10 +92,20 @@ const OrderReconciliationSchema = new mongoose.Schema({
     type: [CommentSchema],
     default: []
   },                                                // Array of comments
+  stationAuditResponse: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'StationAuditResponse',
+    default: null,
+  },                                                // Idempotent source link for Station Audit order requests
   // When the planogram check last ran. null means it never did — either the
   // site had no planogram on file, or the doc predates the feature.
   planogramCheckedAt: { type: Date, default: null }
 });
+
+OrderReconciliationSchema.index(
+  { stationAuditResponse: 1 },
+  { unique: true, sparse: true }
+);
 
 /**
  * Pre-save hook to auto-generate integerId and filename before saving.

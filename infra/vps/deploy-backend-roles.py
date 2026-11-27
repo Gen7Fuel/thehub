@@ -214,10 +214,10 @@ def main():
             state = json.loads(command(['docker', 'exec', name, 'curl', '-fsS', 'http://localhost:5000/health']))
             assert state['role'] == role and state['ready']
             if role == 'worker':
-                assert len(state['workers']) == 15 and not state['schedules']
+                assert len(state['workers']) == 16 and not state['schedules']
             else:
-                assert not state['workers'] and state['leader'] and len(state['schedules']) == 18
-        print(json.dumps({'rolesHealthy': True, 'workerCount': 15, 'scheduleCount': 18}))
+                assert not state['workers'] and state['leader'] and len(state['schedules']) == 20
+        print(json.dumps({'rolesHealthy': True, 'workerCount': 16, 'scheduleCount': 20}))
         safe_to_resume = True
     except Exception:
         if stopped:

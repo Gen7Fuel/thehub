@@ -31,6 +31,7 @@ const emailRoutes = require("./routes/emailRoutes");
 const orderRecRoutes = require("./routes/orderRecRoutes");
 const vendorRoutes = require("./routes/vendorRoutes");
 const auditRoutes = require("./routes/audit/auditTemplateRoutes");
+const stationAuditRoutes = require("./routes/station-audits");
 const safesheetRoutes = require("./routes/safesheetRoutes");
 const roleRoutes = require("./routes/roleRoutes");
 const sftpRoutes = require("./routes/sftpRoutes");
@@ -134,6 +135,7 @@ app.use("/api/cycle-count", cycleCountRoutes);
 app.use("/api/planogram", planogramRoutes);
 app.use("/api/audit/select-templates", selectTemplateRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/station-audits", stationAuditRoutes);
 app.use("/api/permissions", permissionRoutes);
 app.use("/api/roles", roleRoutes);
 app.use("/api/logs", logsRoute);
@@ -176,8 +178,6 @@ app.use('/api', emailRoutes);
 
 const io = setupSocket(server);
 app.set("io", io);
-
-
 
 const PORT = process.env.PORT || 5000;
 

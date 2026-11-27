@@ -1,8 +1,10 @@
 import React from 'react'
 import { useState, useEffect } from "react";
-import { createFileRoute, Link } from '@tanstack/react-router'
+import { createFileRoute, Link, useLocation } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
 import { useAuth } from "@/context/AuthContext"
+import { auditTrackerService } from "@/api/audit-tracker/audit-tracker.service"
+import { hasAuditTrackerAccess, hasAuditTrackerPermission } from "@/lib/auditTrackerPermissions"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   ClipboardCheck,
@@ -31,6 +33,7 @@ import {
   FileUp,
   LayoutGrid,
   FileBarChart,
+  ListTodo,
 } from 'lucide-react'
 
 export const Route = createFileRoute('/_navbarLayout/')({
@@ -66,6 +69,21 @@ function App() {
   const { user } = useAuth();
   const access = user?.access || {}
   const isDesktopOrTablet = useIsDesktopOrTablet();
+  const isHome = useLocation({ select: (location) => location.pathname === "/" });
+  const canViewMyIssues = hasAuditTrackerAccess(access) && hasAuditTrackerPermission(access, "myIssues");
+  const [issueCounts, setIssueCounts] = useState<{ pending: number; unread: number } | null>(null);
+
+  useEffect(() => {
+    setIssueCounts(null);
+    if (!isHome || !canViewMyIssues) return;
+    const controller = new AbortController();
+    auditTrackerService.myIssueCounts(controller.signal)
+      .then((counts) => {
+        if (!controller.signal.aborted) setIssueCounts(counts);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [isHome, canViewMyIssues, user]);
 
   // Determine permissions and target route dynamically based on screen resolution
   const canShowFuelPricing = isDesktopOrTablet
@@ -85,13 +103,31 @@ function App() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
             
           {/* AUDITS - EMERALD */}
-          {access?.stationAudit?.value && (
+          {(access?.stationAudit?.value || access?.auditManager?.value || access?.auditTracker?.value) && (
             <Section 
               title="Audits" 
               accentColor="border-t-emerald-500" 
               icon={<ClipboardCheck className="w-5 h-5 text-emerald-600" />}
             >
-              <NavButton to="/audit" label="Station Audits" icon={Layers} theme="emerald" />
+              {access?.stationAudit?.value && (
+                <>
+                  <NavButton to="/audit" label="Station Audits" icon={Layers} theme="emerald" />
+                  {/* Temporarily hidden during Station Audits testing. Routes remain available by direct URL. */}
+                  {/* <NavButton to="/station-audits/checklist" label="Station Audits New" icon={Layers} theme="emerald" /> */}
+                </>
+              )}
+              {access?.auditManager?.value && (
+                <NavButton to="/audit-manager" label="Audit Manager" icon={Settings} theme="emerald" />
+              )}
+              {access?.auditTracker?.value && (
+                <NavButton
+                  to="/audit-tracker"
+                  label="Audits Tracker"
+                  icon={ListTodo}
+                  theme="emerald"
+                  badge={canViewMyIssues && issueCounts && issueCounts.pending > 0 ? issueCounts.unread : undefined}
+                />
+              )}
             </Section>
           )}
 
@@ -315,10 +351,11 @@ interface NavButtonProps {
   label: string;
   icon: React.ComponentType<LucideProps>;
   search?: Record<string, any>;
+  badge?: number;
   theme: 'emerald' | 'blue' | 'amber' | 'indigo' | 'violet' | 'rose' | 'slate' | 'sky' | 'teal';
 }
 
-function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
+function NavButton({ to, label, icon: Icon, search, theme, badge }: NavButtonProps) {
   const themeClasses = {
     emerald: "bg-emerald-50 text-emerald-700 border-emerald-100 hover:border-emerald-500 hover:bg-emerald-100",
     blue: "bg-blue-50 text-blue-700 border-blue-100 hover:border-blue-500 hover:bg-blue-100",
@@ -336,7 +373,7 @@ function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
       <Button 
         variant="outline" 
         className={`
-          w-full h-28 flex flex-col items-center justify-center gap-3 
+          relative w-full h-28 flex flex-col items-center justify-center gap-3
           text-xs transition-all duration-200 shadow-sm
           border-2 font-medium
           group-hover:font-bold group-hover:scale-[1.02]
@@ -344,6 +381,14 @@ function NavButton({ to, label, icon: Icon, search, theme }: NavButtonProps) {
           ${themeClasses[theme]}
         `}
       >
+        {badge !== undefined && (
+          <span
+            className={`absolute right-2 top-2 rounded-full bg-red-600 text-white ${badge > 0 ? "min-w-5 px-1.5 py-0.5 text-center text-[10px] font-bold" : "size-2.5"}`}
+            aria-label={badge > 0 ? `${badge} unread issues` : "Open issues"}
+          >
+            {badge > 0 ? badge : null}
+          </span>
+        )}
         <div className="p-2 rounded-xl bg-white/80 shadow-sm group-hover:shadow-md transition-all">
           <Icon size={24} className="stroke-[2.5px]" />
         </div>

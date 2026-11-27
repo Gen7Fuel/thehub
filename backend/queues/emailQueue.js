@@ -49,7 +49,7 @@ function idempotencyKey(job) {
 }
 
 async function processEmailJob(job) {
-  const { attachments, ...rest } = job.data;
+  const { attachments, auditVisitorReportDispatchId, ...rest } = job.data;
   const resolved = await resolveAttachments(attachments);
   const key = idempotencyKey(job);
 
@@ -74,6 +74,14 @@ async function processEmailJob(job) {
     const body = await res.json().catch(() => ({}));
     throw new Error(`${body.error ?? `email-service responded ${res.status}`} (Idempotency-Key ${key})`);
   }
+
+  if (auditVisitorReportDispatchId) {
+    const { StationAuditVisitorReportDispatch } = require("../models/station-audits");
+    await StationAuditVisitorReportDispatch.updateOne(
+      { _id: auditVisitorReportDispatchId },
+      { $set: { status: "sent", sentAt: new Date(), lastError: "" } }
+    );
+  }
 }
 
 const emailWorker = createWorker(
@@ -93,6 +101,15 @@ const emailWorker = createWorker(
 
 emailWorker?.on("failed", (job, err) => {
   console.error(`🚨 Email job ${job?.id || "unknown"} failed:`, err.message);
+  const dispatchId = job?.data?.auditVisitorReportDispatchId;
+  const configuredAttempts = Number(job?.opts?.attempts || 1);
+  if (dispatchId && Number(job?.attemptsMade || 0) >= configuredAttempts) {
+    const { StationAuditVisitorReportDispatch } = require("../models/station-audits");
+    void StationAuditVisitorReportDispatch.updateOne(
+      { _id: dispatchId },
+      { $set: { status: "failed", lastError: String(err.message || err).slice(0, 1000) } }
+    ).catch((updateError) => console.error("Failed to record visitor report email failure:", updateError));
+  }
 });
 
 emailWorker?.on("completed", (job) => {

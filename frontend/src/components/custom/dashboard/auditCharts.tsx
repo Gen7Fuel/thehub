@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { StationAuditSectionListReadModel } from "@/api/station-audits/station-audits.types";
 import { Bar, BarChart, CartesianGrid, LabelList, ResponsiveContainer, XAxis, YAxis, Cell } from "recharts";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -22,7 +23,7 @@ const getUrgencyColor = (freq: string, percent: number, timezone: string) => {
   return "#3b82f6"; // Default Blue
 };
 
-const getReadablePeriod = (freq: string, periodKey: string) => {
+const getReadablePeriod = (freq: string, periodKey: string, stationWeek: boolean) => {
   if (!periodKey) return "";
 
   if (freq === "daily") {
@@ -40,24 +41,9 @@ const getReadablePeriod = (freq: string, periodKey: string) => {
     const yearNum = parseInt(year);
     const weekNum = parseInt(weekStr);
 
-    // 1. Get the first day of the year
-    // const startOfYear = new Date(yearNum, 0, 1);
-
-    // 2. Calculate the days to add
-    // (weekNum - 1) * 7 gets us to the correct week
-    const daysToAdd = (weekNum - 1) * 7;
-    const targetDate = new Date(yearNum, 0, 1 + daysToAdd);
-
-    // 3. Adjust to Monday
-    // In JS: Sun=0, Mon=1, Tue=2...
-    // We want to find how far we are from Monday (1)
-    const dayIndex = targetDate.getDay();
-    const diffToMonday = targetDate.getDate() - dayIndex + (dayIndex === 0 ? -6 : 1);
-
-    const startOfWeek = new Date(targetDate.setDate(diffToMonday));
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    // 4. End of week is Sunday (Start + 6 days)
+    const januaryFirst = new Date(yearNum, 0, 1);
+    const weekOffset = stationWeek ? januaryFirst.getDay() : (januaryFirst.getDay() + 6) % 7;
+    const startOfWeek = new Date(yearNum, 0, 1 - weekOffset + (weekNum - 1) * 7);
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
@@ -74,14 +60,42 @@ const getReadablePeriod = (freq: string, periodKey: string) => {
   return periodKey;
 };
 
-// Pass periodKeys as an object: { daily: "2024-W10", ... }
-export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditStats: any, periodKeys: any, timezone: any }) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedFreq, setSelectedFreq] = useState<string | null>(null);
+const frequencies = ["daily", "weekly", "monthly"] as const;
+type Frequency = typeof frequencies[number];
 
-  // 1. Format Summary Data as Percentages
-  const chartData = Object.keys(auditStats.summary).map((freq) => {
-    const s = auditStats.summary[freq];
+type Progress = { total: number; completed: number; issues: number };
+type LegacyChartProps = {
+  auditStats: {
+    summary: Record<Frequency, Progress>;
+    checklists: Array<{ templateName: string; stats: Record<Frequency, Progress> }>;
+  };
+  periodKeys: Record<Frequency, string>;
+  timezone: string;
+};
+
+export function AuditSummaryChart(props: { auditStats: StationAuditSectionListReadModel } | LegacyChartProps) {
+  const legacy = "periodKeys" in props ? props : null;
+  const stationAudits = "sections" in props.auditStats ? props.auditStats : null;
+  const periodKeys = legacy?.periodKeys ?? stationAudits?.periodKeys;
+  const timezone = legacy?.timezone || stationAudits?.location.timezone || "America/Toronto";
+  const sections = stationAudits?.sections ?? [];
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedFreq, setSelectedFreq] = useState<Frequency | null>(null);
+
+  const summary = legacy?.auditStats.summary ?? Object.fromEntries(frequencies.map((freq) => [
+    freq,
+    sections.reduce((totals, section) => {
+      const stats = section.frequencies[freq];
+      return {
+        total: totals.total + stats.total,
+        completed: totals.completed + stats.completed,
+        issues: totals.issues + stats.issues,
+      };
+    }, { total: 0, completed: 0, issues: 0 }),
+  ]));
+
+  const chartData = frequencies.map((freq) => {
+    const s = summary[freq];
     const total = s.total || 0;
 
     // Calculate percentages for the stacked bars
@@ -101,14 +115,22 @@ export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditS
     };
   });
 
-  const getModalData = () => {
-    if (!selectedFreq) return [];
-    return auditStats.checklists.map((cl: any) => ({
-      name: cl.templateName,
-      stats: cl.stats[selectedFreq]
-    })).filter((cl: any) => cl.stats.total > 0);
-  };
+  const modalRows = selectedFreq
+    ? (legacy ? legacy.auditStats.checklists.map((checklist) => ({
+        id: checklist.templateName,
+        name: checklist.templateName,
+        stats: checklist.stats[selectedFreq],
+      })) : sections.map((section) => ({
+        id: section._id,
+        name: section.name,
+        stats: section.frequencies[selectedFreq],
+      }))).filter((section) => section.stats.total > 0)
+    : [];
 
+  const openBreakdown = ({ freq }: { freq: Frequency }) => {
+    setSelectedFreq(freq);
+    setIsModalOpen(true);
+  };
   return (
     <Card className="w-full">
       <CardHeader>
@@ -122,15 +144,7 @@ export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditS
             layout="vertical"
             data={chartData}
             margin={{ left: 5, right: 60, top: 10, bottom: 10 }}
-            // This ensures clicking the "empty" grey area still triggers the modal
-            onClick={(state) => {
-              if (state && state.activePayload) {
-                const clickedData = state.activePayload[0].payload;
-                setSelectedFreq(clickedData.freq);
-                setIsModalOpen(true);
-              }
-            }}
-            style={{ cursor: 'pointer' }} // Visual cue that the whole row is interactive
+            style={{ cursor: 'pointer' }}
           >
             <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
             <XAxis type="number" domain={[0, 100]} hide />
@@ -146,16 +160,15 @@ export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditS
               tickLine={false}
             />
 
-            {/* Segments - No longer need individual onClicks */}
-            <Bar dataKey="clean" stackId="a" barSize={45}>
+            <Bar dataKey="clean" stackId="a" barSize={45} onClick={(entry) => openBreakdown(entry.payload)}>
               {chartData.map((entry, index) => (
                 <Cell key={`cell-${index}`} fill={getUrgencyColor(entry.freq, entry.percentage, timezone)} />
               ))}
             </Bar>
 
-            <Bar dataKey="issues" stackId="a" fill="#ff1d1d" />
+            <Bar dataKey="issues" stackId="a" fill="#ff1d1d" onClick={(entry) => openBreakdown(entry.payload)} />
 
-            <Bar dataKey="pending" stackId="a" fill="#f1f5f9">
+            <Bar dataKey="pending" stackId="a" fill="#f1f5f9" onClick={(entry) => openBreakdown(entry.payload)}>
               <LabelList
                 dataKey="actualTotal"
                 position="right"
@@ -205,18 +218,18 @@ export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditS
             <DialogDescription className="text-md flex flex-col gap-1">
               <span className="text-slate-700">
                 <strong>Period: </strong>
-                {selectedFreq && getReadablePeriod(selectedFreq, periodKeys[selectedFreq])}
+                {selectedFreq && periodKeys && getReadablePeriod(selectedFreq, periodKeys[selectedFreq], !legacy)}
               </span>
               <span>
                 <strong>Summary: </strong>
-                {selectedFreq && auditStats.summary[selectedFreq].completed} / {selectedFreq && auditStats.summary[selectedFreq].total} Items Completed
+                {selectedFreq && summary[selectedFreq].completed} / {selectedFreq && summary[selectedFreq].total} Items Completed
                 <span
-                  className={`ml-2 font-bold ${selectedFreq && auditStats.summary[selectedFreq].issues > 0
+                  className={`ml-2 font-bold ${selectedFreq && summary[selectedFreq].issues > 0
                     ? "text-red-600"
                     : "text-slate-500"
                     }`}
                 >
-                  ({selectedFreq && auditStats.summary[selectedFreq].issues} Issues)
+                  ({selectedFreq && summary[selectedFreq].issues} Issues)
                 </span>
               </span>
             </DialogDescription>
@@ -226,14 +239,14 @@ export function AuditSummaryChart({ auditStats, periodKeys, timezone }: { auditS
             <table className="w-full text-sm">
               <thead className="bg-slate-100 border-b">
                 <tr>
-                  <th className="px-4 py-3 text-left font-bold text-slate-700">Checklist Name</th>
+                  <th className="px-4 py-3 text-left font-bold text-slate-700">{legacy ? "Checklist Name" : "Section"}</th>
                   <th className="px-4 py-3 text-center font-bold text-slate-700">Progress</th>
                   <th className="px-4 py-3 text-right font-bold text-slate-700">Issues Raised</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {getModalData().map((cl: any, i: number) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                {modalRows.map((cl) => (
+                  <tr key={cl.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-slate-900">{cl.name}</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`px-3 py-1 rounded-full text-xs font-extrabold ${cl.stats.completed === cl.stats.total ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
