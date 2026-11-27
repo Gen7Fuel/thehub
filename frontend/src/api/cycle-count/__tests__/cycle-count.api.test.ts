@@ -97,7 +97,7 @@ describe('cycleCountService request metadata', () => {
     await cycleCountService.getDashboardDailyCounts('Rankin', '2026-10-01', '2026-10-29')
 
     expect(mocks.get.mock.calls[0][1].headers).toEqual(expect.objectContaining({
-      'X-Required-Permission': 'cycleCount.lookup',
+      'X-Required-Permission': 'orderRec.id.scanItem',
       'X-Action-Source': 'order-rec.scan',
     }))
     expect(mocks.get.mock.calls[1][1].headers).toEqual(expect.objectContaining({

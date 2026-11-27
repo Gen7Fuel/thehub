@@ -6,7 +6,7 @@ const permissions = {
   inventory: 'cycleCount.inventory',
   report: 'cycleCount.report',
   manage: 'cycleCount.manageCount',
-  lookup: 'cycleCount.lookup',
+  lookup: 'orderRec.id.scanItem',
   writeOff: 'writeOff.create',
   dashboard: 'dashboard',
   reportGenerateCsoTicket: 'cycleCount.report.generateCsoTicket',
