@@ -73,7 +73,7 @@ class RolloutTests(unittest.TestCase):
             elif args[:2] == ['docker', 'exec']:
                 role = 'worker' if args[2] == 'backend-worker' else 'scheduler'
                 return json.dumps({'role': role, 'ready': True, 'workers': ['queue'] * 16 if role == 'worker' else [],
-                                   'schedules': ['cron'] * 19 if role == 'scheduler' else [], 'leader': role == 'scheduler'})
+                                   'schedules': ['cron'] * 20 if role == 'scheduler' else [], 'leader': role == 'scheduler'})
             return ''
 
         args = ['rollout', '--execute']

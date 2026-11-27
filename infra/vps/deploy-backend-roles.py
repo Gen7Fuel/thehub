@@ -216,8 +216,8 @@ def main():
             if role == 'worker':
                 assert len(state['workers']) == 16 and not state['schedules']
             else:
-                assert not state['workers'] and state['leader'] and len(state['schedules']) == 19
-        print(json.dumps({'rolesHealthy': True, 'workerCount': 16, 'scheduleCount': 19}))
+                assert not state['workers'] and state['leader'] and len(state['schedules']) == 20
+        print(json.dumps({'rolesHealthy': True, 'workerCount': 16, 'scheduleCount': 20}))
         safe_to_resume = True
     except Exception:
         if stopped:

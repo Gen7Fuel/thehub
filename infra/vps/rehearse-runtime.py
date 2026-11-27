@@ -52,13 +52,16 @@ def main():
                 state = json.loads(run(cli + ['exec', '-T', service, 'curl', '-fsS', 'http://localhost:5000/health'], capture_output=True).stdout)
                 assert state['role'] == role and state['ready']
                 assert len(state['workers']) == (16 if role == 'worker' else 0)
-                assert len(state['schedules']) == (19 if role == 'scheduler' else 0)
+                expected_schedules = 20 if role == 'scheduler' else 0
+                assert len(state['schedules']) == expected_schedules, (
+                    f"{role}: expected {expected_schedules} schedules, got {state['schedules']}"
+                )
             run(cli + ['exec', '-T', 'backend', 'node', 'scripts/rehearse-runtime.cjs', 'verify'])
             run(cli + ['stop', '--timeout', '30', 'backend', 'worker', 'scheduler'])
             for service in ['backend', 'worker', 'scheduler']:
                 result = run(cli + ['ps', '-a', '--format', 'json', service], capture_output=True).stdout
                 assert json.loads(result)['ExitCode'] == 0, service + ' did not shut down cleanly'
-            print('PASS: three real Docker roles, 16 consumers, 19 schedules, clean SIGTERM shutdown')
+            print('PASS: three real Docker roles, 16 consumers, 20 schedules, clean SIGTERM shutdown')
         except Exception:
             run(cli + ['logs', '--tail', '45', 'backend', 'worker', 'scheduler'])
             raise
