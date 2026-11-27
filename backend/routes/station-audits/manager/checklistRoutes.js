@@ -180,7 +180,9 @@ async function assignableDepartmentFilter(section, userId) {
   return {
     _id: { $in: (section.departments || []).map((department) => department._id) },
     active: true,
-    ...(isAdmin ? {} : membership),
+    ...(isAdmin ? {} : {
+      $or: [...membership.$or, { assignmentStrategy: "station_manager" }],
+    }),
   };
 }
 
