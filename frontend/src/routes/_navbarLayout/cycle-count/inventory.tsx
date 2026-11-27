@@ -22,6 +22,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { inventoryQueries } from '@/queries/inventory'
 import { PasswordProtection } from '@/components/custom/PasswordProtection'
 import { useAuth } from "@/context/AuthContext";
+import { cycleCountPages, hasCycleCountPageAccess } from '@/lib/cycleCountPermissions'
 import * as XLSX from "xlsx";
 import { ArrowDown, ArrowUp, Barcode as BarcodeIcon, FileSpreadsheet, ImageIcon, PackageCheck, Search } from "lucide-react"
 import Barcode from "react-barcode";
@@ -237,8 +238,10 @@ function RouteComponent() {
 
   const handlePasswordCancel = () => {
     setShowPasswordDialog(false)
-    // Navigate back to cycle-count main page
-    navigate({ to: '/cycle-count' })
+    const nextPage = cycleCountPages.find(({ permission }) =>
+      permission !== 'inventory' && hasCycleCountPageAccess(user?.access, permission),
+    )
+    navigate({ to: nextPage?.to ?? '/', replace: true })
   }
 
   // ✅ Show password dialog if no access

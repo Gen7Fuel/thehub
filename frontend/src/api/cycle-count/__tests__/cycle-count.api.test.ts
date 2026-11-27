@@ -23,22 +23,25 @@ describe('cycleCountService request metadata', () => {
   it('annotates live count reads and PostgreSQL item updates', async () => {
     await cycleCountService.getDailyItems('Rankin')
     await cycleCountService.saveItem({ entryId: '451', field: 'foh', value: 12, site: 'Rankin' })
+    await cycleCountService.finalize('Rankin')
 
     expect(mocks.get).toHaveBeenCalledWith('/cycle-count/daily-items-v2', expect.objectContaining({
       params: { site: 'Rankin' },
       headers: expect.objectContaining({
-        'X-Required-Permission': 'cycleCount',
+        'X-Required-Permission': 'cycleCount.count',
         'X-Action-Source': 'cycle-count.count',
         'X-Action-Message': 'Cycle Count opened for Rankin',
       }),
     }))
     expect(mocks.post).toHaveBeenCalledWith('/cycle-count/save-item-v2', expect.objectContaining({ entryId: '451' }), expect.objectContaining({
       headers: expect.objectContaining({
+        'X-Required-Permission': 'cycleCount.count',
         'X-Action-Type': 'update',
         'X-Action-Resource': 'cycle-count-item',
         'X-Action-Message': 'Cycle Count FOH update requested for item 451',
       }),
     }))
+    expect(mocks.post.mock.calls[1][2].headers['X-Required-Permission']).toBe('cycleCount.count')
   })
 
   it('distinguishes report reads, notes, recounts, and finalization', async () => {
@@ -48,6 +51,7 @@ describe('cycleCountService request metadata', () => {
     await cycleCountService.finalize('Rankin', '2026-10-29', 'cycle-count.report', true)
 
     expect(mocks.get.mock.calls[0][1].headers).toEqual(expect.objectContaining({
+      'X-Required-Permission': 'cycleCount.report',
       'X-Action-Source': 'cycle-count.report',
       'X-Action-Message': 'Cycle Count report viewed for Rankin on 2026-10-29',
     }))
@@ -60,6 +64,14 @@ describe('cycleCountService request metadata', () => {
       overrideFinalized: true,
     })
     expect(mocks.post.mock.calls[1][2].headers['X-Required-Permission']).toBe('cycleCount.report.generateCsoTicket')
+  })
+
+  it('requests inventory independently of live counts', async () => {
+    await cycleCountService.getCurrentInventory('Rankin', 300)
+    await cycleCountService.getInventoryCategories('Rankin')
+
+    expect(mocks.get.mock.calls.map(([, config]) => config.headers['X-Required-Permission']))
+      .toEqual(['cycleCount.inventory', 'cycleCount.inventory'])
   })
 
   it('annotates schedule and group administration with manage permission', async () => {
@@ -85,7 +97,7 @@ describe('cycleCountService request metadata', () => {
     await cycleCountService.getDashboardDailyCounts('Rankin', '2026-10-01', '2026-10-29')
 
     expect(mocks.get.mock.calls[0][1].headers).toEqual(expect.objectContaining({
-      'X-Required-Permission': 'cycleCount.lookup',
+      'X-Required-Permission': 'orderRec.id.scanItem',
       'X-Action-Source': 'order-rec.scan',
     }))
     expect(mocks.get.mock.calls[1][1].headers).toEqual(expect.objectContaining({

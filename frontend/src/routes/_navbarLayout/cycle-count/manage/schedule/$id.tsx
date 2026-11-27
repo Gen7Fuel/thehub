@@ -22,6 +22,7 @@ import {
 import Barcode from 'react-barcode'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { cycleCountService } from '@/api/cycle-count/cycle-count.service'
+import { hasCycleCountPageAccess } from '@/lib/cycleCountPermissions'
 import { Dialog, DialogContent } from '@/components/ui/dialog' // Adjust import path to your project rules
 import { useAuth } from '@/context/AuthContext'
 
@@ -603,14 +604,15 @@ function RouteComponent() {
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-3 shadow-sm">
           <span className="p-1 rounded-md bg-slate-200 text-slate-700 text-xs font-bold uppercase shrink-0">Archive View</span>
           <p className="text-xs text-slate-600 leading-normal font-medium">
-            You are viewing an immutable historical entry record. For detailed information about consolidated final counts, operational adjustments, and inventory variances, please visit the{' '}
-            <Link
-              to="/cycle-count/report"
-              className="text-blue-600 font-bold hover:underline"
-            >
-              Reports page
-            </Link>
-            .
+            You are viewing an immutable historical entry record.
+            {hasCycleCountPageAccess(access, 'report') && (
+              <>
+                {' For consolidated final counts, operational adjustments, and inventory variances, visit the '}
+                <Link to="/cycle-count/report" className="text-blue-600 font-bold hover:underline">
+                  Reports page
+                </Link>.
+              </>
+            )}
           </p>
         </div>
       ) : (

@@ -17,9 +17,24 @@ const Role = require('../models/Role');
 const { pushNotification } = require('../services/notificationService');
 const Event = require('../models/Event');
 const { logChange } = require('../middleware/changeLogger');
+const { hasEffectiveAccess } = require('../middleware/authMiddleware');
+const { getPermissionMap } = require('../utils/permissionStore');
 
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+function requireCycleCountPermission(permission) {
+  return (req, res, next) => {
+    const permId = getPermissionMap().get(permission);
+    if (!req.user || !permId || !hasEffectiveAccess(req.user, req.user.role, permId)) {
+      return res.status(403).json({ message: `Access denied for ${permission}` });
+    }
+    next();
+  };
+}
+
+const requireCount = requireCycleCountPermission('cycleCount.count');
+const requireReportSync = requireCycleCountPermission('cycleCount.report.generateCsoTicket');
 
 function hasCountValue(value) {
   return value !== "" && value !== null && value !== undefined;
@@ -362,7 +377,7 @@ if (false) router.get('/daily-items', async (req, res) => {
   }
 });
 
-router.get('/daily-items-v2', async (req, res) => {
+router.get('/daily-items-v2', requireCount, async (req, res) => {
   try {
     const { site } = req.query;
     const db = getPg();
@@ -1100,7 +1115,10 @@ router.put('/schedules/details/:id/items', async (req, res) => {
  * @route POST /api/cycle-count/finalize-and-sync
  * @desc Resolves local runtime location references, applies timezone fallbacks, and initiates the Petrosoft sync engine.
  */
-router.post('/finalize-and-sync', async (req, res) => {
+router.post('/finalize-and-sync', (req, res, next) => {
+  const authorize = req.body?.overrideFinalized === true ? requireReportSync : requireCount;
+  return authorize(req, res, next);
+}, async (req, res) => {
   try {
     // 💡 targetDate is now optional in the destructuring
     const { siteName, targetDate, overrideFinalized } = req.body;
@@ -1136,16 +1154,7 @@ router.post('/finalize-and-sync', async (req, res) => {
     const locationIdStr = locationDoc._id.toString();
     console.log(`📡 Instantiating database-to-browser push pipeline hook for ${siteName} (${locationIdStr}) on target date: ${finalizedDate}`);
 
-    const isAuthorizedOverride =
-      overrideFinalized === true &&
-      req.header('X-Required-Permission') === 'cycleCount.report.generateCsoTicket';
-
-    if (overrideFinalized === true && !isAuthorizedOverride) {
-      return res.status(403).json({
-        success: false,
-        message: 'The finalized count override is only available from the authorized cycle count report action.'
-      });
-    }
+    const isAuthorizedOverride = overrideFinalized === true;
 
     // 2. Direct-invoke our orchestrator processing helper sequence using the resolved date string
     const db = getPg();
@@ -1542,7 +1551,7 @@ router.post('/groups', async (req, res) => {
   }
 });
 
-router.post('/save-item-v2', async (req, res) => {
+router.post('/save-item-v2', requireCount, async (req, res) => {
   try {
     const { entryId, field, value, breakdown } = req.body;
     const db = getPg();

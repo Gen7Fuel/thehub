@@ -169,6 +169,16 @@ const allPermissions = [
         "name": "report",
         "children": [],
         "permId": 20002
+      },
+      {
+        "name": "count",
+        "children": [],
+        "permId": 20003
+      },
+      {
+        "name": "inventory",
+        "children": [],
+        "permId": 20004
       }
     ],
     "module_permId": 20000
@@ -388,6 +398,14 @@ adminRole = [
       },
       {
         "permId": 20002,
+        "value": true
+      },
+      {
+        "permId": 20003,
+        "value": true
+      },
+      {
+        "permId": 20004,
         "value": true
       },
       {

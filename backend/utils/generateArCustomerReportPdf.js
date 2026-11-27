@@ -1,4 +1,5 @@
 const PDFDocument = require('pdfkit');
+const { drawReportPdfFooter } = require('./reportPdfFooter');
 
 /**
  * Normalizes customer names for grouping
@@ -18,7 +19,7 @@ function normalizeCustomerName(name) {
 /**
  * Generates an A/R Customer Transactions PDF Report Buffer
  */
-function generateArCustomerReportPdf({ siteDisplayName, startDate, endDate, groupedData }) {
+function generateArCustomerReportPdf({ siteDisplayName, startDate, endDate, groupedData, generationFooter }) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
@@ -45,6 +46,7 @@ function generateArCustomerReportPdf({ siteDisplayName, startDate, endDate, grou
       const borderLine = '#E2E8F0';
 
       const renderHeader = () => {
+        drawReportPdfFooter(doc, generationFooter);
         doc.rect(marginX, 36, pageWidth, 4).fill(primaryColor);
         doc.fillColor(textDark).font('Helvetica-Bold').fontSize(18).text('A/R Customer Transactions Report', marginX, 48, { lineBreak: false });
         doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(12).text(siteDisplayName, marginX, 70, { lineBreak: false });
@@ -172,7 +174,7 @@ function generateArCustomerReportPdf({ siteDisplayName, startDate, endDate, grou
 /**
  * Generates an A/R Paid PDF Report Buffer (from CashSummary Data)
  */
-function generateArPaidReportPdf({ siteDisplayName, startDate, endDate, groupedData }) {
+function generateArPaidReportPdf({ siteDisplayName, startDate, endDate, groupedData, generationFooter }) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({
@@ -199,6 +201,7 @@ function generateArPaidReportPdf({ siteDisplayName, startDate, endDate, groupedD
       const borderLine = '#E2E8F0';
 
       const renderHeader = () => {
+        drawReportPdfFooter(doc, generationFooter);
         doc.rect(marginX, 36, pageWidth, 4).fill(primaryColor);
         doc.fillColor(textDark).font('Helvetica-Bold').fontSize(18).text('A/R Customer Paid Payments Report', marginX, 48, { lineBreak: false });
         doc.fillColor(primaryColor).font('Helvetica-Bold').fontSize(12).text(siteDisplayName, marginX, 70, { lineBreak: false });

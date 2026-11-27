@@ -12,6 +12,7 @@ const { CashSummaryReport } = require("../models/CashSummaryNew");
 const { Lottery } = require("../models/Lottery");
 const Location = require("../models/Location");
 const { getFuelSalesRollupReport } = require("../services/sqlService");
+const { reportPdfFooterStyle } = require("./reportPdfFooter");
 
 const h = React.createElement;
 
@@ -142,7 +143,7 @@ const styles = StyleSheet.create({
   arColAmt: { width: 90, textAlign: "right" },
 });
 
-function EodReportDoc({ site, date, data }) {
+function EodReportDoc({ site, date, data, generationFooter }) {
   const displaySiteName = formatReportSiteName(site);
 
   const renderRow = (
@@ -606,6 +607,7 @@ function EodReportDoc({ site, date, data }) {
           formatCurrency(data.fuelRemittanceTotals.remittableGst),
         ),
       ),
+      generationFooter && h(Text, { fixed: true, style: reportPdfFooterStyle }, generationFooter),
     ),
   );
 }
@@ -987,8 +989,8 @@ async function streamToBuffer(stream) {
 /**
  * Renders the React-PDF document and converts it to a Node Buffer
  */
-async function generateEodReportBuffer({ site, date, data }) {
-  const instance = pdf(h(EodReportDoc, { site, date, data }));
+async function generateEodReportBuffer({ site, date, data, generationFooter }) {
+  const instance = pdf(h(EodReportDoc, { site, date, data, generationFooter }));
   const result = await instance.toBuffer();
 
   // If React-PDF already returns a Buffer, pass it through directly

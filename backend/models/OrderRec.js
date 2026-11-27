@@ -95,7 +95,6 @@ const OrderReconciliationSchema = new mongoose.Schema({
   stationAuditResponse: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'StationAuditResponse',
-    default: null,
   },                                                // Idempotent source link for Station Audit order requests
   // When the planogram check last ran. null means it never did — either the
   // site had no planogram on file, or the doc predates the feature.
@@ -104,7 +103,11 @@ const OrderReconciliationSchema = new mongoose.Schema({
 
 OrderReconciliationSchema.index(
   { stationAuditResponse: 1 },
-  { unique: true, sparse: true }
+  {
+    name: "station_audit_response_unique",
+    unique: true,
+    partialFilterExpression: { stationAuditResponse: { $type: "objectId" } },
+  }
 );
 
 /**
