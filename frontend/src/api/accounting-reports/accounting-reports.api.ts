@@ -11,21 +11,24 @@ import type {
   SageExportReportResult,
 } from './accounting-reports.types'
 
+const reportTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
+
 export const accountingReportsApi = {
   async requestInfonet(formData: FormData, options: RequestOptions): Promise<ReportRequestResult> {
+    formData.set('timeZone', reportTimeZone())
     return (await apiClient.post('/accounting-reports/infonet-reports', formData, requestConfig(options))).data
   },
 
   async requestEndOfDay(input: EndOfDayReportInput, options: RequestOptions): Promise<ReportRequestResult> {
-    return (await apiClient.post('/accounting-reports/eod-reports/cumulative', input, requestConfig(options))).data
+    return (await apiClient.post('/accounting-reports/eod-reports/cumulative', { ...input, timeZone: reportTimeZone() }, requestConfig(options))).data
   },
 
   async requestArCustomer(input: ArCustomerReportInput, options: RequestOptions): Promise<ReportRequestResult> {
-    return (await apiClient.post('/accounting-reports/ar-customer-report', input, requestConfig(options))).data
+    return (await apiClient.post('/accounting-reports/ar-customer-report', { ...input, timeZone: reportTimeZone() }, requestConfig(options))).data
   },
 
   async requestApCustomer(input: DateRangeReportInput, options: RequestOptions): Promise<ReportRequestResult> {
-    return (await apiClient.post('/accounting-reports/ap-customer-report', input, requestConfig(options))).data
+    return (await apiClient.post('/accounting-reports/ap-customer-report', { ...input, timeZone: reportTimeZone() }, requestConfig(options))).data
   },
 
   async getSageAccountMap(site: string, options: RequestOptions): Promise<SageAccountMap | null> {

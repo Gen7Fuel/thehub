@@ -1,5 +1,6 @@
 const PDFDocument = require('pdfkit');
 const { formatReportSiteName } = require('./siteDisplayName');
+const { drawReportPdfFooter } = require('./reportPdfFooter');
 const {
   formatCurrency,
   formatNumber,
@@ -12,7 +13,7 @@ const {
  * Generates a single PDF report in memory supporting grouped fuel sections with subtotals and grand totals.
  * Returns a Promise resolving to a Buffer.
  */
-function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr, sortBy = 'statusNumber') {
+function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr, sortBy = 'statusNumber', generationFooter) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'LETTER',
@@ -226,6 +227,7 @@ function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, 
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
       renderHeader(i + 1, range.count);
+      drawReportPdfFooter(doc, generationFooter);
     }
 
     doc.end();
@@ -241,7 +243,7 @@ function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, 
  * @param {string} [addressLine2=''] - Secondary site address line (City, Province, Postal Code).
  * @returns {Promise<Array<{ fileName: string, title: string, buffer: Buffer }>>}
  */
-async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', addressLine2 = '', sortBy = 'statusNumber') {
+async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', addressLine2 = '', sortBy = 'statusNumber', generationFooter) {
   if (!Array.isArray(flattenData) || flattenData.length === 0) {
     throw new Error('No flatten data provided to generate PDF reports.');
   }
@@ -318,7 +320,8 @@ async function generateInfonetPdfReports(site, flattenData, addressLine1 = '', a
       addressLine2,
       dateFromStr,
       dateToStr,
-      sortBy
+      sortBy,
+      generationFooter
     );
 
     pdfReports.push({

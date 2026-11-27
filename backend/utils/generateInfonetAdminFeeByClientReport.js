@@ -1,5 +1,6 @@
 const PDFDocument = require('pdfkit');
 const { formatReportSiteName } = require('../utils/siteDisplayName');
+const { drawReportPdfFooter } = require('./reportPdfFooter');
 
 // Helper to format currency values to 2 decimal places with commas ($1,234.56 or -$1,234.56)
 function formatCurrency(val) {
@@ -59,7 +60,7 @@ function formatDateToFileNameString(dateObj) {
  * Generates a single PDF report in memory and returns a Promise resolving to a Buffer.
  * Supports grouped sections with section subtotals and grand totals.
  */
-function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr, sortBy = 'statusNumber') {
+function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, addressLine1, addressLine2, dateFromStr, dateToStr, sortBy = 'statusNumber', generationFooter) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'LETTER',
@@ -283,6 +284,7 @@ function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, 
     for (let i = range.start; i < range.start + range.count; i++) {
       doc.switchToPage(i);
       renderHeader(i + 1, range.count);
+      drawReportPdfFooter(doc, generationFooter);
     }
 
     doc.end();
@@ -292,7 +294,7 @@ function generateSinglePdfBuffer(groupedSections, reportTitle, siteDisplayName, 
 /**
  * Generates Admin Fee PDF reports directly in memory and tracks adjusted transactions.
  */
-async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount, flattenData, addressLine1 = '', addressLine2 = '', sortBy = 'statusNumber') {
+async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount, flattenData, addressLine1 = '', addressLine2 = '', sortBy = 'statusNumber', generationFooter) {
   if (!Array.isArray(flattenData) || flattenData.length === 0) {
     throw new Error('No flatten data provided to generate PDF reports.');
   }
@@ -420,7 +422,8 @@ async function generateAdminFeePdfReports(site, adminFee, provinceStatusDiscount
       addressLine2,
       dateFromStr,
       dateToStr,
-      sortBy
+      sortBy,
+      generationFooter
     );
 
     pdfReports.push({

@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { LocationPicker } from "@/components/custom/locationPicker";
 import { useAuth } from "@/context/AuthContext";
+import { cycleCountPages, hasCycleCountPageAccess } from '@/lib/cycleCountPermissions';
 import { DatePicker } from "@/components/custom/datePicker";
 import {
   Dialog,
@@ -916,7 +917,10 @@ function RouteComponent() {
 
   const handlePasswordCancel = () => {
     setShowPasswordDialog(false);
-    navigate({ to: "/cycle-count" });
+    const nextPage = cycleCountPages.find(({ permission }) =>
+      (permission === 'count' || permission === 'manageCount') && hasCycleCountPageAccess(user?.access, permission),
+    );
+    navigate({ to: nextPage?.to ?? '/', replace: true });
   };
 
   const fetchReport = async () => {

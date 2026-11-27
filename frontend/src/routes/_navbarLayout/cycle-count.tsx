@@ -1,99 +1,44 @@
-import { createFileRoute, Link, Outlet, useMatchRoute } from '@tanstack/react-router'
+import { createFileRoute, Link, Navigate, Outlet, useChildMatches } from '@tanstack/react-router'
 import { Button } from '@/components/ui/button'
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from '@/context/AuthContext'
+import { cycleCountPages, hasCycleCountPageAccess } from '@/lib/cycleCountPermissions'
+import { cn } from '@/lib/utils'
 
-
-// Define the route for the cycle count section using TanStack Router
 export const Route = createFileRoute('/_navbarLayout/cycle-count')({
-  component: RouteComponent,
+  component: CycleCountLayout,
 })
 
-/**
- * RouteComponent
- * Renders the cycle count section with navigation buttons for Input, Count, and Console.
- * Buttons are conditionally styled and rendered based on user access permissions.
- */
-function RouteComponent() {
-  // Hook to match the current route for button highlighting
-  const matchRoute = useMatchRoute();
+function CycleCountLayout() {
+  const { user } = useAuth()
+  const childPath = useChildMatches({ select: (matches): string | undefined => matches[0]?.fullPath })
+  if (!user) return null
 
-  // Determine if each tab is active
-  // const isInputActive = matchRoute({ to: '/cycle-count' });
-  const isCountActive = matchRoute({ to: '/cycle-count' });
-  const isInventoryActive = matchRoute({ to: '/cycle-count/inventory' });
-  const isReportActive = matchRoute({ to: '/cycle-count/report' });
-  const isManageCountActive = matchRoute({ to: '/cycle-count/manage' });
+  const currentPage = cycleCountPages.find(({ to }) => to === childPath)
+  const allowedPages = cycleCountPages.filter(({ permission }) => hasCycleCountPageAccess(user.access, permission))
 
-  const { user } = useAuth();
-
-  // Retrieve access permissions from Auth provider
-  // const access = user?.access || "{}" //markpoint
-  const access = user?.access || {}
+  if (!allowedPages.length || (currentPage && !allowedPages.includes(currentPage))) {
+    return <Navigate to="/no-access" replace />
+  }
 
   return (
     <div className="pt-5 flex flex-col items-center">
-      {/* Navigation buttons for cycle count sections */}
       <div className="flex mb-4">
-        {/* Input tab button */}
-        {/* <Link to="/cycle-count" activeOptions={{ exact: true }}>
+        {allowedPages.map(({ to, label }, index) => (
           <Button
-            {...(!isInputActive && { variant: 'outline' } as object)}
-            className="rounded-r-none"
+            key={to}
+            asChild
+            variant={to === childPath ? 'default' : 'outline'}
+            className={cn(index > 0 && 'rounded-l-none', index < allowedPages.length - 1 && 'rounded-r-none')}
           >
-            Input
-          </Button>
-        </Link> */}
-        {/* Count tab button */}
-        <Link to="/cycle-count" activeOptions={{ exact: true }}>
-          <Button
-            {...(!isCountActive && { variant: 'outline' } as object)}
-            className="rounded-r-none"
-          >
-            Count
-          </Button>
-        </Link>
-
-        <Link
-          to="/cycle-count/inventory"
-          activeOptions={{ exact: true }}
-          search={{ site: user?.location || '', category: '' }}
-        >
-          <Button
-            {...(!isInventoryActive && { variant: 'outline' } as object)}
-            // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-            className={access?.cycleCount?.report?.value ? 'rounded-none' : 'rounded-l-none'}
-          >
-            Inventory
-          </Button>
-        </Link>
-
-        {access?.cycleCount?.report?.value && (
-          <Link
-            to="/cycle-count/report"
-            activeOptions={{ exact: true }}
-          >
-            <Button
-              {...(!isReportActive && { variant: 'outline' } as object)}
-              // className={access.component_cycle_count_console ? 'rounded-none' : 'rounded-l-none'} //markpoint
-              className={access?.cycleCount?.manageCount?.value ? 'rounded-none' : 'rounded-l-none'}
+            <Link
+              to={to}
+              search={to === '/cycle-count/inventory' ? { site: user.location || '', category: '' } : undefined}
             >
-              Report
-            </Button>
-          </Link>
-        )}
-
-        {access?.cycleCount?.manageCount?.value && (
-          <Link to="/cycle-count/manage" activeOptions={{ exact: true }}>
-            <Button
-              {...(!isManageCountActive && { variant: 'outline' } as object)}
-              className="rounded-l-none"
-            >
-              Manage Counts
-            </Button>
-          </Link>
-        )}
+              {label}
+            </Link>
+          </Button>
+        ))}
       </div>
-      {/* Render the nested route content */}
       <Outlet />
     </div>
   )

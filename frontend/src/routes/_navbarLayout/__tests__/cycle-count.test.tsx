@@ -40,6 +40,8 @@ const { mockNavigate, mockUseLoaderData, mockUseSearch, mockUseAuth, mockUseSite
     },
   }
 })
+const mockCycleCountChildPath = vi.hoisted(() => vi.fn())
+
 vi.mock('@tanstack/react-router', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@tanstack/react-router')>()
   return {
@@ -50,6 +52,12 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
       useLoaderData: mockUseLoaderData,
       useSearch: mockUseSearch,
     }),
+    Navigate: (props: unknown) => {
+      mockNavigate(props)
+      return null
+    },
+    Outlet: () => <div data-testid="cycle-count-outlet" />,
+    useChildMatches: ({ select }: any) => select([{ fullPath: mockCycleCountChildPath() }]),
     useNavigate: () => mockNavigate,
     useLocation: () => ({ pathname: '/cycle-count/manage/schedule' }),
     Link: ({ to, children }: any) => <a href={to}>{children}</a>,
@@ -146,11 +154,12 @@ vi.mock('@/components/custom/TableWithInputs', () => ({
 }))
 
 vi.mock('@/components/custom/PasswordProtection', () => ({
-  PasswordProtection: ({ isOpen, onSuccess }: any) =>
+  PasswordProtection: ({ isOpen, onSuccess, onCancel }: any) =>
     isOpen ? (
       <div data-testid="password-dialog">
         Password Required
         <button onClick={onSuccess}>Unlock</button>
+        <button onClick={onCancel}>Cancel</button>
       </div>
     ) : null,
 }))
@@ -193,7 +202,9 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogFooter: ({ children }: any) => <div>{children}</div>,
 }))
 
+import { Route as LayoutRoute } from '../cycle-count'
 import { Route as IndexRoute } from '../cycle-count/index'
+import { Route as CountRoute } from '../cycle-count/count'
 import { Route as ReportRoute } from '../cycle-count/report'
 import { Route as InventoryRoute } from '../cycle-count/inventory'
 import { Route as GroupNewRoute } from '../cycle-count/manage/group/new'
@@ -209,7 +220,9 @@ const renderWithSuspense = (ui: React.ReactElement) =>
 
 const getRouteComponent = (route: any) => (route.component || route.options?.component) as React.ComponentType
 
+const CycleCountLayout = getRouteComponent(LayoutRoute)
 const CycleCountIndex = getRouteComponent(IndexRoute)
+const CountPage = getRouteComponent(CountRoute)
 const ReportPage = getRouteComponent(ReportRoute)
 const InventoryPage = getRouteComponent(InventoryRoute)
 const GroupNewPage = getRouteComponent(GroupNewRoute)
@@ -223,6 +236,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   localStorage.setItem('token', 'test-token')
   sessionStorage.clear()
+  mockCycleCountChildPath.mockReturnValue('/cycle-count/')
   mockUseAuth.mockReturnValue({ user: { id: 'user-1', location: 'Rankin' } })
   mockUseSite.mockReturnValue({ selectedSite: 'Rankin', setSelectedSite: vi.fn() })
   mockUseQuery.mockReturnValue({
@@ -238,16 +252,54 @@ beforeEach(() => {
   mockCycleCountService.getItemBook.mockResolvedValue({ items: [] })
 })
 
-describe('Cycle Count Index - active count page', () => {
-  it('renders the new count page instead of redirecting', async () => {
+describe('Cycle Count entry and tabs', () => {
+  it.each([
+    { access: { value: true, count: true, inventory: true }, to: '/cycle-count/count' },
+    { access: { value: true, count: false, inventory: true, report: true }, to: '/cycle-count/inventory', search: { site: 'Rankin', category: '' } },
+    { access: { value: true, report: { value: true }, manageCount: true }, to: '/cycle-count/report' },
+    { access: { value: true, report: { value: false }, manageCount: { value: true } }, to: '/cycle-count/manage' },
+    { access: { value: true, count: false, lookup: true }, to: '/no-access' },
+    { access: { value: false, count: true }, to: '/no-access' },
+  ])('redirects to $to for the given permissions', async ({ access, to, search }) => {
+    mockUseAuth.mockReturnValue({ user: { location: 'Rankin', access: { cycleCount: access } } })
     renderWithSuspense(<CycleCountIndex />)
 
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to, replace: true, ...(search && { search }) }))
+    expect(mockCycleCountService.getDailyItems).not.toHaveBeenCalled()
+  })
+
+  it('shows permitted tabs and hides the Count tab when Count is off', async () => {
+    mockUseAuth.mockReturnValue({ user: { access: { cycleCount: { value: true, count: false, inventory: true, report: true, manageCount: { value: true } } } } })
+    mockCycleCountChildPath.mockReturnValue('/cycle-count/manage')
+    renderWithSuspense(<CycleCountLayout />)
+
+    expect(await screen.findByRole('link', { name: 'Manage Counts' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Report' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Inventory' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Count' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('cycle-count-outlet')).toBeInTheDocument()
+  })
+
+  it('blocks a direct link to Count and does not mount the page when Count is off', async () => {
+    mockUseAuth.mockReturnValue({ user: { access: { cycleCount: { value: true, inventory: true } } } })
+    mockCycleCountChildPath.mockReturnValue('/cycle-count/count')
+    renderWithSuspense(<CycleCountLayout />)
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access', replace: true }))
+    expect(screen.queryByTestId('cycle-count-outlet')).not.toBeInTheDocument()
+  })
+})
+
+describe('Cycle Count - count.tsx', () => {
+  it('renders the count screen at the new route', async () => {
+    renderWithSuspense(<CountPage />)
+
     await waitFor(() => expect(screen.getByText(/cycle count/i)).toBeInTheDocument())
-    expect(mockNavigate).not.toHaveBeenCalledWith({ to: '/cycle-count/count' })
+    expect(mockCycleCountService.getDailyItems).toHaveBeenCalledWith('Rankin')
   })
 
   it('renders the LocationPicker and count action buttons', async () => {
-    renderWithSuspense(<CycleCountIndex />)
+    renderWithSuspense(<CountPage />)
 
     await waitFor(() => expect(screen.getByTestId('location-picker')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: /expand all/i })).toBeInTheDocument()
@@ -257,7 +309,7 @@ describe('Cycle Count Index - active count page', () => {
   it('shows the tablet loading state while daily items are loading', async () => {
     mockCycleCountService.getDailyItems.mockReturnValue(new Promise(() => {}))
 
-    renderWithSuspense(<CycleCountIndex />)
+    renderWithSuspense(<CountPage />)
 
     await waitFor(() => expect(screen.getByText(/loading tablet view/i)).toBeInTheDocument())
   })
@@ -265,7 +317,7 @@ describe('Cycle Count Index - active count page', () => {
   it('navigates to /no-access when daily items returns 403', async () => {
     mockCycleCountService.getDailyItems.mockRejectedValue({ status: 403 })
 
-    renderWithSuspense(<CycleCountIndex />)
+    renderWithSuspense(<CountPage />)
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith({ to: '/no-access' }))
   })
@@ -276,6 +328,15 @@ describe('Cycle Count Report - report.tsx', () => {
     renderWithSuspense(<ReportPage />)
 
     await waitFor(() => expect(screen.getByTestId('password-dialog')).toBeInTheDocument())
+  })
+
+  it('opens Manage when the Report prompt is canceled and Count is off', async () => {
+    mockUseAuth.mockReturnValue({ user: { access: { cycleCount: { value: true, report: true, manageCount: true } } } })
+    renderWithSuspense(<ReportPage />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/cycle-count/manage', replace: true })
   })
 
   it('renders the new analytics report after access is granted', async () => {

@@ -2,7 +2,9 @@ import { actionOptions } from '@/api/resources/action-options'
 import { cycleCountApi } from './cycle-count.api'
 
 const permissions = {
-  count: 'cycleCount',
+  count: 'cycleCount.count',
+  inventory: 'cycleCount.inventory',
+  report: 'cycleCount.report',
   manage: 'cycleCount.manageCount',
   lookup: 'cycleCount.lookup',
   writeOff: 'writeOff.create',
@@ -33,16 +35,16 @@ export const cycleCountService = {
     return cycleCountApi.post<T>('/finalize-and-sync', { siteName, targetDate, overrideFinalized }, mutate(permission, source, 'update', 'cycle-count-instance', `Cycle Count finalization and inventory sync requested for ${siteName}${dateLabel}`))
   },
   getDailyReport<T = unknown>(site: string, date: string) {
-    return cycleCountApi.get<T>('/daily-report', { site, date }, read(permissions.count, 'cycle-count.report', 'cycle-count-report', `Cycle Count report viewed for ${site} on ${date}`))
+    return cycleCountApi.get<T>('/daily-report', { site, date }, read(permissions.report, 'cycle-count.report', 'cycle-count-report', `Cycle Count report viewed for ${site} on ${date}`))
   },
   getInstanceNotes<T = unknown>(instanceId: string | number) {
-    return cycleCountApi.get<T>(`/instance-notes/${encodeURIComponent(String(instanceId))}`, undefined, read(permissions.count, 'cycle-count.report', 'cycle-count-note', `Cycle Count notes viewed for instance ${instanceId}`))
+    return cycleCountApi.get<T>(`/instance-notes/${encodeURIComponent(String(instanceId))}`, undefined, read(permissions.report, 'cycle-count.report', 'cycle-count-note', `Cycle Count notes viewed for instance ${instanceId}`))
   },
   addInstanceNote<T = unknown>(instanceId: string | number, note: string) {
-    return cycleCountApi.post<T>('/instance-notes', { instanceId, note }, mutate(permissions.count, 'cycle-count.report', 'create', 'cycle-count-note', `Cycle Count note added to instance ${instanceId}`))
+    return cycleCountApi.post<T>('/instance-notes', { instanceId, note }, mutate(permissions.report, 'cycle-count.report', 'create', 'cycle-count-note', `Cycle Count note added to instance ${instanceId}`))
   },
   updateManagerCount<T = unknown>(itemId: string | number, input: unknown) {
-    return cycleCountApi.put<T>(`/items/${encodeURIComponent(String(itemId))}/manager-count`, input, mutate(permissions.count, 'cycle-count.report', 'update', 'cycle-count-item', `Manager recount update requested for Cycle Count item ${itemId}`))
+    return cycleCountApi.put<T>(`/items/${encodeURIComponent(String(itemId))}/manager-count`, input, mutate(permissions.report, 'cycle-count.report', 'update', 'cycle-count-item', `Manager recount update requested for Cycle Count item ${itemId}`))
   },
   listInstances<T = unknown>(site: string, view: 'active' | 'historical') {
     return cycleCountApi.get<T>('/instances', { site, view }, read(permissions.manage, 'cycle-count.manage.schedule', 'cycle-count-instance', `${view === 'active' ? 'Active' : 'Historical'} Cycle Count schedules viewed for ${site}`))
@@ -102,10 +104,10 @@ export const cycleCountService = {
     return cycleCountApi.put<T>('/item-bk/mass-edit', { ids, updates }, mutate(permissions.manage, 'cycle-count.manage.items', 'update', 'inventory-item', `${ids.length} Cycle Count item-book record${ids.length === 1 ? '' : 's'} update requested for ${site}`))
   },
   getCurrentInventory<T = unknown>(site: string, limit?: number) {
-    return cycleCountApi.get<T>('/current-inventory', { site, limit }, read(permissions.count, 'cycle-count.inventory', 'inventory', `Current inventory viewed for ${site}${limit ? ` (first ${limit} items)` : ''}`))
+    return cycleCountApi.get<T>('/current-inventory', { site, limit }, read(permissions.inventory, 'cycle-count.inventory', 'inventory', `Current inventory viewed for ${site}${limit ? ` (first ${limit} items)` : ''}`))
   },
   getInventoryCategories<T = unknown>(site: string) {
-    return cycleCountApi.get<T>('/inventory-categories', { site }, read(permissions.count, 'cycle-count.inventory', 'inventory-category', `Inventory categories viewed for ${site}`))
+    return cycleCountApi.get<T>('/inventory-categories', { site }, read(permissions.inventory, 'cycle-count.inventory', 'inventory-category', `Inventory categories viewed for ${site}`))
   },
   lookupItem<T = unknown>(upcBarcode: string, site: string) {
     return cycleCountApi.get<T>('/lookup', { upc_barcode: upcBarcode, site }, read(permissions.lookup, 'order-rec.scan', 'inventory-item', `Inventory item lookup requested for scanned code at ${site}`))

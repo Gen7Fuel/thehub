@@ -19,6 +19,7 @@ const {
   generateInfonetPdfReports,
 } = require("../utils/generateInfonetByClientReport");
 const { formatReportSiteName } = require("../utils/siteDisplayName");
+const { formatReportGenerationFooter } = require("../utils/reportPdfFooter");
 const { emailQueue } = require("../queues/emailQueue"); // Update to match your queue import path
 
 // Configure multer to store uploaded files in memory
@@ -175,6 +176,7 @@ router.post("/infonet-reports", upload.single("file"), async (req, res) => {
     }
 
     // 5. Generate Admin Fee PDF Reports & tracked adjusted transactions
+    const generationFooter = formatReportGenerationFooter(req.body.timeZone);
     const { pdfReports: adminFeePdfs, adjustedTransactions } =
       await generateAdminFeePdfReports(
         site,
@@ -184,6 +186,7 @@ router.post("/infonet-reports", upload.single("file"), async (req, res) => {
         addressLine1,
         addressLine2,
         sortBy,
+        generationFooter,
       );
 
     // 6. Generate Standard Infonet Grade PDF Reports
@@ -193,6 +196,7 @@ router.post("/infonet-reports", upload.single("file"), async (req, res) => {
       addressLine1,
       addressLine2,
       sortBy,
+      generationFooter,
     );
 
     // 7. Build raw attachments array (4 total attachments)
@@ -334,6 +338,7 @@ router.post("/eod-reports/cumulative", async (req, res) => {
     const cdIndividualPdfs = [];
 
     // 4. Fetch daily data & conditionally generate individual PDF buffers
+    const generationFooter = formatReportGenerationFooter(req.body.timeZone);
     for (const date of dates) {
       // Regular EOD Data
       const dailyData = await fetchEodDataForDate({ site, date, isManitoba });
@@ -344,6 +349,7 @@ router.post("/eod-reports/cumulative", async (req, res) => {
           site,
           date,
           data: dailyData,
+          generationFooter,
         });
         individualPdfs.push({
           date,
@@ -365,6 +371,7 @@ router.post("/eod-reports/cumulative", async (req, res) => {
             site,
             date,
             data: cdDailyData,
+            generationFooter,
           });
           cdIndividualPdfs.push({
             date,
@@ -384,6 +391,7 @@ router.post("/eod-reports/cumulative", async (req, res) => {
       site,
       date: cumulativeDateLabel,
       data: cumulativeData,
+      generationFooter,
     });
 
     // 6. Build Attachments Array
@@ -405,6 +413,7 @@ router.post("/eod-reports/cumulative", async (req, res) => {
           site,
           date: cumulativeDateLabel,
           data: cdCumulativeData,
+          generationFooter,
         },
       );
 
@@ -570,11 +579,13 @@ router.post("/ar-customer-report", async (req, res) => {
     );
 
     // 5. Generate Main A/R Transactions PDF Buffer
+    const generationFooter = formatReportGenerationFooter(req.body.timeZone);
     const pdfBuffer = await generateArCustomerReportPdf({
       siteDisplayName,
       startDate,
       endDate,
       groupedData,
+      generationFooter,
     });
 
     // 6. Build Attachments Array
@@ -648,6 +659,7 @@ router.post("/ar-customer-report", async (req, res) => {
         startDate,
         endDate,
         groupedData: groupedPaidData,
+        generationFooter,
       });
 
       const paidReportFileName = `AR_Customer_Paid_Report_${siteDisplayName}_${startDate}_to_${endDate}.pdf`;
@@ -749,6 +761,7 @@ router.post("/ap-customer-report", async (req, res) => {
       startDate,
       endDate,
       groupedData: Object.values(grouped),
+      generationFooter: formatReportGenerationFooter(req.body.timeZone),
     });
     const recipientEmail = req.user?.email || "daksh@gen7fuel.com";
     await emailQueue.add("sendApCustomerReportEmail", {

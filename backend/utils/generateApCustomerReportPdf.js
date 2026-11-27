@@ -1,7 +1,8 @@
 const PDFDocument = require('pdfkit');
+const { drawReportPdfFooter } = require('./reportPdfFooter');
 const money = (value) => `$${Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-function generateApCustomerReportPdf({ siteDisplayName, startDate, endDate, groupedData }) {
+function generateApCustomerReportPdf({ siteDisplayName, startDate, endDate, groupedData, generationFooter }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 36, autoPageBreak: false });
     const chunks = [];
@@ -13,6 +14,7 @@ function generateApCustomerReportPdf({ siteDisplayName, startDate, endDate, grou
     const colors = { primary: '#1F4E78', light: '#F2F4F7', text: '#1E293B', muted: '#64748B', border: '#E2E8F0' };
     let y;
     const header = () => {
+      drawReportPdfFooter(doc, generationFooter);
       doc.rect(36, 36, width, 4).fill(colors.primary);
       doc.fillColor(colors.text).font('Helvetica-Bold').fontSize(18).text('A/P Customer Reports', 36, 48, { lineBreak: false });
       doc.fillColor(colors.primary).fontSize(12).text(siteDisplayName, 36, 70, { lineBreak: false });

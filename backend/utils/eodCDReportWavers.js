@@ -2,6 +2,7 @@ const React = require('react');
 const { pdf, Document, Page, Text, View, StyleSheet } = require('@react-pdf/renderer');
 const CashSummary = require('../models/CashSummaryNew');
 const Location = require('../models/Location');
+const { reportPdfFooterStyle } = require('./reportPdfFooter');
 
 const h = React.createElement;
 
@@ -125,7 +126,7 @@ const styles = StyleSheet.create({
   }
 });
 
-function ChickenDelightEodDoc({ site, date, data }) {
+function ChickenDelightEodDoc({ site, date, data, generationFooter }) {
   const displaySiteName = formatReportSiteName(site);
 
   const renderRow = (desc, amount, isTotalHighlight = false, customAmountStyle = null, isIndented = false) => {
@@ -236,7 +237,8 @@ function ChickenDelightEodDoc({ site, date, data }) {
         h(Text, { style: [styles.arColAmt, styles.textBold] }, formatCurrency(totalArPaid))
       ),
 
-      showArMissingNote && h(Text, { style: styles.warningNote }, '* Note: Over/Short threshold exceeded $50, but A/R details were not entered during the shift.')
+      showArMissingNote && h(Text, { style: styles.warningNote }, '* Note: Over/Short threshold exceeded $50, but A/R details were not entered during the shift.'),
+      generationFooter && h(Text, { fixed: true, style: reportPdfFooterStyle }, generationFooter)
     )
   );
 }
@@ -367,8 +369,8 @@ function combineChickenDelightEodData(dailyDataList) {
 /**
  * 3. Render Buffer Function
  */
-async function generateChickenDelightEodReportBuffer({ site, date, data }) {
-  const instance = pdf(h(ChickenDelightEodDoc, { site, date, data }));
+async function generateChickenDelightEodReportBuffer({ site, date, data, generationFooter }) {
+  const instance = pdf(h(ChickenDelightEodDoc, { site, date, data, generationFooter }));
   const result = await instance.toBuffer();
 
   if (Buffer.isBuffer(result)) {
