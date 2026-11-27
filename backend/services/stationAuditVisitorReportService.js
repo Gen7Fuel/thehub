@@ -10,7 +10,7 @@ const {
 const { emailQueue } = require("../queues/emailQueue");
 
 const REPORT_TO = "ana@gen7fuel.com";
-const REPORT_CC = ["glenn@gen7fuel.com"];
+const REPORT_CC = ["glenn@gen7fuel.com","daksh@gen7fuel.com"];
 const FREQUENCY_ORDER = { daily: 0, weekly: 1, monthly: 2 };
 
 function validateReportDate(value) {

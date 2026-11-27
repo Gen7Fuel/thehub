@@ -282,7 +282,7 @@ function buildPlan(legacy, config, occurrences) {
   const runs = [];
   const responses = [];
   const issues = [];
-  const skipped = { visitorOpenIssue: 0 };
+  const skipped = { visitorOpenIssue: 0, unmappedItems: [] };
 
   for (const instance of legacy.instances) {
     const allItems = legacy.itemsByInstance.get(id(instance)) || [];
@@ -298,7 +298,9 @@ function buildPlan(legacy, config, occurrences) {
     for (const item of allItems) {
       const checklist = matchChecklist(instance, item, config);
       if (!checklist) {
-        errors.push(`Item ${item._id} ("${item.item}", ${item.frequency}) in instance ${instance._id}: checklist mapping is missing or ambiguous`);
+        skipped.unmappedItems.push(
+          `Item ${item._id} ("${item.item}", ${item.frequency}) in instance ${instance._id}: checklist mapping is missing or ambiguous`
+        );
         continue;
       }
       const department = config.departmentByName.get(key(item.assignedTo))
@@ -539,6 +541,12 @@ function printPlan(plan) {
   console.log(`  Open issues:                       ${plan.issues.length}`);
   console.log(`  Issue activities:                  ${plan.issues.reduce((total, issue) => total + issue.timeline.length, 0)}`);
   console.log(`  Skipped visitor open issues:       ${plan.skipped.visitorOpenIssue}`);
+  console.log(`  Skipped unmapped audit items:      ${plan.skipped.unmappedItems.length}`);
+
+  if (plan.skipped.unmappedItems.length) {
+    console.warn("\nSkipped unmapped audit items:");
+    plan.skipped.unmappedItems.forEach((item) => console.warn(`  - ${item}`));
+  }
 
   if (plan.warnings.length) {
     console.warn("\nWarnings:");
